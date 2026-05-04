@@ -19,6 +19,7 @@
     { "path": "packages/guardrail-service" },
     { "path": "packages/risk-engine" },
     { "path": "packages/broker" },
-    { "path": "packages/binance-connector" }
+    { "path": "packages/binance-connector" },
+    { "path": "packages/evm-connector" }
   ]
 }

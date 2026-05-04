@@ -219,17 +219,17 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 
 ## Phase 8 - Ethereum Sepolia Onchain Connector
 
-- [ ] Define EVM connector interface.
-- [ ] Implement Ethereum Sepolia RPC provider adapter.
-- [ ] Implement transaction decoding.
-- [ ] Implement ERC-20 approval detection.
-- [ ] Implement unlimited approval rejection.
-- [ ] Implement contract/function/token/spender allowlist checks.
-- [ ] Implement transaction simulation.
-- [ ] Implement expected balance delta comparison.
-- [ ] Implement signer interface without exposing private keys to agent runtime.
-- [ ] Implement local dev signer for testnet only.
-- [ ] Add tests for unknown contract, known contract, approval, unlimited approval, and failed simulation.
+- [x] Define EVM connector interface.
+- [x] Implement Ethereum Sepolia RPC provider adapter.
+- [x] Implement transaction decoding.
+- [x] Implement ERC-20 approval detection.
+- [x] Implement unlimited approval rejection.
+- [x] Implement contract/function/token/spender allowlist checks.
+- [x] Implement transaction simulation.
+- [x] Implement expected balance delta comparison.
+- [x] Implement signer interface without exposing private keys to agent runtime.
+- [x] Implement local dev signer for testnet only.
+- [x] Add tests for unknown contract, known contract, approval, unlimited approval, and failed simulation.
 
 ## Phase 9 - Solana Devnet Onchain Connector
 
