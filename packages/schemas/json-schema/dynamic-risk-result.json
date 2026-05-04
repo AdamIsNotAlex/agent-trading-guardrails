@@ -32,7 +32,32 @@
             },
             "required": ["check", "status"],
             "additionalProperties": false
-          }
+          },
+          "minItems": 1
+        },
+        "dailyStats": {
+          "type": "object",
+          "properties": {
+            "account": {
+              "type": "string",
+              "minLength": 1
+            },
+            "date": {
+              "type": "string",
+              "minLength": 1
+            },
+            "totalNotionalUsd": {
+              "type": "number"
+            },
+            "realizedLossUsd": {
+              "type": "number"
+            },
+            "orderCount": {
+              "type": "number"
+            }
+          },
+          "required": ["account", "date", "totalNotionalUsd", "realizedLossUsd", "orderCount"],
+          "additionalProperties": false
         },
         "evaluatedAt": {
           "type": "string",

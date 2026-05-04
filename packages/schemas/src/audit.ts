@@ -12,6 +12,7 @@ export const AuditEventType = z.enum([
   "policy.failed",
   "risk.evaluated",
   "risk.failed",
+  "decision.final",
   "approval.created",
   "approval.decided",
   "approval.timeout",
@@ -36,6 +37,9 @@ export const AuditEvent = z
     environment: Environment,
     intentId: z.string().uuid().optional(),
     principal: z.string().optional(),
+    promptId: z.string().optional(),
+    sessionId: z.string().optional(),
+    inputRef: z.string().optional(),
     data: z.record(z.unknown()),
     previousHash: z.string().min(1),
   })

@@ -1,3 +1,4 @@
+import type { AuditEventInput } from "@guardrails/audit";
 import type {
   DynamicRiskResult,
   PolicyInput,
@@ -17,6 +18,10 @@ const config: GuardrailConfig = {
   environment: "dev",
   opaUrl: "http://localhost:8181",
   approvalTimeoutSeconds: 300,
+};
+
+const nullAuditWriter = {
+  write(_event: AuditEventInput) {},
 };
 
 function makeReviewer(
@@ -67,6 +72,18 @@ function makeRisk(
   };
 }
 
+function makeAuditSpy() {
+  const events: AuditEventInput[] = [];
+  return {
+    events,
+    writer: {
+      write(event: AuditEventInput) {
+        events.push(event);
+      },
+    },
+  };
+}
+
 function makePolicy(
   decision: PolicyOutput["decision"] = "allow",
   opts?: { shouldThrow?: boolean; requiresHuman?: boolean },
@@ -97,7 +114,13 @@ function makePolicy(
 describe("GuardrailService", () => {
   describe("health", () => {
     it("returns ok when OPA is healthy", async () => {
-      const svc = new GuardrailService(config, makeReviewer(), makePolicy(), makeRisk());
+      const svc = new GuardrailService(
+        config,
+        makeReviewer(),
+        makePolicy(),
+        makeRisk(),
+        nullAuditWriter,
+      );
       const health = await svc.health();
       expect(health).toEqual({ status: "ok", opaHealthy: true });
     });
@@ -108,6 +131,7 @@ describe("GuardrailService", () => {
         makeReviewer(),
         makePolicy("allow", { shouldThrow: true }),
         makeRisk(),
+        nullAuditWriter,
       );
       const health = await svc.health();
       expect(health).toEqual({ status: "degraded", opaHealthy: false });
@@ -116,15 +140,35 @@ describe("GuardrailService", () => {
 
   describe("intent validation", () => {
     it("rejects invalid intent with structured reasons", async () => {
-      const svc = new GuardrailService(config, makeReviewer(), makePolicy(), makeRisk());
+      const audit = makeAuditSpy();
+      const svc = new GuardrailService(
+        config,
+        makeReviewer(),
+        makePolicy(),
+        makeRisk(),
+        audit.writer,
+      );
       const result = await svc.evaluate({ action: "invalid", text: "buy ETH" });
       expect(result.outcome).toBe("deny");
       expect(result.reasons.length).toBeGreaterThan(0);
       expect(result.reasons[0].rule).toBe("schema_validation");
+      expect(audit.events).toHaveLength(1);
+      expect(audit.events[0]).toMatchObject({
+        eventType: "decision.final",
+        environment: "dev",
+        correlationId: result.correlationId,
+      });
+      expect(audit.events[0].data).toMatchObject({ outcome: "deny" });
     });
 
     it("rejects intent with unknown fields", async () => {
-      const svc = new GuardrailService(config, makeReviewer(), makePolicy(), makeRisk());
+      const svc = new GuardrailService(
+        config,
+        makeReviewer(),
+        makePolicy(),
+        makeRisk(),
+        nullAuditWriter,
+      );
       const result = await svc.evaluate({ ...binanceSpotOrder, extraField: "hacked" });
       expect(result.outcome).toBe("deny");
     });
@@ -132,7 +176,13 @@ describe("GuardrailService", () => {
 
   describe("allow flow", () => {
     it("allows valid intent through full pipeline", async () => {
-      const svc = new GuardrailService(config, makeReviewer(), makePolicy(), makeRisk());
+      const svc = new GuardrailService(
+        config,
+        makeReviewer(),
+        makePolicy(),
+        makeRisk(),
+        nullAuditWriter,
+      );
       const result = await svc.evaluate(binanceSpotOrder);
       expect(result.outcome).toBe("allow");
       expect(result.intentId).toBe(binanceSpotOrder.intentId);
@@ -158,7 +208,7 @@ describe("GuardrailService", () => {
           return true;
         },
       };
-      const svc = new GuardrailService(config, makeReviewer(), policy, makeRisk());
+      const svc = new GuardrailService(config, makeReviewer(), policy, makeRisk(), nullAuditWriter);
       const result = await svc.evaluate(binanceSpotOrder);
 
       expect(result.outcome).toBe("allow");
@@ -197,6 +247,7 @@ describe("GuardrailService", () => {
             orderCount: 3,
           },
         }),
+        nullAuditWriter,
       );
 
       const result = await svc.evaluate(binanceSpotOrder);
@@ -239,6 +290,7 @@ describe("GuardrailService", () => {
             orderCount: 3,
           },
         }),
+        nullAuditWriter,
       );
 
       const result = await svc.evaluate(binanceSpotOrder);
@@ -252,16 +304,175 @@ describe("GuardrailService", () => {
     });
   });
 
+  describe("audit events", () => {
+    it("emits complete allow flow audit events", async () => {
+      const audit = makeAuditSpy();
+      const svc = new GuardrailService(
+        config,
+        makeReviewer(),
+        makePolicy(),
+        makeRisk(),
+        audit.writer,
+      );
+
+      const result = await svc.evaluate(binanceSpotOrder, {
+        promptId: "prompt-1",
+        sessionId: "session-1",
+        inputRef: "input-1",
+      });
+
+      expect(result.outcome).toBe("allow");
+      expect(audit.events.map((event) => event.eventType)).toEqual([
+        "intent.received",
+        "reviewer.completed",
+        "risk.evaluated",
+        "policy.evaluated",
+        "decision.final",
+      ]);
+      expect(audit.events[0]).toMatchObject({
+        environment: binanceSpotOrder.environment,
+        correlationId: result.correlationId,
+        intentId: binanceSpotOrder.intentId,
+        principal: binanceSpotOrder.principal,
+      });
+      expect(audit.events).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            promptId: "prompt-1",
+            sessionId: "session-1",
+            inputRef: "input-1",
+          }),
+        ]),
+      );
+      expect(audit.events.every((event) => event.promptId === "prompt-1")).toBe(true);
+      expect(audit.events.every((event) => event.sessionId === "session-1")).toBe(true);
+      expect(audit.events.every((event) => event.inputRef === "input-1")).toBe(true);
+      expect(audit.events[0].data.intent).toEqual(binanceSpotOrder);
+      expect(audit.events[1].data.reviewerVerdict).toMatchObject({ verdict: "approve" });
+      expect(audit.events[2].data.riskResult).toMatchObject({ passed: true });
+      expect(audit.events[3].data.policyInput).toMatchObject({
+        intentId: binanceSpotOrder.intentId,
+        reviewerVerdict: "approve",
+      });
+      expect(audit.events[3].data.policyOutput).toMatchObject({ decision: "allow" });
+      expect(audit.events[4].data).toMatchObject({
+        outcome: "allow",
+        requiresHumanApproval: false,
+      });
+      expect(audit.events[4].data.decision).toMatchObject({ outcome: "allow" });
+    });
+
+    it("does not convert audit failures into dependency failures", async () => {
+      const events: AuditEventInput[] = [];
+      const svc = new GuardrailService(config, makeReviewer(), makePolicy(), makeRisk(), {
+        write(event: AuditEventInput) {
+          events.push(event);
+          if (event.eventType === "reviewer.completed") throw new Error("audit unavailable");
+        },
+      });
+
+      await expect(svc.evaluate(binanceSpotOrder)).rejects.toThrow("audit unavailable");
+      expect(events.map((event) => event.eventType)).toEqual([
+        "intent.received",
+        "reviewer.completed",
+      ]);
+    });
+
+    it("emits final decision audit event for policy deny", async () => {
+      const audit = makeAuditSpy();
+      const svc = new GuardrailService(
+        config,
+        makeReviewer(),
+        makePolicy("deny"),
+        makeRisk(),
+        audit.writer,
+      );
+
+      const result = await svc.evaluate(binanceSpotOrder);
+
+      expect(result.outcome).toBe("deny");
+      expect(audit.events.map((event) => event.eventType)).toEqual([
+        "intent.received",
+        "reviewer.completed",
+        "risk.evaluated",
+        "policy.evaluated",
+        "decision.final",
+      ]);
+      expect(audit.events.at(-1)?.data).toMatchObject({ outcome: "deny" });
+    });
+
+    it("emits final decision audit event for needs-human flow", async () => {
+      const audit = makeAuditSpy();
+      const svc = new GuardrailService(
+        config,
+        makeReviewer(),
+        makePolicy("needs_human"),
+        makeRisk(),
+        audit.writer,
+      );
+
+      const result = await svc.evaluate(binanceSpotOrder);
+
+      expect(result.outcome).toBe("needs_human");
+      expect(audit.events.map((event) => event.eventType)).toEqual([
+        "intent.received",
+        "reviewer.completed",
+        "risk.evaluated",
+        "policy.evaluated",
+        "decision.final",
+      ]);
+      expect(audit.events.at(-1)?.data).toMatchObject({
+        outcome: "needs_human",
+        requiresHumanApproval: true,
+      });
+    });
+
+    it("emits final decision audit event for error flow", async () => {
+      const audit = makeAuditSpy();
+      const svc = new GuardrailService(
+        config,
+        makeReviewer("approve", { shouldThrow: true }),
+        makePolicy(),
+        makeRisk(),
+        audit.writer,
+      );
+
+      const result = await svc.evaluate(binanceSpotOrder);
+
+      expect(result.outcome).toBe("deny");
+      expect(audit.events.map((event) => event.eventType)).toEqual([
+        "intent.received",
+        "decision.final",
+      ]);
+      expect(audit.events[1].data.reasons).toContainEqual({
+        rule: "reviewer_unavailable",
+        message: "Reviewer agent is unavailable.",
+      });
+    });
+  });
+
   describe("deny flow", () => {
     it("denies when policy says deny", async () => {
-      const svc = new GuardrailService(config, makeReviewer(), makePolicy("deny"), makeRisk());
+      const svc = new GuardrailService(
+        config,
+        makeReviewer(),
+        makePolicy("deny"),
+        makeRisk(),
+        nullAuditWriter,
+      );
       const result = await svc.evaluate(binanceSpotOrder);
       expect(result.outcome).toBe("deny");
       expect(result.reasons).toContainEqual({ rule: "test-deny", message: "Test denial." });
     });
 
     it("denies when risk checks fail", async () => {
-      const svc = new GuardrailService(config, makeReviewer(), makePolicy(), makeRisk(false));
+      const svc = new GuardrailService(
+        config,
+        makeReviewer(),
+        makePolicy(),
+        makeRisk(false),
+        nullAuditWriter,
+      );
       const result = await svc.evaluate(binanceSpotOrder);
       expect(result.outcome).toBe("deny");
       expect(result.reasons[0].rule).toBe("risk_market_data_freshness");
@@ -275,6 +486,7 @@ describe("GuardrailService", () => {
         makeReviewer(),
         makePolicy("needs_human"),
         makeRisk(),
+        nullAuditWriter,
       );
       const result = await svc.evaluate(binanceSpotOrder);
       expect(result.outcome).toBe("needs_human");
@@ -289,6 +501,7 @@ describe("GuardrailService", () => {
         makeReviewer(),
         makePolicy("allow", { shouldThrow: true }),
         makeRisk(),
+        nullAuditWriter,
       );
       const result = await svc.evaluate(binanceSpotOrder);
       expect(result.outcome).toBe("deny");
@@ -301,6 +514,7 @@ describe("GuardrailService", () => {
         makeReviewer("approve", { shouldThrow: true }),
         makePolicy(),
         makeRisk(),
+        nullAuditWriter,
       );
       const result = await svc.evaluate(binanceSpotOrder);
       expect(result.outcome).toBe("deny");
@@ -313,6 +527,7 @@ describe("GuardrailService", () => {
         makeReviewer(),
         makePolicy(),
         makeRisk(true, { shouldThrow: true }),
+        nullAuditWriter,
       );
       const result = await svc.evaluate(binanceSpotOrder);
       expect(result.outcome).toBe("deny");
@@ -328,7 +543,13 @@ describe("GuardrailService", () => {
           return true;
         },
       };
-      const svc = new GuardrailService(config, makeReviewer(), badPolicy, makeRisk());
+      const svc = new GuardrailService(
+        config,
+        makeReviewer(),
+        badPolicy,
+        makeRisk(),
+        nullAuditWriter,
+      );
       const result = await svc.evaluate(binanceSpotOrder);
       expect(result.outcome).toBe("deny");
       expect(result.reasons[0].rule).toBe("policy_evaluation_failed");
@@ -336,16 +557,73 @@ describe("GuardrailService", () => {
   });
 
   describe("idempotency", () => {
+    it("does not cache decisions when final audit write fails", async () => {
+      let policyEvaluations = 0;
+      let finalAuditWrites = 0;
+      const policy: PolicyEvaluator = {
+        async evaluate(): Promise<PolicyOutput> {
+          policyEvaluations += 1;
+          return {
+            decision: "allow",
+            reasons: [],
+            requiresHumanApproval: false,
+            matchedAllowRules: ["test-allow"],
+            matchedDenyRules: [],
+            evaluatedAt: now,
+          };
+        },
+        async isHealthy() {
+          return true;
+        },
+      };
+      const svc = new GuardrailService(config, makeReviewer(), policy, makeRisk(), {
+        write(event: AuditEventInput) {
+          if (event.eventType === "decision.final") {
+            finalAuditWrites += 1;
+            if (finalAuditWrites === 1) throw new Error("audit unavailable");
+          }
+        },
+      });
+
+      await expect(svc.evaluate(binanceSpotOrder)).rejects.toThrow("audit unavailable");
+      expect(policyEvaluations).toBe(1);
+
+      const result = await svc.evaluate(binanceSpotOrder);
+
+      expect(result.outcome).toBe("allow");
+      expect(policyEvaluations).toBe(2);
+    });
+
     it("returns cached decision for same idempotency key and payload", async () => {
-      const svc = new GuardrailService(config, makeReviewer(), makePolicy(), makeRisk());
+      const audit = makeAuditSpy();
+      const svc = new GuardrailService(
+        config,
+        makeReviewer(),
+        makePolicy(),
+        makeRisk(),
+        audit.writer,
+      );
       const first = await svc.evaluate(binanceSpotOrder);
       const second = await svc.evaluate(binanceSpotOrder);
       expect(second.outcome).toBe(first.outcome);
-      expect(second.correlationId).toBe(first.correlationId);
+      expect(second.correlationId).not.toBe(first.correlationId);
+      expect(audit.events.filter((event) => event.eventType === "intent.received")).toHaveLength(2);
+      expect(audit.events.at(-1)?.eventType).toBe("decision.final");
+      expect(audit.events.at(-1)?.correlationId).toBe(second.correlationId);
+      expect(audit.events.at(-1)?.data.decision).toMatchObject({
+        outcome: first.outcome,
+        correlationId: second.correlationId,
+      });
     });
 
     it("rejects conflicting payload with same idempotency key", async () => {
-      const svc = new GuardrailService(config, makeReviewer(), makePolicy(), makeRisk());
+      const svc = new GuardrailService(
+        config,
+        makeReviewer(),
+        makePolicy(),
+        makeRisk(),
+        nullAuditWriter,
+      );
       await svc.evaluate(binanceSpotOrder);
       const conflicting = { ...binanceSpotOrder, maxNotionalUsd: 999 };
       const result = await svc.evaluate(conflicting);
@@ -356,7 +634,13 @@ describe("GuardrailService", () => {
 
   describe("correlation IDs", () => {
     it("assigns unique correlation IDs to each request", async () => {
-      const svc = new GuardrailService(config, makeReviewer(), makePolicy(), makeRisk());
+      const svc = new GuardrailService(
+        config,
+        makeReviewer(),
+        makePolicy(),
+        makeRisk(),
+        nullAuditWriter,
+      );
       const order1 = { ...binanceSpotOrder, idempotencyKey: "key-1" };
       const order2 = {
         ...binanceSpotOrder,

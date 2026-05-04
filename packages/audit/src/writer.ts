@@ -10,6 +10,9 @@ export interface AuditEventInput {
   correlationId: string;
   intentId?: string;
   principal?: string;
+  promptId?: string;
+  sessionId?: string;
+  inputRef?: string;
   data: Record<string, unknown>;
 }
 
@@ -34,11 +37,27 @@ export class AuditWriter {
         environment TEXT NOT NULL,
         intent_id TEXT,
         principal TEXT,
+        prompt_id TEXT,
+        session_id TEXT,
+        input_ref TEXT,
         data TEXT NOT NULL,
         previous_hash TEXT NOT NULL
       )
     `;
     sqlite.prepare(createTableSql).run();
+    const columns = sqlite.prepare("PRAGMA table_info(audit_events)").all() as Array<{
+      name: string;
+    }>;
+    const existingColumns = new Set(columns.map((column) => column.name));
+    for (const [column, definition] of [
+      ["prompt_id", "TEXT"],
+      ["session_id", "TEXT"],
+      ["input_ref", "TEXT"],
+    ] as const) {
+      if (!existingColumns.has(column)) {
+        sqlite.prepare(`ALTER TABLE audit_events ADD COLUMN ${column} ${definition}`).run();
+      }
+    }
   }
 
   private recoverLastHash() {
@@ -69,6 +88,9 @@ export class AuditWriter {
         environment: event.environment,
         intentId: event.intentId ?? null,
         principal: event.principal ?? null,
+        promptId: event.promptId ?? null,
+        sessionId: event.sessionId ?? null,
+        inputRef: event.inputRef ?? null,
         data: dataJson,
         previousHash,
       })

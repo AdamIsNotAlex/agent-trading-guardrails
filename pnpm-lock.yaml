@@ -113,6 +113,9 @@ importers:
 
   packages/guardrail-service:
     dependencies:
+      '@guardrails/audit':
+        specifier: workspace:*
+        version: link:../audit
       '@guardrails/schemas':
         specifier: workspace:*
         version: link:../schemas

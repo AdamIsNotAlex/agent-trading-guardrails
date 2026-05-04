@@ -9,6 +9,9 @@ export const auditEvents = sqliteTable("audit_events", {
   environment: text("environment").notNull(),
   intentId: text("intent_id"),
   principal: text("principal"),
+  promptId: text("prompt_id"),
+  sessionId: text("session_id"),
+  inputRef: text("input_ref"),
   data: text("data").notNull(),
   previousHash: text("previous_hash").notNull(),
 });

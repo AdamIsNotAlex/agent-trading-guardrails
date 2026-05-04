@@ -15,16 +15,16 @@ These items would cause runtime failures, bypass safety checks, or leave the aud
 
 The entire audit pipeline is disconnected from production flows. `GuardrailService` in `packages/guardrail-service/src/service.ts` never calls `AuditWriter.write()`. All audit writes in the test suite are synthetic.
 
-- [ ] Add `AuditWriter` as a constructor dependency in `packages/guardrail-service/src/service.ts` (alongside existing `reviewer`, `policy`, `risk` params at lines 24-31).
-- [ ] Emit `intent.received` audit event at the start of `evaluate()` (after intent validation, ~line 55), including normalized intent JSON and correlation ID.
-- [ ] Emit `reviewer.completed` audit event after reviewer verdict is obtained (~line 115), including the full `ReviewerVerdictSchema` in the `data` blob.
-- [ ] Emit `policy.evaluated` audit event after OPA evaluation (~line 150), including both `policyInput` and `policyOutput` in the `data` blob.
-- [ ] Emit `risk.evaluated` audit event after risk engine evaluation (~line 175), including `DynamicRiskResult` in the `data` blob.
-- [ ] Emit `decision.final` audit event before returning the `GuardrailDecision` (~line 215), including `outcome`, `reasons`, `requiresHumanApproval`, and the full decision.
-- [ ] Add `promptId` and `sessionId` optional fields to `AuditEventInput` in `packages/audit/src/writer.ts` (lines 7-14) and corresponding columns in `packages/audit/src/schema.ts`.
-- [ ] Add `inputRef` optional field to `AuditEventInput` for structured input data references.
-- [ ] Update `packages/guardrail-service/src/service.test.ts` to inject a real or spy `AuditWriter` and assert that all expected audit events are emitted for allow, deny, needs-human, and error flows.
-- [ ] Update audit completeness tests in `packages/audit/src/audit.test.ts` to assert field completeness (not just `toHaveLength(N)` row counts) — verify `promptId`, `reviewerVerdict`, `opaInput`, `riskChecks` are present and correct in the `data` blob.
+- [x] Add `AuditWriter` as a constructor dependency in `packages/guardrail-service/src/service.ts` (alongside existing `reviewer`, `policy`, `risk` params at lines 24-31).
+- [x] Emit `intent.received` audit event at the start of `evaluate()` (after intent validation, ~line 55), including normalized intent JSON and correlation ID.
+- [x] Emit `reviewer.completed` audit event after reviewer verdict is obtained (~line 115), including the full `ReviewerVerdictSchema` in the `data` blob.
+- [x] Emit `policy.evaluated` audit event after OPA evaluation (~line 150), including both `policyInput` and `policyOutput` in the `data` blob.
+- [x] Emit `risk.evaluated` audit event after risk engine evaluation (~line 175), including `DynamicRiskResult` in the `data` blob.
+- [x] Emit `decision.final` audit event before returning the `GuardrailDecision` (~line 215), including `outcome`, `reasons`, `requiresHumanApproval`, and the full decision.
+- [x] Add `promptId` and `sessionId` optional fields to `AuditEventInput` in `packages/audit/src/writer.ts` (lines 7-14) and corresponding columns in `packages/audit/src/schema.ts`.
+- [x] Add `inputRef` optional field to `AuditEventInput` for structured input data references.
+- [x] Update `packages/guardrail-service/src/service.test.ts` to inject a real or spy `AuditWriter` and assert that all expected audit events are emitted for allow, deny, needs-human, and error flows.
+- [x] Update audit completeness tests in `packages/audit/src/audit.test.ts` to assert field completeness (not just `toHaveLength(N)` row counts) — verify `promptId`, `reviewerVerdict`, `opaInput`, `riskChecks` are present and correct in the `data` blob.
 
 ### P0.2 — Wire human approval store into execution flow (Phases 15, 16)
 

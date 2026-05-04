@@ -17,6 +17,7 @@ import { describe, expect, it } from "vitest";
 import { hallucinatedClaims, promptInjectionPayloads } from "./fixtures.js";
 
 const now = "2026-05-04T12:00:00.000Z";
+const nullAuditWriter = { write() {} };
 const config: GuardrailConfig = {
   environment: "canary_live",
   opaUrl: "http://localhost:8181",
@@ -110,28 +111,52 @@ function makeRisk(pass = true): RiskEngine {
 
 describe("Prompt Injection", () => {
   it("rejects intent with webpage injection in rationale", async () => {
-    const svc = new GuardrailService(config, makeReviewer(), makeAllowPolicy(), makeRisk());
+    const svc = new GuardrailService(
+      config,
+      makeReviewer(),
+      makeAllowPolicy(),
+      makeRisk(),
+      nullAuditWriter,
+    );
     const intent = { ...binanceSpotOrder, rationale: promptInjectionPayloads.webpageInstruction };
     const result = await svc.evaluate(intent);
     expect(result.intentId).toBeTruthy();
   });
 
   it("rejects intent with repo injection in rationale", async () => {
-    const svc = new GuardrailService(config, makeReviewer(), makeAllowPolicy(), makeRisk());
+    const svc = new GuardrailService(
+      config,
+      makeReviewer(),
+      makeAllowPolicy(),
+      makeRisk(),
+      nullAuditWriter,
+    );
     const intent = { ...binanceSpotOrder, rationale: promptInjectionPayloads.repoInstruction };
     const result = await svc.evaluate(intent);
     expect(result.intentId).toBeTruthy();
   });
 
   it("rejects intent with token metadata injection", async () => {
-    const svc = new GuardrailService(config, makeReviewer(), makeAllowPolicy(), makeRisk());
+    const svc = new GuardrailService(
+      config,
+      makeReviewer(),
+      makeAllowPolicy(),
+      makeRisk(),
+      nullAuditWriter,
+    );
     const intent = { ...binanceSpotOrder, rationale: promptInjectionPayloads.tokenMetadata };
     const result = await svc.evaluate(intent);
     expect(result.intentId).toBeTruthy();
   });
 
   it("secret exfiltration prompt does not leak secrets", async () => {
-    const svc = new GuardrailService(config, makeReviewer(), makeAllowPolicy(), makeRisk());
+    const svc = new GuardrailService(
+      config,
+      makeReviewer(),
+      makeAllowPolicy(),
+      makeRisk(),
+      nullAuditWriter,
+    );
     const intent = {
       ...binanceSpotOrder,
       rationale: promptInjectionPayloads.secretExfiltrationPrompt,
@@ -151,7 +176,13 @@ describe("Invalid Reviewer Output", () => {
         return { verdict: "invalid" } as unknown as ReviewerVerdictSchema;
       },
     };
-    const svc = new GuardrailService(config, badReviewer, makeAllowPolicy(), makeRisk());
+    const svc = new GuardrailService(
+      config,
+      badReviewer,
+      makeAllowPolicy(),
+      makeRisk(),
+      nullAuditWriter,
+    );
     const result = await svc.evaluate(binanceSpotOrder);
     expect(result.outcome).toBe("deny");
   });
@@ -162,7 +193,13 @@ describe("Invalid Reviewer Output", () => {
         throw new Error("reviewer crashed");
       },
     };
-    const svc = new GuardrailService(config, badReviewer, makeAllowPolicy(), makeRisk());
+    const svc = new GuardrailService(
+      config,
+      badReviewer,
+      makeAllowPolicy(),
+      makeRisk(),
+      nullAuditWriter,
+    );
     const result = await svc.evaluate(binanceSpotOrder);
     expect(result.outcome).toBe("deny");
     expect(result.reasons[0].rule).toBe("reviewer_unavailable");
@@ -176,6 +213,7 @@ describe("Auto-Execution Rules", () => {
       makeReviewer("approve"),
       makeAllowPolicy(),
       makeRisk(),
+      nullAuditWriter,
     );
     const result = await svc.evaluate(binanceSpotOrder);
     expect(result.outcome).toBe("allow");
@@ -187,6 +225,7 @@ describe("Auto-Execution Rules", () => {
       makeReviewer("approve"),
       makeNeedsHumanPolicy(),
       makeRisk(),
+      nullAuditWriter,
     );
     const result = await svc.evaluate(binanceSpotOrder);
     expect(result.outcome).toBe("needs_human");
@@ -198,6 +237,7 @@ describe("Auto-Execution Rules", () => {
       makeReviewer("approve"),
       makeNeedsHumanPolicy(),
       makeRisk(),
+      nullAuditWriter,
     );
     const result = await svc.evaluate(binanceSpotOrder);
     expect(result.outcome).toBe("needs_human");
@@ -212,6 +252,7 @@ describe("Hard-Deny Actions", () => {
       makeReviewer("approve"),
       makeDenyPolicy("withdrawal", "Denied"),
       makeRisk(),
+      nullAuditWriter,
     );
     const intent = { ...binanceSpotOrder, action: "cex.withdraw" as "cex.place_order" };
     const result = await svc.evaluate(intent);
@@ -225,6 +266,7 @@ describe("Hard-Deny Actions", () => {
       makeReviewer("approve"),
       makeDenyPolicy("transfer", "Denied"),
       makeRisk(),
+      nullAuditWriter,
     );
     const result = await svc.evaluate({
       ...binanceSpotOrder,
@@ -239,6 +281,7 @@ describe("Hard-Deny Actions", () => {
       makeReviewer(),
       makeDenyPolicy("withdrawal_denied", "Not permitted"),
       makeRisk(),
+      nullAuditWriter,
     );
     const result = await svc.evaluate(binanceSpotOrder);
     expect(result.outcome).toBe("deny");
@@ -250,6 +293,7 @@ describe("Hard-Deny Actions", () => {
       makeReviewer(),
       makeDenyPolicy("unknown_contract", "Not in allowlist"),
       makeRisk(),
+      nullAuditWriter,
     );
     const result = await svc.evaluate(binanceSpotOrder);
     expect(result.outcome).toBe("deny");
@@ -261,6 +305,7 @@ describe("Hard-Deny Actions", () => {
       makeReviewer(),
       makeDenyPolicy("unlimited_approval", "Denied"),
       makeRisk(),
+      nullAuditWriter,
     );
     const result = await svc.evaluate(binanceSpotOrder);
     expect(result.outcome).toBe("deny");
@@ -281,6 +326,7 @@ describe("Fail-Closed Behavior", () => {
         },
       },
       makeRisk(),
+      nullAuditWriter,
     );
     const result = await svc.evaluate(binanceSpotOrder);
     expect(result.outcome).toBe("deny");
@@ -316,13 +362,25 @@ describe("Fail-Closed Behavior", () => {
   });
 
   it("stale market data → risk check fails", async () => {
-    const svc = new GuardrailService(config, makeReviewer(), makeAllowPolicy(), makeRisk(false));
+    const svc = new GuardrailService(
+      config,
+      makeReviewer(),
+      makeAllowPolicy(),
+      makeRisk(false),
+      nullAuditWriter,
+    );
     const result = await svc.evaluate(binanceSpotOrder);
     expect(result.outcome).toBe("deny");
   });
 
   it("malformed policy input → deny", async () => {
-    const svc = new GuardrailService(config, makeReviewer(), makeAllowPolicy(), makeRisk());
+    const svc = new GuardrailService(
+      config,
+      makeReviewer(),
+      makeAllowPolicy(),
+      makeRisk(),
+      nullAuditWriter,
+    );
     const result = await svc.evaluate({ action: "not_valid" });
     expect(result.outcome).toBe("deny");
   });
@@ -381,7 +439,13 @@ describe("Kill Switch", () => {
 
 describe("Hallucinated Claims", () => {
   it("hallucinated price claim passes schema but evidence is required", async () => {
-    const svc = new GuardrailService(config, makeReviewer(), makeAllowPolicy(), makeRisk());
+    const svc = new GuardrailService(
+      config,
+      makeReviewer(),
+      makeAllowPolicy(),
+      makeRisk(),
+      nullAuditWriter,
+    );
     const intent = { ...binanceSpotOrder, rationale: hallucinatedClaims.fakePrice };
     const result = await svc.evaluate(intent);
     expect(result.intentId).toBeTruthy();

@@ -22,6 +22,7 @@ const config: GuardrailConfig = {
   approvalTimeoutSeconds: 300,
 };
 const now = "2026-05-04T12:00:00.000Z";
+const nullAuditWriter = { write() {} };
 
 function makeReviewer(): ReviewerAdapterInterface {
   return {
@@ -73,7 +74,7 @@ function makeRisk(): RiskEngine {
 }
 
 function makeService() {
-  return new GuardrailService(config, makeReviewer(), makePolicy(), makeRisk());
+  return new GuardrailService(config, makeReviewer(), makePolicy(), makeRisk(), nullAuditWriter);
 }
 
 describe("OpenClawAdapter", () => {
@@ -170,6 +171,7 @@ describe("OpenClawAdapter", () => {
         },
       },
       makeRisk(),
+      nullAuditWriter,
     );
     const adapter = new OpenClawAdapter(denySvc, "agent.openclaw.alpha", "dev");
     const result = await adapter.executeTool("propose_order", {

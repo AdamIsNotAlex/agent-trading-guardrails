@@ -60,6 +60,27 @@ describe("AuditWriter", () => {
     expect(row.intent_id).toBe("intent-123");
   });
 
+  it("includes prompt, session, and input references in events", () => {
+    const db = createTestDb();
+    const writer = new AuditWriter(db);
+    writer.write({
+      eventType: "intent.received",
+      environment: "canary_live",
+      correlationId: "corr-001",
+      intentId: "intent-123",
+      promptId: "prompt-123",
+      sessionId: "session-456",
+      inputRef: "evidence://input-789",
+      data: { intent: { action: "cex.place_order" } },
+    });
+    const row = db
+      .prepare("SELECT prompt_id, session_id, input_ref FROM audit_events")
+      .get() as Record<string, unknown>;
+    expect(row.prompt_id).toBe("prompt-123");
+    expect(row.session_id).toBe("session-456");
+    expect(row.input_ref).toBe("evidence://input-789");
+  });
+
   it("stores structured data as JSON", () => {
     const db = createTestDb();
     const writer = new AuditWriter(db);
@@ -131,6 +152,41 @@ describe("AuditWriter", () => {
     expect(tables.some((t) => t.name === "audit_events")).toBe(true);
   });
 
+  it("adds new metadata columns to existing audit tables", () => {
+    const db = createTestDb();
+    db.prepare(`
+      CREATE TABLE audit_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_id TEXT NOT NULL UNIQUE,
+        event_type TEXT NOT NULL,
+        timestamp TEXT NOT NULL,
+        correlation_id TEXT NOT NULL,
+        environment TEXT NOT NULL,
+        intent_id TEXT,
+        principal TEXT,
+        data TEXT NOT NULL,
+        previous_hash TEXT NOT NULL
+      )
+    `).run();
+    const writer = new AuditWriter(db);
+    writer.write({
+      eventType: "intent.received",
+      environment: "dev",
+      correlationId: "corr-001",
+      promptId: "prompt-123",
+      sessionId: "session-123",
+      inputRef: "input-123",
+      data: {},
+    });
+
+    const row = db
+      .prepare("SELECT prompt_id, session_id, input_ref FROM audit_events")
+      .get() as Record<string, unknown>;
+    expect(row.prompt_id).toBe("prompt-123");
+    expect(row.session_id).toBe("session-123");
+    expect(row.input_ref).toBe("input-123");
+  });
+
   it("records complete allow flow", () => {
     const db = createTestDb();
     const writer = new AuditWriter(db);
@@ -154,21 +210,21 @@ describe("AuditWriter", () => {
       environment: "dev",
       correlationId: corr,
       intentId: "i1",
-      data: { verdict: "approve" },
+      data: { reviewerVerdict: { verdict: "approve" } },
     });
     writer.write({
       eventType: "policy.evaluated",
       environment: "dev",
       correlationId: corr,
       intentId: "i1",
-      data: { decision: "allow" },
+      data: { decision: "allow", opaInput: { action: "cex.place_order" } },
     });
     writer.write({
       eventType: "risk.evaluated",
       environment: "dev",
       correlationId: corr,
       intentId: "i1",
-      data: { passed: true },
+      data: { passed: true, riskChecks: [{ check: "freshness", status: "pass" }] },
     });
     writer.write({
       eventType: "broker.executed",
@@ -178,9 +234,21 @@ describe("AuditWriter", () => {
       data: { orderId: "o1" },
     });
     const rows = db
-      .prepare("SELECT event_type FROM audit_events WHERE correlation_id = ?")
+      .prepare("SELECT event_type, data FROM audit_events WHERE correlation_id = ?")
       .all(corr) as Array<Record<string, unknown>>;
     expect(rows).toHaveLength(6);
+    const reviewerEvent = rows.find((row) => row.event_type === "reviewer.completed");
+    const policyEvent = rows.find((row) => row.event_type === "policy.evaluated");
+    const riskEvent = rows.find((row) => row.event_type === "risk.evaluated");
+    expect(JSON.parse(reviewerEvent?.data as string).reviewerVerdict).toMatchObject({
+      verdict: "approve",
+    });
+    expect(JSON.parse(policyEvent?.data as string).opaInput).toMatchObject({
+      action: "cex.place_order",
+    });
+    expect(JSON.parse(riskEvent?.data as string).riskChecks).toEqual([
+      { check: "freshness", status: "pass" },
+    ]);
   });
 
   it("records complete deny flow", () => {

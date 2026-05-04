@@ -1,3 +1,4 @@
+import type { AuditWriter } from "@guardrails/audit";
 import {
   type DynamicRiskResult,
   type PolicyInput,
@@ -17,6 +18,11 @@ import type {
 } from "./interfaces.js";
 import { transformOpaOutput } from "./opa-transform.js";
 
+type AuditContext = Pick<
+  Parameters<AuditWriter["write"]>[0],
+  "promptId" | "sessionId" | "inputRef"
+>;
+
 export class GuardrailService {
   private idempotency = new IdempotencyStore();
   readonly config: GuardrailConfig;
@@ -26,8 +32,60 @@ export class GuardrailService {
     private reviewer: ReviewerAdapter,
     private policy: PolicyEvaluator,
     private risk: RiskEngine,
+    private auditWriter: Pick<AuditWriter, "write">,
   ) {
     this.config = config;
+  }
+
+  private writeAudit(event: Parameters<AuditWriter["write"]>[0]): void {
+    this.auditWriter.write(event);
+  }
+
+  private finalizeInvalidDecision(
+    decision: GuardrailDecision,
+    auditContext: AuditContext = {},
+  ): GuardrailDecision {
+    this.writeAudit({
+      eventType: "decision.final",
+      environment: this.config.environment,
+      correlationId: decision.correlationId,
+      promptId: auditContext.promptId,
+      sessionId: auditContext.sessionId,
+      inputRef: auditContext.inputRef,
+      data: {
+        outcome: decision.outcome,
+        reasons: decision.reasons,
+        requiresHumanApproval: decision.requiresHumanApproval,
+        decision,
+      },
+    });
+    return decision;
+  }
+
+  private finalizeDecision(
+    intent: TradingIntent,
+    decision: GuardrailDecision,
+    correlationId = decision.correlationId,
+    auditContext: AuditContext = {},
+  ): GuardrailDecision {
+    const auditedDecision = { ...decision, correlationId };
+    this.writeAudit({
+      eventType: "decision.final",
+      environment: intent.environment,
+      correlationId,
+      intentId: intent.intentId,
+      principal: intent.principal,
+      promptId: auditContext.promptId,
+      sessionId: auditContext.sessionId,
+      inputRef: auditContext.inputRef,
+      data: {
+        outcome: auditedDecision.outcome,
+        reasons: auditedDecision.reasons,
+        requiresHumanApproval: auditedDecision.requiresHumanApproval,
+        decision: auditedDecision,
+      },
+    });
+    return auditedDecision;
   }
 
   async health(): Promise<{ status: "ok" | "degraded"; opaHealthy: boolean }> {
@@ -43,52 +101,71 @@ export class GuardrailService {
     };
   }
 
-  async evaluate(rawIntent: unknown): Promise<GuardrailDecision> {
+  async evaluate(rawIntent: unknown, auditContext: AuditContext = {}): Promise<GuardrailDecision> {
     const correlationId = generateCorrelationId();
     const now = new Date().toISOString();
 
     const parseResult = TradingIntent.safeParse(rawIntent);
     if (!parseResult.success) {
-      return {
-        intentId: "",
-        correlationId,
-        outcome: "deny",
-        reasons: parseResult.error.issues.map((issue) => ({
-          rule: "schema_validation",
-          message: `${issue.path.join(".")}: ${issue.message}`,
-        })),
-        requiresHumanApproval: false,
-        reviewerVerdict: null,
-        policyOutput: null,
-        riskResult: null,
-        decidedAt: now,
-      };
+      return this.finalizeInvalidDecision(
+        {
+          intentId: "",
+          correlationId,
+          outcome: "deny",
+          reasons: parseResult.error.issues.map((issue) => ({
+            rule: "schema_validation",
+            message: `${issue.path.join(".")}: ${issue.message}`,
+          })),
+          requiresHumanApproval: false,
+          reviewerVerdict: null,
+          policyOutput: null,
+          riskResult: null,
+          decidedAt: now,
+        },
+        auditContext,
+      );
     }
 
     const intent = parseResult.data;
+    this.writeAudit({
+      eventType: "intent.received",
+      environment: intent.environment,
+      correlationId,
+      intentId: intent.intentId,
+      principal: intent.principal,
+      promptId: auditContext.promptId,
+      sessionId: auditContext.sessionId,
+      inputRef: auditContext.inputRef ?? intent.evidence[0],
+      data: { intent, correlationId },
+    });
 
     const payloadHash = hashPayload(rawIntent);
     const cached = this.idempotency.get(intent.idempotencyKey, payloadHash);
     if (cached === "conflict") {
-      return {
-        intentId: intent.intentId,
+      return this.finalizeDecision(
+        intent,
+        {
+          intentId: intent.intentId,
+          correlationId,
+          outcome: "deny",
+          reasons: [
+            {
+              rule: "idempotency_conflict",
+              message: "Idempotency key reused with different payload.",
+            },
+          ],
+          requiresHumanApproval: false,
+          reviewerVerdict: null,
+          policyOutput: null,
+          riskResult: null,
+          decidedAt: now,
+        },
         correlationId,
-        outcome: "deny",
-        reasons: [
-          {
-            rule: "idempotency_conflict",
-            message: "Idempotency key reused with different payload.",
-          },
-        ],
-        requiresHumanApproval: false,
-        reviewerVerdict: null,
-        policyOutput: null,
-        riskResult: null,
-        decidedAt: now,
-      };
+        auditContext,
+      );
     }
     if (cached) {
-      return cached;
+      return this.finalizeDecision(intent, cached, correlationId, auditContext);
     }
 
     let opaHealthy: boolean;
@@ -109,8 +186,14 @@ export class GuardrailService {
         riskResult: null,
         decidedAt: now,
       };
-      this.idempotency.set(intent.idempotencyKey, payloadHash, decision);
-      return decision;
+      const finalized = this.finalizeDecision(
+        intent,
+        decision,
+        decision.correlationId,
+        auditContext,
+      );
+      this.idempotency.set(intent.idempotencyKey, payloadHash, finalized);
+      return finalized;
     }
 
     let reviewerVerdict: ReviewerVerdictSchema;
@@ -129,9 +212,26 @@ export class GuardrailService {
         riskResult: null,
         decidedAt: now,
       };
-      this.idempotency.set(intent.idempotencyKey, payloadHash, decision);
-      return decision;
+      const finalized = this.finalizeDecision(
+        intent,
+        decision,
+        decision.correlationId,
+        auditContext,
+      );
+      this.idempotency.set(intent.idempotencyKey, payloadHash, finalized);
+      return finalized;
     }
+    this.writeAudit({
+      eventType: "reviewer.completed",
+      environment: intent.environment,
+      correlationId,
+      intentId: intent.intentId,
+      principal: intent.principal,
+      promptId: auditContext.promptId,
+      sessionId: auditContext.sessionId,
+      inputRef: auditContext.inputRef,
+      data: { reviewerVerdict },
+    });
 
     let riskResult: DynamicRiskResult;
     try {
@@ -150,9 +250,26 @@ export class GuardrailService {
         riskResult: null,
         decidedAt: now,
       };
-      this.idempotency.set(intent.idempotencyKey, payloadHash, decision);
-      return decision;
+      const finalized = this.finalizeDecision(
+        intent,
+        decision,
+        decision.correlationId,
+        auditContext,
+      );
+      this.idempotency.set(intent.idempotencyKey, payloadHash, finalized);
+      return finalized;
     }
+    this.writeAudit({
+      eventType: "risk.evaluated",
+      environment: intent.environment,
+      correlationId,
+      intentId: intent.intentId,
+      principal: intent.principal,
+      promptId: auditContext.promptId,
+      sessionId: auditContext.sessionId,
+      inputRef: auditContext.inputRef,
+      data: { riskResult, riskChecks: riskResult.checks },
+    });
 
     if (!riskResult.passed) {
       const decision: GuardrailDecision = {
@@ -171,8 +288,14 @@ export class GuardrailService {
         riskResult,
         decidedAt: now,
       };
-      this.idempotency.set(intent.idempotencyKey, payloadHash, decision);
-      return decision;
+      const finalized = this.finalizeDecision(
+        intent,
+        decision,
+        decision.correlationId,
+        auditContext,
+      );
+      this.idempotency.set(intent.idempotencyKey, payloadHash, finalized);
+      return finalized;
     }
 
     const policyInput: PolicyInput = {
@@ -214,9 +337,26 @@ export class GuardrailService {
         riskResult,
         decidedAt: now,
       };
-      this.idempotency.set(intent.idempotencyKey, payloadHash, decision);
-      return decision;
+      const finalized = this.finalizeDecision(
+        intent,
+        decision,
+        decision.correlationId,
+        auditContext,
+      );
+      this.idempotency.set(intent.idempotencyKey, payloadHash, finalized);
+      return finalized;
     }
+    this.writeAudit({
+      eventType: "policy.evaluated",
+      environment: intent.environment,
+      correlationId,
+      intentId: intent.intentId,
+      principal: intent.principal,
+      promptId: auditContext.promptId,
+      sessionId: auditContext.sessionId,
+      inputRef: auditContext.inputRef,
+      data: { policyInput, opaInput: policyInput, policyOutput },
+    });
 
     const decision: GuardrailDecision = {
       intentId: intent.intentId,
@@ -230,7 +370,8 @@ export class GuardrailService {
       decidedAt: now,
     };
 
-    this.idempotency.set(intent.idempotencyKey, payloadHash, decision);
-    return decision;
+    const finalized = this.finalizeDecision(intent, decision, decision.correlationId, auditContext);
+    this.idempotency.set(intent.idempotencyKey, payloadHash, finalized);
+    return finalized;
   }
 }

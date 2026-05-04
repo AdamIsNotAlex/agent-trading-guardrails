@@ -21,6 +21,7 @@
             "policy.failed",
             "risk.evaluated",
             "risk.failed",
+            "decision.final",
             "approval.created",
             "approval.decided",
             "approval.timeout",
@@ -52,6 +53,15 @@
           "format": "uuid"
         },
         "principal": {
+          "type": "string"
+        },
+        "promptId": {
+          "type": "string"
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "inputRef": {
           "type": "string"
         },
         "data": {
