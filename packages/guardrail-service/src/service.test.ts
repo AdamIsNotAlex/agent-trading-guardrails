@@ -41,7 +41,10 @@ function makeReviewer(
   };
 }
 
-function makeRisk(pass = true, opts?: { shouldThrow?: boolean }): RiskEngine {
+function makeRisk(
+  pass = true,
+  opts?: { shouldThrow?: boolean; dailyStats?: DynamicRiskResult["dailyStats"] },
+): RiskEngine {
   return {
     async evaluate(intent: TradingIntent): Promise<DynamicRiskResult> {
       if (opts?.shouldThrow) throw new Error("risk data unavailable");
@@ -57,6 +60,7 @@ function makeRisk(pass = true, opts?: { shouldThrow?: boolean }): RiskEngine {
             message: pass ? undefined : "Market data is stale.",
           },
         ],
+        dailyStats: opts?.dailyStats,
         evaluatedAt: now,
       };
     },
@@ -160,6 +164,91 @@ describe("GuardrailService", () => {
       expect(result.outcome).toBe("allow");
       expect(result.policyOutput?.matchedAllowRules).toEqual(["test-allow"]);
       expect(result.policyOutput?.evaluatedAt).toBeTruthy();
+    });
+
+    it("passes daily risk facts to policy evaluation", async () => {
+      let policyInput: PolicyInput | undefined;
+      const policy: PolicyEvaluator = {
+        async evaluate(input: PolicyInput): Promise<PolicyOutput> {
+          policyInput = input;
+          return {
+            decision: "allow",
+            reasons: [],
+            requiresHumanApproval: false,
+            matchedAllowRules: ["test-allow"],
+            matchedDenyRules: [],
+            evaluatedAt: now,
+          };
+        },
+        async isHealthy() {
+          return true;
+        },
+      };
+      const svc = new GuardrailService(
+        config,
+        makeReviewer(),
+        policy,
+        makeRisk(true, {
+          dailyStats: {
+            account: "subaccount-1",
+            date: "2026-05-04",
+            totalNotionalUsd: 42,
+            realizedLossUsd: 7,
+            orderCount: 3,
+          },
+        }),
+      );
+
+      const result = await svc.evaluate(binanceSpotOrder);
+
+      expect(result.outcome).toBe("allow");
+      expect(policyInput?.dailyNotionalUsd).toBe(42);
+      expect(policyInput?.dailyRealizedLossUsd).toBe(7);
+    });
+
+    it("returns policy escalation when daily facts exceed policy thresholds", async () => {
+      const policy: PolicyEvaluator = {
+        async evaluate(input: PolicyInput): Promise<PolicyOutput> {
+          const needsHuman =
+            (input.dailyNotionalUsd ?? 0) > 50 || (input.dailyRealizedLossUsd ?? 0) > 25;
+          return {
+            decision: needsHuman ? "needs_human" : "allow",
+            reasons: needsHuman
+              ? [{ rule: "daily_notional_above_threshold", message: "Daily notional exceeded." }]
+              : [],
+            requiresHumanApproval: needsHuman,
+            matchedAllowRules: needsHuman ? [] : ["test-allow"],
+            matchedDenyRules: [],
+            evaluatedAt: now,
+          };
+        },
+        async isHealthy() {
+          return true;
+        },
+      };
+      const svc = new GuardrailService(
+        config,
+        makeReviewer(),
+        policy,
+        makeRisk(true, {
+          dailyStats: {
+            account: "subaccount-1",
+            date: "2026-05-04",
+            totalNotionalUsd: 100,
+            realizedLossUsd: 5,
+            orderCount: 3,
+          },
+        }),
+      );
+
+      const result = await svc.evaluate(binanceSpotOrder);
+
+      expect(result.outcome).toBe("needs_human");
+      expect(result.requiresHumanApproval).toBe(true);
+      expect(result.reasons).toContainEqual({
+        rule: "daily_notional_above_threshold",
+        message: "Daily notional exceeded.",
+      });
     });
   });
 

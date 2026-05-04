@@ -93,6 +93,7 @@ describe("RiskEngine", () => {
     expect(result.passed).toBe(true);
     expect(result.checks.length).toBe(10);
     expect(result.checks.every((c) => c.status === "pass")).toBe(true);
+    expect(result.dailyStats).toEqual(defaults.dailyStats());
   });
 
   it("fails on stale market data", async () => {

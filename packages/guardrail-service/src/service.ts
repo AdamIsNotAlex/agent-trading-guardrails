@@ -184,6 +184,8 @@ export class GuardrailService {
       reviewerVerdict: reviewerVerdict.verdict,
       reviewerRiskLevel: reviewerVerdict.riskLevel,
       reviewerDetectedIssues: reviewerVerdict.detectedIssues,
+      dailyNotionalUsd: riskResult.dailyStats?.totalNotionalUsd,
+      dailyRealizedLossUsd: riskResult.dailyStats?.realizedLossUsd,
     };
 
     if ("exchange" in intent) policyInput.exchange = intent.exchange;

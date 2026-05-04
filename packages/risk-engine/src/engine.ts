@@ -43,12 +43,20 @@ export class RiskEngine {
     checks.push(checkEvidenceReferences(intent));
     checks.push(checkReviewerConsistency(intent, reviewerVerdict));
 
+    const dailyStats =
+      "account" in intent
+        ? ((await this.provider.getDailyStats(
+            intent.account,
+            new Date().toISOString().slice(0, 10),
+          )) ?? undefined)
+        : undefined;
     const passed = checks.every((c) => c.status === "pass");
 
     return {
       intentId: intent.intentId,
       passed,
       checks,
+      dailyStats,
       evaluatedAt: new Date().toISOString(),
     };
   }
