@@ -24,6 +24,7 @@
     { "path": "packages/solana-connector" },
     { "path": "packages/secrets" },
     { "path": "packages/reviewer" },
-    { "path": "packages/agent-adapters" }
+    { "path": "packages/agent-adapters" },
+    { "path": "packages/audit" }
   ]
 }

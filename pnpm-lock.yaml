@@ -46,6 +46,25 @@ importers:
         specifier: ^25.6.0
         version: 25.6.0
 
+  packages/audit:
+    dependencies:
+      '@guardrails/schemas':
+        specifier: workspace:*
+        version: link:../schemas
+      better-sqlite3:
+        specifier: ^12.9.0
+        version: 12.9.0
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.2(@types/better-sqlite3@7.6.13)(better-sqlite3@12.9.0)
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.13
+        version: 7.6.13
+      '@types/node':
+        specifier: ^25.6.0
+        version: 25.6.0
+
   packages/binance-connector:
     dependencies:
       '@guardrails/broker':

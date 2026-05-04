@@ -316,21 +316,21 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 
 ## Phase 14 - Audit Log And Monitoring
 
-- [ ] Implement append-only audit event writer.
-- [ ] Include agent identity in audit events.
-- [ ] Include prompt/session ID in audit events.
-- [ ] Include input data references in audit events.
-- [ ] Include normalized intent JSON in audit events.
-- [ ] Include reviewer verdict in audit events.
-- [ ] Include OPA input and output in audit events.
-- [ ] Include dynamic risk check results in audit events.
-- [ ] Include broker revalidation results in audit events.
-- [ ] Include CEX order ID or transaction hash in audit events.
-- [ ] Include human approval details in audit events.
-- [ ] Add Drizzle Kit migration for initial audit tables.
-- [ ] Add migration test that applies SQLite schema from an empty database.
-- [ ] Add hash-chain or tamper-evidence design.
-- [ ] Add tests for audit completeness on allow, deny, needs-human, and error flows.
+- [x] Implement append-only audit event writer.
+- [x] Include agent identity in audit events.
+- [x] Include prompt/session ID in audit events.
+- [x] Include input data references in audit events.
+- [x] Include normalized intent JSON in audit events.
+- [x] Include reviewer verdict in audit events.
+- [x] Include OPA input and output in audit events.
+- [x] Include dynamic risk check results in audit events.
+- [x] Include broker revalidation results in audit events.
+- [x] Include CEX order ID or transaction hash in audit events.
+- [x] Include human approval details in audit events.
+- [x] Add Drizzle Kit migration for initial audit tables.
+- [x] Add migration test that applies SQLite schema from an empty database.
+- [x] Add hash-chain or tamper-evidence design.
+- [x] Add tests for audit completeness on allow, deny, needs-human, and error flows.
 
 ## Phase 15 - Human Approval And Kill Switch
 
