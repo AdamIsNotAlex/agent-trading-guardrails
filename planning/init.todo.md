@@ -233,16 +233,16 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 
 ## Phase 9 - Solana Devnet Onchain Connector
 
-- [ ] Define Solana connector interface.
-- [ ] Implement Solana devnet RPC provider adapter.
-- [ ] Implement instruction parsing.
-- [ ] Implement program allowlist checks.
-- [ ] Implement token/account/authority checks.
-- [ ] Implement simulation before signing.
-- [ ] Implement expected balance delta comparison.
-- [ ] Implement signer interface without exposing private keys to agent runtime.
-- [ ] Implement local dev signer for devnet only.
-- [ ] Add tests for unknown program, known program, authority change, token transfer, and failed simulation.
+- [x] Define Solana connector interface.
+- [x] Implement Solana devnet RPC provider adapter.
+- [x] Implement instruction parsing.
+- [x] Implement program allowlist checks.
+- [x] Implement token/account/authority checks.
+- [x] Implement simulation before signing.
+- [x] Implement expected balance delta comparison.
+- [x] Implement signer interface without exposing private keys to agent runtime.
+- [x] Implement local dev signer for devnet only.
+- [x] Add tests for unknown program, known program, authority change, token transfer, and failed simulation.
 
 ## Phase 10 - Secret And Signing Boundary
 
