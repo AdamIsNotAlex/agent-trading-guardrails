@@ -2,6 +2,8 @@ package guardrail.rules.escalation
 
 import rego.v1
 
+import data.guardrail.rules.allowlist
+
 escalation_reasons contains {"rule": "reviewer_not_approved", "message": "Reviewer did not approve this action."} if {
 	input.reviewerVerdict != "approve"
 }
@@ -45,4 +47,15 @@ escalation_reasons contains {"rule": "requires_human_by_policy", "message": "Mat
 	entry.effect == "allow"
 	entry.condition
 	entry.condition.requiresHumanApproval == true
+	allowlist.principal_matches(entry, input)
+	allowlist.action_matches(entry, input)
+	allowlist.resource_matches(entry, input)
+	escalation_condition_matches(entry, input)
+}
+
+escalation_condition_matches(entry, inp) if {
+	allowlist.environment_ok(entry, inp)
+	allowlist.account_mode_ok(entry, inp)
+	allowlist.notional_ok(entry, inp)
+	allowlist.leverage_ok(entry, inp)
 }

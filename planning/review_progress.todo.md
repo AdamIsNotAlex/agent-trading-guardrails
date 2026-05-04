@@ -74,9 +74,9 @@ Rego outputs `snake_case` field names (`requires_human_approval`, `matched_allow
 
 `requires_human_by_policy` in `packages/policy/src/rules/escalation.rego` lines 43-48 fires if ANY allowlist entry has `requiresHumanApproval: true`, regardless of whether that entry matches the current request.
 
-- [ ] Modify `requires_human_by_policy` in `packages/policy/src/rules/escalation.rego` to additionally check that the matching allowlist entry's `principal`, `action`, and `resource` match `input.principal`, `input.action`, and `input.resource` (or use the same matching logic as `allowlist.rego`).
-- [ ] Add Rego test: an allowlist entry with `requiresHumanApproval: true` for agent A does NOT escalate a request from agent B.
-- [ ] Add Rego test: an allowlist entry with `requiresHumanApproval: true` for `cex.place_order` does NOT escalate a `cex.cancel_order` request.
+- [x] Modify `requires_human_by_policy` in `packages/policy/src/rules/escalation.rego` to additionally check that the matching allowlist entry's `principal`, `action`, and `resource` match `input.principal`, `input.action`, and `input.resource` (or use the same matching logic as `allowlist.rego`).
+- [x] Add Rego test: an allowlist entry with `requiresHumanApproval: true` for agent A does NOT escalate a request from agent B.
+- [x] Add Rego test: an allowlist entry with `requiresHumanApproval: true` for `cex.place_order` does NOT escalate a `cex.cancel_order` request.
 
 ---
 

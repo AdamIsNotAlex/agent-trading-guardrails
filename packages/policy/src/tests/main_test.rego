@@ -231,6 +231,64 @@ test_cancel_order_allowed if {
 	guardrail.decision == "allow" with input as inp
 }
 
+test_human_approval_rule_for_other_agent_does_not_escalate if {
+	rules := array.concat(data.policy.allowlists.rules, [{
+		"name": "agent-specific-human-approval",
+		"effect": "allow",
+		"principal": "agent.other.strategy",
+		"action": "cex.place_order",
+		"resource": "cex:binance:",
+		"condition": {"requiresHumanApproval": true},
+	}])
+	guardrail.decision == "allow" with input as base_input with data.policy.allowlists.rules as rules
+	guardrail.requires_human_approval == false with input as base_input with data.policy.allowlists.rules as rules
+}
+
+test_human_approval_rule_for_other_action_does_not_escalate if {
+	rules := array.concat(data.policy.allowlists.rules, [{
+		"name": "place-order-human-approval",
+		"effect": "allow",
+		"principal": "*",
+		"action": "cex.place_order",
+		"resource": "cex:binance:",
+		"condition": {"requiresHumanApproval": true},
+	}])
+	inp := object.union(base_input, {
+		"action": "cex.cancel_order",
+		"resource": "cex:binance:subaccount-1:ETH-USDC",
+	})
+	guardrail.decision == "allow" with input as inp with data.policy.allowlists.rules as rules
+	guardrail.requires_human_approval == false with input as inp with data.policy.allowlists.rules as rules
+}
+
+test_human_approval_rule_for_other_resource_does_not_escalate if {
+	rules := array.concat(data.policy.allowlists.rules, [{
+		"name": "other-resource-human-approval",
+		"effect": "allow",
+		"principal": "*",
+		"action": "cex.place_order",
+		"resource": "cex:coinbase:",
+		"condition": {"requiresHumanApproval": true},
+	}])
+	guardrail.decision == "allow" with input as base_input with data.policy.allowlists.rules as rules
+	guardrail.requires_human_approval == false with input as base_input with data.policy.allowlists.rules as rules
+}
+
+test_matching_human_approval_rule_escalates if {
+	rules := array.concat(data.policy.allowlists.rules, [{
+		"name": "matching-human-approval",
+		"effect": "allow",
+		"principal": "agent.openclaw.strategy-alpha",
+		"action": "cex.place_order",
+		"resource": "cex:binance:",
+		"condition": {"requiresHumanApproval": true},
+	}])
+	guardrail.decision == "needs_human" with input as base_input with data.policy.allowlists.rules as rules
+	guardrail.requires_human_approval with input as base_input with data.policy.allowlists.rules as rules
+	some reason in guardrail.escalation_reasons with input as base_input with data.policy.allowlists.rules as rules
+	reason.rule == "requires_human_by_policy"
+}
+
 # Futures order above futures limit (5) but below spot limit (10) is escalated
 test_futures_above_futures_limit_escalated if {
 	inp := object.union(base_input, {
