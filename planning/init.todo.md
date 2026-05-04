@@ -5,7 +5,7 @@ Source plan: `planning/init.planning.md`
 
 ## Goal
 
-Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agent propose trading actions for Binance, Ethereum, and Solana while keeping execution, policy, secrets, signing, network access, and auditability outside the agent runtime.
+Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agent propose trading actions for Binance spot, Binance USD-M futures, Ethereum Sepolia, and Solana devnet while keeping execution, policy, secrets, signing, network access, and auditability outside the agent runtime.
 
 ## Confirmed Decisions
 
@@ -14,10 +14,20 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 - [x] Choose TypeScript for the first implementation.
 - [x] Support OpenClaw and Hermes Agent from the initial integration phase.
 - [x] Use Binance as the first CEX connector.
-- [x] Use Ethereum and Solana as the first onchain targets.
+- [x] Scope Binance first to spot plus USD-M futures; exclude margin lending, cross-margin, and COIN-M futures from first scope.
+- [x] Use Ethereum Sepolia and Solana devnet as the first onchain targets.
 - [x] Embed OPA/Rego from day one for deterministic final authorization.
 - [x] Target limited live trading only behind paper trading, testnet, canary limits, human approval policy, and kill-switch coverage.
 - [x] Treat human approval thresholds, risk limits, secret backends, and deployment profiles as configuration.
+- [x] Use `pnpm` workspaces with a committed lockfile and Corepack-pinned package manager.
+- [x] Use Zod as the TypeScript runtime schema source of truth and generate JSON Schema for external contracts.
+- [x] Use OPA as a sidecar/local service, with local OPA binary for tests.
+- [x] Use `gpt-5.5` as the first reviewer model/provider.
+- [x] Use Vault as the first production-grade secret backend.
+- [x] Use SQLite append-only audit storage with hash-chain tamper evidence for MVP.
+- [x] Use CLI as the first human approval surface, then add local web UI, Slack, Telegram, Discord, WhatsApp, and Signal adapters.
+- [x] Use USD 10/order and USD 50/day as default spot canary-live limits.
+- [x] Use USD 5/order and USD 25/day as default USD-M futures canary-live limits.
 
 ## Phase 0 - Spec And Threat Model
 
@@ -36,7 +46,9 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 - [ ] Define explicitly denied actions for MVP:
   - [ ] CEX withdrawal
   - [ ] CEX account transfer
-  - [ ] Leverage or margin enablement
+  - [ ] Spot margin or cross-margin enablement
+  - [ ] USD-M futures leverage above configured policy cap
+  - [ ] COIN-M futures trading
   - [ ] Unlimited token approval
   - [ ] Unknown contract interaction
   - [ ] Bridge transaction without human approval
@@ -50,7 +62,7 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 ## Phase 1 - Repository And Tooling
 
 - [ ] Initialize TypeScript monorepo.
-- [ ] Choose package manager and lockfile policy.
+- [x] Choose `pnpm` workspaces and committed `pnpm-lock.yaml` lockfile policy.
 - [ ] Add formatting and linting.
 - [ ] Add unit test runner.
 - [ ] Add integration test structure.
@@ -66,7 +78,9 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 
 ## Phase 2 - Schemas And Core Types
 
-- [ ] Create trading intent schema package.
+- [ ] Create Zod-based trading intent schema package.
+- [ ] Generate JSON Schema artifacts from Zod schemas.
+- [ ] Enforce strict schema mode that rejects unknown execution-intent fields.
 - [ ] Define common intent envelope:
   - [ ] `intentId`
   - [ ] `principal`
@@ -88,7 +102,7 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 - [ ] Define broker execution result schema.
 - [ ] Define audit log event schema.
 - [ ] Add schema tests for valid and invalid examples.
-- [ ] Add canonical fixture examples for Binance, Ethereum, and Solana.
+- [ ] Add canonical fixture examples for Binance spot, Binance USD-M futures, Ethereum Sepolia, and Solana devnet.
 - [ ] Reject ambiguous free-form execution requests in schema tests.
 
 ## Phase 3 - Guardrail Service MVP
@@ -121,12 +135,14 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 - [ ] Implement Binance notional limit policy.
 - [ ] Implement Binance daily notional limit policy.
 - [ ] Implement Binance daily loss limit policy.
-- [ ] Implement leverage denied policy.
+- [ ] Implement spot margin and cross-margin denied policy.
+- [ ] Implement USD-M futures leverage cap policy.
+- [ ] Implement COIN-M futures denied policy.
 - [ ] Implement withdrawal denied policy.
-- [ ] Implement Ethereum chain allowlist policy.
+- [ ] Implement Ethereum Sepolia allowlist policy.
 - [ ] Implement Ethereum contract/function/token/spender allowlist policy.
 - [ ] Implement Ethereum unlimited approval denial policy.
-- [ ] Implement Solana program/instruction/token/account allowlist policy.
+- [ ] Implement Solana devnet program/instruction/token/account allowlist policy.
 - [ ] Implement Solana authority-change denial or human approval policy.
 - [ ] Add Rego unit tests for each allow/deny path.
 - [ ] Add policy fixtures for `dev`, `paper`, `testnet`, and `canary_live`.
@@ -165,20 +181,25 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 - [ ] Define Binance connector interface.
 - [ ] Implement Binance public market data access through broker only.
 - [ ] Implement Binance account snapshot through broker only.
-- [ ] Implement Binance paper order simulation.
-- [ ] Implement Binance live order placement behind `canary_live` policy.
+- [ ] Implement Binance spot paper order simulation.
+- [ ] Implement Binance USD-M futures paper order simulation.
+- [ ] Implement Binance spot live order placement behind `canary_live` policy.
+- [ ] Implement Binance USD-M futures live order placement behind `canary_live` policy.
 - [ ] Implement Binance cancel order.
 - [ ] Implement Binance order status polling.
+- [ ] Enforce spot margin and cross-margin exclusion.
+- [ ] Enforce COIN-M futures exclusion.
+- [ ] Enforce USD-M futures isolated-mode and leverage-cap policy.
 - [ ] Enforce no-withdrawal API key requirement in docs and runtime checks where possible.
 - [ ] Enforce subaccount/account allowlist.
 - [ ] Enforce IP allowlist requirement in deployment docs.
 - [ ] Add integration tests with mocked Binance API.
 - [ ] Add optional sandbox/testnet tests if Binance environment supports required flow.
 
-## Phase 8 - Ethereum Onchain Connector
+## Phase 8 - Ethereum Sepolia Onchain Connector
 
 - [ ] Define EVM connector interface.
-- [ ] Implement Ethereum testnet RPC provider adapter.
+- [ ] Implement Ethereum Sepolia RPC provider adapter.
 - [ ] Implement transaction decoding.
 - [ ] Implement ERC-20 approval detection.
 - [ ] Implement unlimited approval rejection.
@@ -189,25 +210,25 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 - [ ] Implement local dev signer for testnet only.
 - [ ] Add tests for unknown contract, known contract, approval, unlimited approval, and failed simulation.
 
-## Phase 9 - Solana Onchain Connector
+## Phase 9 - Solana Devnet Onchain Connector
 
 - [ ] Define Solana connector interface.
-- [ ] Implement Solana testnet/devnet RPC provider adapter.
+- [ ] Implement Solana devnet RPC provider adapter.
 - [ ] Implement instruction parsing.
 - [ ] Implement program allowlist checks.
 - [ ] Implement token/account/authority checks.
 - [ ] Implement simulation before signing.
 - [ ] Implement expected balance delta comparison.
 - [ ] Implement signer interface without exposing private keys to agent runtime.
-- [ ] Implement local dev signer for testnet/devnet only.
+- [ ] Implement local dev signer for devnet only.
 - [ ] Add tests for unknown program, known program, authority change, token transfer, and failed simulation.
 
 ## Phase 10 - Secret And Signing Boundary
 
 - [ ] Define secret provider interface.
 - [ ] Implement local development secret provider.
-- [ ] Choose first production-grade secret backend.
-- [ ] Implement first production-grade secret provider adapter.
+- [x] Choose Vault as the first production-grade secret backend.
+- [ ] Implement Vault secret provider adapter.
 - [ ] Define signer backend interface.
 - [ ] Implement local testnet signer backend.
 - [ ] Document KMS adapter requirements.
@@ -223,7 +244,7 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 - [ ] Define reviewer input schema.
 - [ ] Define reviewer output schema.
 - [ ] Implement reviewer adapter interface.
-- [ ] Implement first reviewer provider adapter.
+- [ ] Implement `gpt-5.5` reviewer provider adapter.
 - [ ] Ensure reviewer verdict is advisory, not final authorization.
 - [ ] Add prompt injection detection labels.
 - [ ] Add unsupported-claim detection labels.
@@ -290,6 +311,13 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 - [ ] Implement approval timeout behavior.
 - [ ] Implement approval audit logging.
 - [ ] Implement configurable approval thresholds.
+- [ ] Implement CLI approval surface first.
+- [ ] Design local web UI approval adapter.
+- [ ] Design Slack approval adapter.
+- [ ] Design Telegram approval adapter.
+- [ ] Design Discord approval adapter.
+- [ ] Design WhatsApp approval adapter.
+- [ ] Design Signal approval adapter.
 - [ ] Implement global kill switch.
 - [ ] Implement per-agent kill switch.
 - [ ] Implement per-account kill switch.
@@ -301,7 +329,9 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 ## Phase 16 - Limited Live Trading Gates
 
 - [ ] Define `canary_live` policy bundle.
-- [ ] Set tiny default canary notional.
+- [x] Set default Binance spot canary-live notional to USD 10/order and USD 50/day.
+- [x] Set default Binance USD-M futures canary-live notional to USD 5/order and USD 25/day.
+- [ ] Enforce default USD-M futures max leverage of 1x in canary-live.
 - [ ] Require explicit configuration to enable live mode.
 - [ ] Require Binance no-withdrawal key before live mode.
 - [ ] Require Binance IP allowlist before live mode.
@@ -364,8 +394,8 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 - [ ] Run integration tests with mocked CEX/RPC providers.
 - [ ] Run Rego policy tests.
 - [ ] Run end-to-end paper trading flow.
-- [ ] Run Ethereum testnet simulation/signing flow.
-- [ ] Run Solana testnet simulation/signing flow.
+- [ ] Run Ethereum Sepolia simulation/signing flow.
+- [ ] Run Solana devnet simulation/signing flow.
 - [ ] Run agent integration tests for OpenClaw and Hermes.
 - [ ] Run sandbox egress-block tests.
 - [ ] Run secret redaction tests.
@@ -373,36 +403,29 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 
 ## Dependencies
 
-- [ ] Choose package manager.
-- [ ] Choose JSON Schema vs Zod for runtime validation.
-- [ ] Choose OPA integration mode: local binary, sidecar, library, or policy bundle service.
-- [ ] Choose first reviewer model/provider.
-- [ ] Choose first production secret backend.
-- [ ] Choose Binance library or implement signed REST client directly.
-- [ ] Choose EVM library.
-- [ ] Choose Solana library.
-- [ ] Choose audit log storage backend.
-- [ ] Choose container/network enforcement approach for local Docker.
+- [x] Choose package manager: `pnpm` workspaces with committed lockfile.
+- [x] Choose schema validation: Zod source of truth plus generated JSON Schema.
+- [x] Choose OPA integration mode: sidecar/local service, with local OPA binary for tests.
+- [x] Choose first reviewer model/provider: `gpt-5.5`.
+- [x] Choose first production secret backend: Vault.
+- [x] Choose Binance connector approach: thin broker-owned signed REST client for limited spot and USD-M futures endpoints.
+- [x] Choose EVM library: `viem`.
+- [x] Choose Solana library: `@solana/web3.js`.
+- [x] Choose audit log storage backend: SQLite append-only audit table with hash-chain tamper evidence and JSONL export.
+- [x] Choose container/network enforcement approach for local Docker: Docker Compose profile, dedicated agent network, egress proxy, and DOCKER-USER/nftables firewall rules.
+
+## Resolved Follow-Up Decisions
+
+- [x] First Ethereum testnet: Sepolia.
+- [x] First Solana environment: devnet.
+- [x] First human approval surface: CLI.
+- [x] Later human approval adapters: local web UI, Slack, Telegram, Discord, WhatsApp, and Signal.
+- [x] Binance first account modes: spot and USD-M futures.
+- [x] Binance excluded first account modes: margin lending, cross-margin, and COIN-M futures.
 
 ## Open Questions
 
-- [ ] Which package manager should the TypeScript monorepo use?
-You can decide.
-- [ ] Should schema validation use JSON Schema, Zod, or both?
-You can decide.
-- [ ] What is the first production-grade secret backend?
-You can decide.
-- [ ] Which reviewer model/provider should be used first?
-gpt-5.5
-- [ ] Which Binance account mode is in scope first: spot only, margin disabled, futures excluded?
-Spot + Futures
-- [ ] Which Ethereum testnet should be the first supported network?
-You can decide.
-- [ ] Which Solana environment should be the first supported network: devnet or testnet?
-You can decide.
-- [ ] What is the default tiny canary-live notional?
-You can decide.
-- [ ] What audit log backend should be used for MVP?
-You can decide.
-- [ ] What human approval surface should be used first: CLI, local web UI, Slack, Telegram, or GitHub issue/comment?
-At the end we need to support CLI, local web UI, Slack, Telegram, Discord, WhatsApp, Signal.
+- [ ] Which exact Vault deployment mode should be used first: dev server for local only, single-node file storage, integrated storage, or cloud-hosted Vault?
+- [ ] Which CLI approval UX should be used first: blocking command, TUI, or separate approval command polling pending requests?
+- [ ] Which SQLite migration tool should be used?
+- [ ] Which exact OPA distribution should be pinned in CI and local Docker?

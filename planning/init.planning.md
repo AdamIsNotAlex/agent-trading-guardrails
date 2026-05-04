@@ -35,11 +35,16 @@ These decisions resolve the initial open questions and should guide the first im
 - First implementation language: TypeScript.
 - First agent integrations: OpenClaw and Hermes Agent in parallel.
 - First CEX connector: Binance.
+- First Binance scope: spot plus USD-M futures. Margin lending, cross-margin, and COIN-M futures are out of the first scope unless explicitly added later.
 - First onchain targets: Ethereum and Solana.
+- First Ethereum testnet: Sepolia.
+- First Solana environment: devnet.
 - First live target: limited live trading, but only after paper trading, testnet signing, and canary limits pass.
+- Default canary-live limits: spot max USD 10 per order and USD 50 per day; futures max USD 5 per order and USD 25 per day.
 - Human approval thresholds: configurable by policy, environment, agent, action, asset, exchange, chain, and account.
+- First human approval surface: CLI. Later adapters should support local web UI, Slack, Telegram, Discord, WhatsApp, and Signal.
 - Policy engine: embed OPA/Rego from day one for final authorization. Keep TypeScript schema validation and dynamic risk checks outside OPA where they require live data fetching.
-- Secret backends: design a pluggable secret provider interface from day one. Start with local development secrets and one production-grade backend, then add Vault, cloud secret managers, KMS, HSM, and MPC providers as adapters.
+- Secret backends: design a pluggable secret provider interface from day one. Start with local development secrets plus Vault as the first production-grade backend, then add cloud secret managers, KMS, HSM, and MPC providers as adapters.
 - Deployment targets: design for local Docker first, with deployment profiles for single VPS, Kubernetes, and cloud-managed runtimes later.
 
 ## Key Architectural Judgment
@@ -205,7 +210,7 @@ Controls:
 - Simulate onchain transactions before signing.
 - Reject unknown contracts by default.
 - Reject unlimited approvals by default.
-- Require human approval for large transfers, new contract addresses, bridges, leverage, or withdrawals.
+- Require human approval for large transfers, new contract addresses, bridges, futures leverage above the configured cap, or withdrawals.
 
 ## Recommended Architecture
 
@@ -293,7 +298,7 @@ Example policy concepts:
 - Max notional USD 500 per order.
 - Max daily notional USD 2,000.
 - Max daily realized loss USD 200.
-- Leverage disabled.
+- Spot margin disabled; futures leverage capped by environment and risk tier.
 - Withdrawals always denied.
 - Unknown onchain contracts denied.
 - Human approval required for new spender addresses.
@@ -480,9 +485,9 @@ Recommended MVP should support:
 - Structured trading intent schema.
 - Reviewer agent verdict.
 - OPA/Rego policy evaluation.
-- Binance broker with paper, sandbox where available, and limited-live modes.
-- Ethereum testnet signer.
-- Solana testnet signer.
+- Binance broker with spot and USD-M futures paper, sandbox where available, and limited-live modes.
+- Ethereum Sepolia testnet signer.
+- Solana devnet signer.
 - Append-only audit log.
 - Basic egress allowlist for agent runtime.
 
@@ -491,12 +496,17 @@ Recommended MVP should support:
 Recommended first stack:
 
 - TypeScript monorepo.
-- JSON Schema or Zod for intent validation.
-- OPA/Rego for final policy evaluation.
+- `pnpm` workspaces with a committed lockfile and a pinned package manager via Corepack.
+- Zod as the TypeScript runtime validation source of truth, with generated JSON Schema for external contracts, docs, fixtures, and agent/tool interoperability.
+- OPA/Rego for final policy evaluation, running as a sidecar or local service in dev and deployment. Use a local OPA binary in tests.
 - TypeScript risk engine for live data checks that are awkward to express directly in Rego.
-- Binance connector behind the broker boundary.
-- EVM connector for Ethereum using typed transaction simulation before signing.
-- Solana connector using explicit instruction parsing and simulation before signing.
+- Thin broker-owned Binance signed REST client for the limited spot and USD-M futures endpoint set.
+- EVM connector for Ethereum Sepolia using `viem` and typed transaction simulation before signing.
+- Solana devnet connector using `@solana/web3.js`, explicit instruction parsing, and simulation before signing.
+- `gpt-5.5` as the first reviewer model/provider.
+- HashiCorp Vault as the first production-grade secret backend, plus a local development secret provider.
+- SQLite audit backend for MVP with an append-only audit table, hash-chain tamper evidence, and JSONL export.
+- CLI as the first human approval surface.
 - Pluggable interfaces for agent adapters, secret providers, signer backends, exchange connectors, RPC providers, and deployment profiles.
 
 Why TypeScript first:
@@ -505,6 +515,17 @@ Why TypeScript first:
 - Good ecosystem coverage for Binance, EVM, Solana, schema validation, and policy integration.
 - Faster iteration for a greenfield MVP than Rust or Go while still allowing strict types and test coverage.
 - Security-critical signing can later move behind a Rust, Go, KMS, HSM, or MPC backend without changing the agent-facing API.
+
+Why Zod plus generated JSON Schema:
+
+- Zod keeps TypeScript runtime validation and inferred types close to implementation.
+- Generated JSON Schema gives agent adapters, docs, fixtures, and external clients a language-neutral contract.
+- Strict schemas must reject unknown fields for execution intents.
+
+Why Vault first for production secrets:
+
+- Vault is deployment-neutral across local Docker, single VPS, Kubernetes, and cloud-managed environments.
+- Cloud secret managers, KMS, HSM, and MPC integrations can be added as provider adapters without changing the agent-facing API.
 
 ## Phased Execution Plan
 
@@ -520,6 +541,7 @@ Deliverables:
 - Initial allow/deny matrix.
 - Secret provider interface.
 - Deployment profile model for local Docker, single VPS, Kubernetes, and cloud-managed runtimes.
+- Human approval channel roadmap: CLI first, then local web UI, Slack, Telegram, Discord, WhatsApp, and Signal.
 
 Validation:
 
@@ -555,10 +577,10 @@ Validation:
 
 Deliverables:
 
-- Binance broker with paper mode first.
-- Binance limited-live execution path gated behind explicit policy and canary limits.
-- Ethereum testnet transaction simulator/signer.
-- Solana testnet transaction simulator/signer.
+- Binance broker with spot and USD-M futures paper mode first.
+- Binance spot and USD-M futures limited-live execution path gated behind explicit policy and canary limits.
+- Ethereum Sepolia transaction simulator/signer.
+- Solana devnet transaction simulator/signer.
 - Market data freshness checks.
 - Portfolio and balance snapshot support.
 - Kill switch.
@@ -567,8 +589,8 @@ Validation:
 
 - End-to-end paper order flow.
 - End-to-end Binance limited-live canary flow with tiny configurable notional.
-- End-to-end Ethereum testnet simulation and signing.
-- End-to-end Solana testnet simulation and signing.
+- End-to-end Ethereum Sepolia simulation and signing.
+- End-to-end Solana devnet simulation and signing.
 - Rejection for stale market data.
 - Rejection for over-limit notional.
 - Rejection for unknown contract.
@@ -644,9 +666,10 @@ Use an IAM-inspired model:
   "action": "cex.place_order",
   "resource": "cex:binance:subaccount-1:ETH-USDC",
   "condition": {
+    "accountMode": "spot",
     "maxNotionalUsd": 500,
     "maxSlippageBps": 30,
-    "leverageAllowed": false,
+    "maxLeverage": 1,
     "requiresFreshMarketDataSeconds": 10
   }
 }
@@ -664,11 +687,18 @@ OPA/Rego should be embedded from day one as the final authorization engine. Type
 
 Human approval thresholds must be configurable. If no explicit threshold policy exists for a live action, the system should fail closed and require human approval.
 
+Default canary-live thresholds:
+
+- Binance spot: max USD 10 per order and USD 50 per day.
+- Binance USD-M futures: max USD 5 per order and USD 25 per day.
+- Futures leverage: default max 1x in canary-live. Any higher leverage requires explicit policy and human approval.
+- All default thresholds are configuration defaults, not hardcoded constants.
+
 ## Onchain-Specific Guardrails
 
 Minimum controls:
 
-- Chain allowlist, with Ethereum and Solana first.
+- Chain/environment allowlist, with Ethereum Sepolia and Solana devnet first.
 - Contract allowlist.
 - Function selector allowlist.
 - Token allowlist.
@@ -696,6 +726,7 @@ Human approval should be required for:
 Minimum controls:
 
 - Exchange allowlist, with Binance first.
+- Account mode allowlist, with spot and USD-M futures first.
 - Account/subaccount allowlist.
 - Symbol allowlist.
 - Order type allowlist.
@@ -704,7 +735,9 @@ Minimum controls:
 - Max position size.
 - Max realized/unrealized loss.
 - Slippage/price band checks.
-- Leverage disabled by default.
+- Spot margin disabled by default.
+- Futures leverage capped by policy, defaulting to 1x in canary-live.
+- Cross-margin, margin lending, and COIN-M futures out of first scope.
 - Withdrawals denied.
 - Transfer between accounts denied unless explicitly allowed.
 - Cooldown after repeated rejections or losses.
@@ -740,8 +773,10 @@ Resolved:
 - Build the first implementation in TypeScript.
 - Support OpenClaw and Hermes Agent from the initial integration phase.
 - Support Binance as the first CEX.
-- Support Ethereum and Solana as the first onchain targets.
+- Support Binance spot and USD-M futures first; exclude margin lending, cross-margin, and COIN-M futures from first scope.
+- Support Ethereum Sepolia and Solana devnet as the first onchain targets.
 - Embed OPA/Rego from day one for deterministic authorization.
+- Use `pnpm` workspaces, Zod with generated JSON Schema, OPA sidecar/local service, `gpt-5.5` reviewer, Vault as the first production secret backend, SQLite/hash-chain audit backend, and CLI-first human approval.
 - Aim for limited live trading as the first real-money target, but only behind explicit policy, canary limits, paper trading validation, testnet validation, and kill-switch coverage.
 - Design secret and deployment backends as pluggable interfaces so the framework can eventually support local development, cloud secret managers, Vault, KMS, HSM, MPC providers, local Docker, single VPS, Kubernetes, and cloud-managed runtimes.
 
@@ -752,8 +787,8 @@ Still configurable rather than hardcoded:
 - Daily notional limits.
 - Daily loss limits.
 - Allowed Binance accounts and subaccounts.
-- Allowed symbols.
-- Allowed Ethereum chains, contracts, functions, tokens, spenders, and destinations.
-- Allowed Solana programs, instructions, tokens, accounts, and authorities.
+- Allowed Binance spot/futures symbols, leverage caps, and futures account modes.
+- Allowed Ethereum Sepolia contracts, functions, tokens, spenders, and destinations.
+- Allowed Solana devnet programs, instructions, tokens, accounts, and authorities.
 - Secret backend per environment.
 - Deployment profile per environment.
