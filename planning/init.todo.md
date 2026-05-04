@@ -171,19 +171,19 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 
 ## Phase 5 - Dynamic Risk Engine
 
-- [ ] Create risk engine package.
-- [ ] Implement market data freshness check.
-- [ ] Implement portfolio freshness check.
-- [ ] Implement per-order notional check.
-- [ ] Implement daily notional check.
-- [ ] Implement daily loss check.
-- [ ] Implement slippage and price band check.
-- [ ] Implement position delta check.
-- [ ] Implement order frequency and cooldown check.
-- [ ] Implement unknown data fail-closed result.
-- [ ] Implement evidence reference validation.
-- [ ] Implement reviewer verdict consistency check.
-- [ ] Add tests for stale data, missing data, exceeded limits, and valid low-risk flow.
+- [x] Create risk engine package.
+- [x] Implement market data freshness check.
+- [x] Implement portfolio freshness check.
+- [x] Implement per-order notional check.
+- [x] Implement daily notional check.
+- [x] Implement daily loss check.
+- [x] Implement slippage and price band check.
+- [x] Implement position delta check.
+- [x] Implement order frequency and cooldown check.
+- [x] Implement unknown data fail-closed result.
+- [x] Implement evidence reference validation.
+- [x] Implement reviewer verdict consistency check.
+- [x] Add tests for stale data, missing data, exceeded limits, and valid low-risk flow.
 
 ## Phase 6 - Broker MVP
 

@@ -14,5 +14,9 @@
     "sourceMap": true
   },
   "include": [],
-  "references": [{ "path": "packages/schemas" }, { "path": "packages/guardrail-service" }]
+  "references": [
+    { "path": "packages/schemas" },
+    { "path": "packages/guardrail-service" },
+    { "path": "packages/risk-engine" }
+  ]
 }
