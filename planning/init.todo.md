@@ -38,37 +38,37 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 
 ## Phase 0 - Spec And Threat Model
 
-- [ ] Create `docs/threat-model.md`.
-- [ ] Document attacker profiles: prompt injector, compromised agent runtime, compromised host, malicious tool, malicious RPC/provider, leaked credential user, unsafe strategy.
-- [ ] Document protected assets: CEX keys, wallet keys, LLM keys, exchange accounts, signer, broker, audit logs, policy bundles, portfolio data.
-- [ ] Document fail-closed behavior for missing data, stale data, policy errors, reviewer errors, signer errors, RPC disagreement, and broker errors.
-- [ ] Define supported actions for MVP:
-  - [ ] `cex.place_order`
-  - [ ] `cex.cancel_order`
-  - [ ] `cex.get_open_orders`
-  - [ ] `cex.get_portfolio`
-  - [ ] `onchain.simulate_transaction`
-  - [ ] `onchain.request_signature`
-  - [ ] `onchain.get_portfolio`
-- [ ] Define explicitly denied actions for MVP:
-  - [ ] CEX withdrawal
-  - [ ] CEX account transfer
-  - [ ] Spot margin or cross-margin enablement
-  - [ ] USD-M futures leverage above configured policy cap
-  - [ ] COIN-M futures trading
-  - [ ] Unlimited token approval
-  - [ ] Unknown contract interaction
-  - [ ] Bridge transaction without human approval
-- [ ] Define risk tiers: `low`, `medium`, `high`, `critical`.
-- [ ] Define human approval classes: `none`, `required`, `break_glass`.
-- [ ] Define policy decision states: `allow`, `deny`, `needs_human`.
-- [ ] Define automatic execution envelope for reviewer-approved low-risk allowlisted actions.
-- [ ] Define `needs_human` escalation criteria.
-- [ ] Define hard-deny criteria that must not be converted into human approval.
-- [ ] Define one-time approval versus durable allowlist onboarding semantics.
-- [ ] Define audit event taxonomy.
-- [ ] Define idempotency strategy for trading and signing requests.
-- [ ] Define environment profiles: `dev`, `paper`, `testnet`, `canary_live`, `production`.
+- [x] Create `docs/threat-model.md`.
+- [x] Document attacker profiles: prompt injector, compromised agent runtime, compromised host, malicious tool, malicious RPC/provider, leaked credential user, unsafe strategy.
+- [x] Document protected assets: CEX keys, wallet keys, LLM keys, exchange accounts, signer, broker, audit logs, policy bundles, portfolio data.
+- [x] Document fail-closed behavior for missing data, stale data, policy errors, reviewer errors, signer errors, RPC disagreement, and broker errors.
+- [x] Define supported actions for MVP:
+  - [x] `cex.place_order`
+  - [x] `cex.cancel_order`
+  - [x] `cex.get_open_orders`
+  - [x] `cex.get_portfolio`
+  - [x] `onchain.simulate_transaction`
+  - [x] `onchain.request_signature`
+  - [x] `onchain.get_portfolio`
+- [x] Define explicitly denied actions for MVP:
+  - [x] CEX withdrawal
+  - [x] CEX account transfer
+  - [x] Spot margin or cross-margin enablement
+  - [x] USD-M futures leverage above configured policy cap
+  - [x] COIN-M futures trading
+  - [x] Unlimited token approval
+  - [x] Unknown contract interaction
+  - [x] Bridge transaction without human approval
+- [x] Define risk tiers: `low`, `medium`, `high`, `critical`.
+- [x] Define human approval classes: `none`, `required`, `break_glass`.
+- [x] Define policy decision states: `allow`, `deny`, `needs_human`.
+- [x] Define automatic execution envelope for reviewer-approved low-risk allowlisted actions.
+- [x] Define `needs_human` escalation criteria.
+- [x] Define hard-deny criteria that must not be converted into human approval.
+- [x] Define one-time approval versus durable allowlist onboarding semantics.
+- [x] Define audit event taxonomy.
+- [x] Define idempotency strategy for trading and signing requests.
+- [x] Define environment profiles: `dev`, `paper`, `testnet`, `canary_live`, `production`.
 
 ## Phase 1 - Repository And Tooling
 
