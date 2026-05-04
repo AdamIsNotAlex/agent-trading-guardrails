@@ -51,6 +51,44 @@ test_needs_human_notional_above_threshold if {
 	guardrail.decision == "needs_human" with input as inp
 }
 
+# Reviewer high risk blocks auto-allow
+test_needs_human_reviewer_high_risk if {
+	inp := object.union(base_input, {"reviewerRiskLevel": "high"})
+	guardrail.decision == "needs_human" with input as inp
+	some reason in guardrail.escalation_reasons with input as inp
+	reason.rule == "reviewer_risk_not_low"
+}
+
+# Reviewer medium risk blocks auto-allow
+test_needs_human_reviewer_medium_risk if {
+	inp := object.union(base_input, {"reviewerRiskLevel": "medium"})
+	guardrail.decision == "needs_human" with input as inp
+	some reason in guardrail.escalation_reasons with input as inp
+	reason.rule == "reviewer_risk_not_low"
+}
+
+# Reviewer critical risk blocks auto-allow
+test_needs_human_reviewer_critical_risk if {
+	inp := object.union(base_input, {"reviewerRiskLevel": "critical"})
+	guardrail.decision == "needs_human" with input as inp
+	some reason in guardrail.escalation_reasons with input as inp
+	reason.rule == "reviewer_risk_not_low"
+}
+
+# Missing reviewer risk blocks auto-allow
+test_needs_human_reviewer_missing_risk if {
+	inp := object.remove(base_input, ["reviewerRiskLevel"])
+	guardrail.decision == "needs_human" with input as inp
+	some reason in guardrail.escalation_reasons with input as inp
+	reason.rule == "reviewer_risk_not_low"
+}
+
+# Reviewer low risk allows auto-allow when other conditions match
+test_allow_reviewer_low_risk if {
+	inp := object.union(base_input, {"reviewerRiskLevel": "low"})
+	guardrail.decision == "allow" with input as inp
+}
+
 # Hard deny: withdrawal
 test_hard_deny_withdrawal if {
 	inp := object.union(base_input, {"action": "cex.withdraw"})

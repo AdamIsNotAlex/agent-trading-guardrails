@@ -8,6 +8,10 @@ escalation_reasons contains {"rule": "reviewer_not_approved", "message": "Review
 	input.reviewerVerdict != "approve"
 }
 
+escalation_reasons contains {"rule": "reviewer_risk_not_low", "message": "Reviewer risk level is not eligible for automatic execution."} if {
+	not input.reviewerRiskLevel == "low"
+}
+
 escalation_reasons contains {"rule": "notional_above_auto_threshold", "message": "Notional exceeds automatic execution threshold."} if {
 	input.maxNotionalUsd
 	limits := data.policy.limits[input.environment]

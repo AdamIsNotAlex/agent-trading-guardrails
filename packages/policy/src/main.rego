@@ -24,6 +24,7 @@ decision := "allow" if {
 	count(escalation_reasons) == 0
 	count(allow_reasons) > 0
 	reviewer_approved
+	reviewer_low_risk
 }
 
 requires_human_approval if {
@@ -64,6 +65,10 @@ matched_deny_rules contains rule if {
 
 reviewer_approved if {
 	input.reviewerVerdict == "approve"
+}
+
+reviewer_low_risk if {
+	input.reviewerRiskLevel == "low"
 }
 
 reasons := array.concat(

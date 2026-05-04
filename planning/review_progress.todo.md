@@ -174,9 +174,9 @@ No concrete `OpenAiLlmProvider` HTTP client exists. `ReviewerAdapter` accepts a 
 
 `main.rego` auto-allows reviewer-approved allowlist matches without checking `reviewerRiskLevel`. A high/critical risk input can auto-allow.
 
-- [ ] In `packages/policy/src/main.rego`, add a condition to the `"allow"` decision rule: `input.reviewerRiskLevel == "low"` (or `input.reviewerRiskLevel` is in `{"low", "medium"}` depending on policy intent).
-- [ ] Add Rego test: reviewer approves with `riskLevel: "high"` → decision is `"needs_human"`, not `"allow"`.
-- [ ] Add Rego test: reviewer approves with `riskLevel: "low"` → decision is `"allow"` when other conditions are met.
+- [x] In `packages/policy/src/main.rego`, add a condition to the `"allow"` decision rule: `input.reviewerRiskLevel == "low"` (or `input.reviewerRiskLevel` is in `{"low", "medium"}` depending on policy intent).
+- [x] Add Rego test: reviewer approves with `riskLevel: "high"` → decision is `"needs_human"`, not `"allow"`.
+- [x] Add Rego test: reviewer approves with `riskLevel: "low"` → decision is `"allow"` when other conditions are met.
 
 ### P1.10 — Implement concrete BrokerIdempotencyStore (Phase 6)
 
