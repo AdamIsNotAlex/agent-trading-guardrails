@@ -199,23 +199,23 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 
 ## Phase 7 - Binance Connector
 
-- [ ] Define Binance connector interface.
-- [ ] Implement Binance public market data access through broker only.
-- [ ] Implement Binance account snapshot through broker only.
-- [ ] Implement Binance spot paper order simulation.
-- [ ] Implement Binance USD-M futures paper order simulation.
-- [ ] Implement Binance spot live order placement behind `canary_live` policy.
-- [ ] Implement Binance USD-M futures live order placement behind `canary_live` policy.
-- [ ] Implement Binance cancel order.
-- [ ] Implement Binance order status polling.
-- [ ] Enforce spot margin and cross-margin exclusion.
-- [ ] Enforce COIN-M futures exclusion.
-- [ ] Enforce USD-M futures isolated-mode and leverage-cap policy.
-- [ ] Enforce no-withdrawal API key requirement in docs and runtime checks where possible.
-- [ ] Enforce subaccount/account allowlist.
-- [ ] Enforce IP allowlist requirement in deployment docs.
-- [ ] Add integration tests with mocked Binance API.
-- [ ] Add optional sandbox/testnet tests if Binance environment supports required flow.
+- [x] Define Binance connector interface.
+- [x] Implement Binance public market data access through broker only.
+- [x] Implement Binance account snapshot through broker only.
+- [x] Implement Binance spot paper order simulation.
+- [x] Implement Binance USD-M futures paper order simulation.
+- [x] Implement Binance spot live order placement behind `canary_live` policy.
+- [x] Implement Binance USD-M futures live order placement behind `canary_live` policy.
+- [x] Implement Binance cancel order.
+- [x] Implement Binance order status polling.
+- [x] Enforce spot margin and cross-margin exclusion.
+- [x] Enforce COIN-M futures exclusion.
+- [x] Enforce USD-M futures isolated-mode and leverage-cap policy.
+- [x] Enforce no-withdrawal API key requirement in docs and runtime checks where possible.
+- [x] Enforce subaccount/account allowlist.
+- [x] Enforce IP allowlist requirement in deployment docs.
+- [x] Add integration tests with mocked Binance API.
+- [x] Add optional sandbox/testnet tests if Binance environment supports required flow.
 
 ## Phase 8 - Ethereum Sepolia Onchain Connector
 
