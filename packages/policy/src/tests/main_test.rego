@@ -214,12 +214,18 @@ test_solana_devnet_sign_known_program if {
 test_daily_notional_escalation if {
 	inp := object.union(base_input, {"dailyNotionalUsd": 100})
 	guardrail.decision == "needs_human" with input as inp
+	count(guardrail.escalation_reasons) == 1 with input as inp
+	some reason in guardrail.escalation_reasons with input as inp
+	reason.rule == "daily_notional_above_threshold"
 }
 
 # Daily loss escalation
 test_daily_loss_escalation if {
 	inp := object.union(base_input, {"dailyRealizedLossUsd": 50})
 	guardrail.decision == "needs_human" with input as inp
+	count(guardrail.escalation_reasons) == 1 with input as inp
+	some reason in guardrail.escalation_reasons with input as inp
+	reason.rule == "daily_loss_above_threshold"
 }
 
 # Cancel order is allowed

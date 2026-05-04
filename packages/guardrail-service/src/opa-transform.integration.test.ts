@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PolicyOutput as PolicyOutputValidator } from "@guardrails/schemas";
 import { describe, expect, it } from "vitest";
 import { transformOpaOutput } from "./opa-transform.js";
 
@@ -51,7 +52,7 @@ describe.runIf(hasOpaCli())("transformOpaOutput with real Rego output", () => {
         result: Array<{ expressions: Array<{ value: unknown }> }>;
       };
       const rawOutput = parsed.result[0].expressions[0].value as Record<string, unknown>;
-      const output = transformOpaOutput(rawOutput);
+      const output = PolicyOutputValidator.parse(transformOpaOutput(rawOutput));
 
       expect(output.decision).toBe("deny");
       expect(output.matchedDenyRules).toContain("withdrawal_denied");

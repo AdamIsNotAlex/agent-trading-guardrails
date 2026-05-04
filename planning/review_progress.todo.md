@@ -59,7 +59,7 @@ Rego outputs `snake_case` field names (`requires_human_approval`, `matched_allow
   - Injects `evaluatedAt: new Date().toISOString()`
 - [x] Call `transformOpaOutput` in `packages/guardrail-service/src/service.ts` before `PolicyOutputValidator.parse(...)`.
 - [x] Add unit tests for the transform function covering all output permutations.
-- [ ] Add integration test that passes real Rego output (from `opa eval`) through the transform and validates against `PolicyOutputValidator`.
+- [x] Add integration test that passes real Rego output (from `opa eval`) through the transform and validates against `PolicyOutputValidator`.
 
 ### P0.5 — Populate daily risk facts into OPA policy input (Phase 4)
 
@@ -68,7 +68,7 @@ Rego outputs `snake_case` field names (`requires_human_approval`, `matched_allow
 - [x] In `packages/guardrail-service/src/service.ts`, after obtaining the `DynamicRiskResult` from the risk engine, extract `dailyNotionalUsd` and `dailyRealizedLossUsd` from the risk facts and include them in the `policyInput` object passed to `policy.evaluate(policyInput)`.
 - [x] Ensure the risk engine's `DailyStats` (from `packages/risk-engine/src/providers.ts`) is accessible to the service for populating these fields — may require the risk engine to expose the raw `DailyStats` alongside its pass/fail result.
 - [x] Add test that verifies `policyInput` passed to OPA contains `dailyNotionalUsd` and `dailyRealizedLossUsd` when daily stats are available.
-- [ ] Add test that verifies OPA escalation rules fire correctly when daily limits are exceeded.
+- [x] Add test that verifies OPA escalation rules fire correctly when daily limits are exceeded.
 
 ### P0.6 — Fix `needs_human` scoping bug in escalation.rego (Phase 4)
 
