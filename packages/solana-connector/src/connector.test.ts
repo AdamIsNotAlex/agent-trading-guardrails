@@ -1,9 +1,9 @@
 import type { OnchainSigningIntent } from "@guardrails/schemas";
 import { solanaDevnetSimulation } from "@guardrails/schemas/fixtures";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { SolanaConnector } from "./connector.js";
 import { LocalDevSolanaSigner } from "./dev-signer.js";
-import type { SolanaConfig, SolanaRpcProvider } from "./interfaces.js";
+import type { ParsedInstruction, SolanaConfig, SolanaRpcProvider } from "./interfaces.js";
 import { hasAuthorityChange, parseInstructions } from "./parser.js";
 
 const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
@@ -107,11 +107,50 @@ describe("SolanaConnector execution", () => {
     await expect(connector.execute(solanaDevnetSimulation)).rejects.toThrow("Simulation failed");
   });
 
-  it("signs with dev signer", async () => {
+  it("simulates before signing with dev signer", async () => {
+    const calls: string[] = [];
+    const simulateTransaction = vi.fn(async (instructions: ParsedInstruction[]) => {
+      calls.push("simulate");
+      return { success: true, logs: [], balanceChanges: [], error: null };
+    });
+    const provider: SolanaRpcProvider = {
+      simulateTransaction,
+      async getBalance() {
+        return 1_000_000_000;
+      },
+      async getSlot() {
+        return 12345;
+      },
+    };
     const signer = new LocalDevSolanaSigner("devnet-pubkey-test");
-    const connector = new SolanaConnector(config, makeMockProvider(), signer);
+    const signAndBroadcast = vi.spyOn(signer, "signAndBroadcast").mockImplementation(async () => {
+      calls.push("sign");
+      return "solana-tx-test";
+    });
+
+    const connector = new SolanaConnector(config, provider, signer);
     const result = await connector.execute(signingIntent);
-    expect(result.transactionHash).toBeTruthy();
+
+    expect(result.transactionHash).toBe("solana-tx-test");
+    expect(simulateTransaction).toHaveBeenCalledOnce();
+    expect(simulateTransaction).toHaveBeenCalledWith(
+      parseInstructions([{ programId: signingIntent.programId }]),
+    );
+    expect(signAndBroadcast).toHaveBeenCalledOnce();
+    expect(calls).toEqual(["simulate", "sign"]);
+  });
+
+  it("does not sign when request-signature simulation fails", async () => {
+    const signer = new LocalDevSolanaSigner("devnet-pubkey-test");
+    const signAndBroadcast = vi.spyOn(signer, "signAndBroadcast");
+    const connector = new SolanaConnector(
+      config,
+      makeMockProvider({ simulationSuccess: false }),
+      signer,
+    );
+
+    await expect(connector.execute(signingIntent)).rejects.toThrow("Simulation failed");
+    expect(signAndBroadcast).not.toHaveBeenCalled();
   });
 
   it("throws when signing without signer", async () => {

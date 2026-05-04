@@ -70,6 +70,10 @@ export class SolanaConnector implements ExecutionConnector {
       if (!this.signer) {
         throw new Error("Signer not configured.");
       }
+      const result = await this.provider.simulateTransaction(instructions);
+      if (!result.success) {
+        throw new Error(`Simulation failed: ${result.error}`);
+      }
       const txHash = await this.signer.signAndBroadcast(instructions);
       return { transactionHash: txHash };
     }

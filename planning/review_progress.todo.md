@@ -42,10 +42,10 @@ The `ApprovalStore` exists in `packages/approval/src/store.ts` but is never chec
 
 The signing path in `packages/solana-connector/src/connector.ts` lines 69-74 calls `signer.signAndBroadcast(instructions)` directly without calling `provider.simulateTransaction(instructions)` first. This is a core safety bypass.
 
-- [ ] In `packages/solana-connector/src/connector.ts`, add `const simResult = await this.provider.simulateTransaction(instructions)` before `this.signer.signAndBroadcast(instructions)` in the `onchain.request_signature` branch (lines 69-74).
-- [ ] If `simResult.success === false`, return a failed result without calling `signAndBroadcast`.
-- [ ] Add test in `packages/solana-connector/src/connector.test.ts` that verifies `onchain.request_signature` calls `simulateTransaction` before `signAndBroadcast` (mock provider should receive the simulation call).
-- [ ] Add test that signing is rejected when simulation fails.
+- [x] In `packages/solana-connector/src/connector.ts`, add `const simResult = await this.provider.simulateTransaction(instructions)` before `this.signer.signAndBroadcast(instructions)` in the `onchain.request_signature` branch (lines 69-74).
+- [x] If `simResult.success === false`, return a failed result without calling `signAndBroadcast`.
+- [x] Add test in `packages/solana-connector/src/connector.test.ts` that verifies `onchain.request_signature` calls `simulateTransaction` before `signAndBroadcast` (mock provider should receive the simulation call).
+- [x] Add test that signing is rejected when simulation fails.
 
 ### P0.4 — Fix Rego↔TypeScript schema mismatch (Phase 4)
 
