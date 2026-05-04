@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "composite": true,
+    "types": ["node"]
+  },
+  "include": ["src"],
+  "references": [
+    { "path": "../schemas" },
+    { "path": "../guardrail-service" },
+    { "path": "../broker" }
+  ]
+}

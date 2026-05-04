@@ -1,0 +1,17 @@
+{
+  "name": "@guardrails/red-team",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@guardrails/schemas": "workspace:*",
+    "@guardrails/service": "workspace:*",
+    "@guardrails/broker": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0"
+  }
+}

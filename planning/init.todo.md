@@ -380,35 +380,35 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 
 ## Phase 17 - Red Team And Hardening
 
-- [ ] Build prompt injection fixture suite.
-- [ ] Test malicious webpage instructions.
-- [ ] Test malicious repository instructions.
-- [ ] Test malicious token metadata.
-- [ ] Test malicious MCP/tool definitions.
-- [ ] Test attempted secret exfiltration through prompts.
-- [ ] Test attempted secret exfiltration through logs.
-- [ ] Test attempted arbitrary egress.
-- [ ] Test attempted direct CEX access from agent runtime.
-- [ ] Test attempted direct RPC access from agent runtime.
-- [ ] Test hallucinated price/balance/position claims.
-- [ ] Test invalid reviewer output.
-- [ ] Test reviewer `approve` plus matching allowlist auto-executes within low-risk limits.
-- [ ] Test reviewer `approve` without matching allowlist does not auto-execute.
-- [ ] Test threshold breach returns `needs_human` when below hard-deny threshold.
-- [ ] Test hard-deny actions never become human approval requests.
-- [ ] Test malformed policy input.
-- [ ] Test OPA unavailable.
-- [ ] Test broker unavailable.
-- [ ] Test signer unavailable.
-- [ ] Test stale market data.
-- [ ] Test stale portfolio data.
-- [ ] Test unauthorized withdrawal.
-- [ ] Test unauthorized transfer.
-- [ ] Test unknown onchain contract.
-- [ ] Test unlimited approval.
-- [ ] Test Solana authority change.
-- [ ] Test repeated rejection cooldown.
-- [ ] Document findings and fixes.
+- [x] Build prompt injection fixture suite.
+- [x] Test malicious webpage instructions.
+- [x] Test malicious repository instructions.
+- [x] Test malicious token metadata.
+- [x] Test malicious MCP/tool definitions.
+- [x] Test attempted secret exfiltration through prompts.
+- [x] Test attempted secret exfiltration through logs.
+- [x] Test attempted arbitrary egress.
+- [x] Test attempted direct CEX access from agent runtime.
+- [x] Test attempted direct RPC access from agent runtime.
+- [x] Test hallucinated price/balance/position claims.
+- [x] Test invalid reviewer output.
+- [x] Test reviewer `approve` plus matching allowlist auto-executes within low-risk limits.
+- [x] Test reviewer `approve` without matching allowlist does not auto-execute.
+- [x] Test threshold breach returns `needs_human` when below hard-deny threshold.
+- [x] Test hard-deny actions never become human approval requests.
+- [x] Test malformed policy input.
+- [x] Test OPA unavailable.
+- [x] Test broker unavailable.
+- [x] Test signer unavailable.
+- [x] Test stale market data.
+- [x] Test stale portfolio data.
+- [x] Test unauthorized withdrawal.
+- [x] Test unauthorized transfer.
+- [x] Test unknown onchain contract.
+- [x] Test unlimited approval.
+- [x] Test Solana authority change.
+- [x] Test repeated rejection cooldown.
+- [x] Document findings and fixes.
 
 ## Phase 18 - RPC Eclipse And BGP Split Future Work
 
@@ -427,19 +427,19 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 
 ## Cross-Cutting Validation
 
-- [ ] Run formatting checks.
-- [ ] Run lint checks.
-- [ ] Run TypeScript type checks.
-- [ ] Run unit tests.
-- [ ] Run integration tests with mocked CEX/RPC providers.
-- [ ] Run Rego policy tests.
-- [ ] Run end-to-end paper trading flow.
-- [ ] Run Ethereum Sepolia simulation/signing flow.
-- [ ] Run Solana devnet simulation/signing flow.
-- [ ] Run agent integration tests for OpenClaw and Hermes.
-- [ ] Run sandbox egress-block tests.
-- [ ] Run secret redaction tests.
-- [ ] Run audit completeness tests.
+- [x] Run formatting checks.
+- [x] Run lint checks.
+- [x] Run TypeScript type checks.
+- [x] Run unit tests.
+- [x] Run integration tests with mocked CEX/RPC providers.
+- [x] Run Rego policy tests.
+- [x] Run end-to-end paper trading flow.
+- [x] Run Ethereum Sepolia simulation/signing flow.
+- [x] Run Solana devnet simulation/signing flow.
+- [x] Run agent integration tests for OpenClaw and Hermes.
+- [x] Run sandbox egress-block tests.
+- [x] Run secret redaction tests.
+- [x] Run audit completeness tests.
 
 ## Dependencies
 
