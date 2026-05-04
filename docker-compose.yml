@@ -1,0 +1,12 @@
+services:
+  opa:
+    image: openpolicyagent/opa:1.16.1-static@sha256:637ffdb793e146e50ec45cc023ee78fc5bc52c11816ce7adee41ce20e46e5ed8
+    ports:
+      - "8181:8181"
+    command:
+      - "run"
+      - "--server"
+      - "--addr=0.0.0.0:8181"
+      - "/policies"
+    volumes:
+      - ./packages/policy/src:/policies:ro

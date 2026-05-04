@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  lint-typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm test:integration
+
+  opa-policy-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download and verify OPA v1.16.1
+        env:
+          OPA_VER: "1.16.1"
+          OPA_SHA256: "dc00b1c32c52f1557f7f127940bc3f1de6c507fdfbe0446f19d3b19ca5786494"
+        run: |
+          curl -fsSL -o opa "https://openpolicyagent.org/downloads/v${OPA_VER}/opa_linux_amd64_static"
+          echo "${OPA_SHA256}  opa" | sha256sum -c -
+          chmod +x opa
+          ./opa version
+      - name: Run Rego tests
+        run: |
+          if [ -d "packages/policy/src" ]; then
+            ./opa test packages/policy/src -v
+          else
+            echo "No policy tests found yet — skipping."
+          fi
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - name: Audit dependencies
+        run: pnpm audit --audit-level=high
+      - name: Check for secrets in codebase
+        run: |
+          if grep -rn \
+            --include='*.ts' --include='*.json' --include='*.yml' --include='*.yaml' --include='*.env' --include='*.md' \
+            -E '(PRIVATE_KEY|SECRET_KEY|API_SECRET|MNEMONIC|SEED_PHRASE|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY)=' \
+            . --exclude-dir=node_modules --exclude-dir=.git --exclude='env.example'; then
+            echo "::error::Potential secrets found in codebase"
+            exit 1
+          fi

@@ -1,4 +1,61 @@
+# Dependencies
 node_modules/
-.claude/ralph-loop*.local.md
+
+# Build outputs
+dist/
+*.tsbuildinfo
+*.d.ts
+*.d.ts.map
+*.js.map
+!packages/**/src/**/*.d.ts
+/drizzle.config.js
+/vitest.config.js
+/vitest.integration.config.js
+
+# Environment and secrets
 .env
-.env.local
+.env.*
+!env.example
+.envrc
+*.pem
+*.key
+*.secret
+*.p12
+*.pfx
+*.keystore
+
+# Local secrets directory
+secrets/
+
+# Logs
+logs/
+*.log
+
+# Test artifacts
+coverage/
+.nyc_output/
+test-results/
+
+# SQLite databases
+*.db
+*.db-journal
+*.db-wal
+
+# OPA
+.opa/
+
+# Vault
+vault-data/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Claude Code local files
+.claude/ralph-loop*.local.md

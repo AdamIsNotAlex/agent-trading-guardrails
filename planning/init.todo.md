@@ -72,23 +72,23 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 
 ## Phase 1 - Repository And Tooling
 
-- [ ] Initialize TypeScript monorepo.
+- [x] Initialize TypeScript monorepo.
 - [x] Choose `pnpm` workspaces and committed `pnpm-lock.yaml` lockfile policy.
-- [ ] Add formatting and linting.
-- [ ] Add unit test runner.
-- [ ] Add integration test structure.
-- [ ] Add security-oriented CI checks.
-- [ ] Pin `opa_linux_amd64_static` v1.16.1 for CI policy tests and verify checksum.
-- [ ] Pin `openpolicyagent/opa:1.16.1-static` by image digest for local Docker.
-- [ ] Add `README.md` with project scope and non-goals.
-- [ ] Add `docs/architecture.md` from the core plan.
-- [ ] Add `docs/security-boundaries.md`.
-- [ ] Add `docs/deployment-profiles.md`.
-- [ ] Add `docs/live-trading-safety.md`.
-- [ ] Add `.gitignore` for Node, build outputs, local secrets, logs, and test artifacts.
-- [ ] Add example environment files without real secrets.
-- [ ] Add contributor note that real keys and wallet seeds must never be committed.
-- [ ] Add Drizzle Kit configuration for SQLite migrations.
+- [x] Add formatting and linting.
+- [x] Add unit test runner.
+- [x] Add integration test structure.
+- [x] Add security-oriented CI checks.
+- [x] Pin `opa_linux_amd64_static` v1.16.1 for CI policy tests and verify checksum.
+- [x] Pin `openpolicyagent/opa:1.16.1-static` by image digest for local Docker.
+- [x] Add `README.md` with project scope and non-goals.
+- [x] Add `docs/architecture.md` from the core plan.
+- [x] Add `docs/security-boundaries.md`.
+- [x] Add `docs/deployment-profiles.md`.
+- [x] Add `docs/live-trading-safety.md`.
+- [x] Add `.gitignore` for Node, build outputs, local secrets, logs, and test artifacts.
+- [x] Add example environment files without real secrets.
+- [x] Add contributor note that real keys and wallet seeds must never be committed.
+- [x] Add Drizzle Kit configuration for SQLite migrations.
 
 ## Phase 2 - Schemas And Core Types
 
