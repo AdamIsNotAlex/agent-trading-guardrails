@@ -364,19 +364,19 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 
 ## Phase 16 - Limited Live Trading Gates
 
-- [ ] Define `canary_live` policy bundle.
+- [x] Define `canary_live` policy bundle.
 - [x] Set default Binance spot canary-live notional to USD 10/order and USD 50/day.
 - [x] Set default Binance USD-M futures canary-live notional to USD 5/order and USD 25/day.
-- [ ] Enforce default USD-M futures max leverage of 1x in canary-live.
-- [ ] Require explicit configuration to enable live mode.
-- [ ] Require Binance no-withdrawal key before live mode.
-- [ ] Require Binance IP allowlist before live mode.
-- [ ] Require audit log enabled before live mode.
-- [ ] Require kill switch enabled before live mode.
-- [ ] Require human approval for live mode until policy explicitly allows no-human low-risk trades.
-- [ ] Add dry-run report before first live trade.
-- [ ] Add post-trade reconciliation after first live trade.
-- [ ] Add rollback procedure for live mode.
+- [x] Enforce default USD-M futures max leverage of 1x in canary-live.
+- [x] Require explicit configuration to enable live mode.
+- [x] Require Binance no-withdrawal key before live mode.
+- [x] Require Binance IP allowlist before live mode.
+- [x] Require audit log enabled before live mode.
+- [x] Require kill switch enabled before live mode.
+- [x] Require human approval for live mode until policy explicitly allows no-human low-risk trades.
+- [x] Add dry-run report before first live trade.
+- [x] Add post-trade reconciliation after first live trade.
+- [x] Add rollback procedure for live mode.
 
 ## Phase 17 - Red Team And Hardening
 
