@@ -84,7 +84,7 @@ describe("assertNotVaultDevInProduction", () => {
 
 describe("Secret redaction", () => {
   it("redacts hex private keys", () => {
-    const text = "key is 0x" + "a".repeat(64);
+    const text = `key is 0x${"a".repeat(64)}`;
     const redacted = redactSecrets(text);
     expect(redacted).toContain("[REDACTED]");
     expect(redacted).not.toContain("a".repeat(64));

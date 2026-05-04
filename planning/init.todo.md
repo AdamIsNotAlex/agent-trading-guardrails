@@ -266,17 +266,17 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 
 ## Phase 11 - Reviewer Agent Layer
 
-- [ ] Define reviewer prompt contract.
-- [ ] Define reviewer input schema.
-- [ ] Define reviewer output schema.
-- [ ] Implement reviewer adapter interface.
-- [ ] Implement `gpt-5.5` reviewer provider adapter.
-- [ ] Ensure reviewer verdict is advisory, not final authorization.
-- [ ] Add prompt injection detection labels.
-- [ ] Add unsupported-claim detection labels.
-- [ ] Add mismatch-between-evidence-and-action labels.
-- [ ] Add tests for reviewer output parsing.
-- [ ] Add fail-closed behavior for malformed reviewer output.
+- [x] Define reviewer prompt contract.
+- [x] Define reviewer input schema.
+- [x] Define reviewer output schema.
+- [x] Implement reviewer adapter interface.
+- [x] Implement `gpt-5.5` reviewer provider adapter.
+- [x] Ensure reviewer verdict is advisory, not final authorization.
+- [x] Add prompt injection detection labels.
+- [x] Add unsupported-claim detection labels.
+- [x] Add mismatch-between-evidence-and-action labels.
+- [x] Add tests for reviewer output parsing.
+- [x] Add fail-closed behavior for malformed reviewer output.
 
 ## Phase 12 - Agent Integrations
 
