@@ -43,8 +43,12 @@ These decisions resolve the initial open questions and should guide the first im
 - Default canary-live limits: spot max USD 10 per order and USD 50 per day; futures max USD 5 per order and USD 25 per day.
 - Human approval thresholds: configurable by policy, environment, agent, action, asset, exchange, chain, and account.
 - First human approval surface: CLI. Later adapters should support local web UI, Slack, Telegram, Discord, WhatsApp, and Signal.
+- First CLI approval UX: separate approval commands that list/show/approve/deny pending requests, plus a watch mode. Do not make the agent execution path depend on an interactive blocking prompt.
 - Policy engine: embed OPA/Rego from day one for final authorization. Keep TypeScript schema validation and dynamic risk checks outside OPA where they require live data fetching.
+- OPA distribution: pin OPA v1.16.1. Use official static Linux release binaries such as `opa_linux_amd64_static` for CI, and `openpolicyagent/opa:1.16.1-static` for local Docker with the image digest recorded during implementation.
 - Secret backends: design a pluggable secret provider interface from day one. Start with local development secrets plus Vault as the first production-grade backend, then add cloud secret managers, KMS, HSM, and MPC providers as adapters.
+- Vault deployment path: use Vault dev server for local development only, then add single-node integrated storage, Kubernetes HA integrated storage, and cloud-hosted Vault/HCP profiles step by step.
+- SQLite migration tool: use Drizzle Kit migrations for the MVP audit database.
 - Deployment targets: design for local Docker first, with deployment profiles for single VPS, Kubernetes, and cloud-managed runtimes later.
 
 ## Key Architectural Judgment
@@ -103,6 +107,7 @@ Useful references raised during planning:
 - SlowMist Agent Security: https://github.com/slowmist/slowmist-agent-security
 - SlowMist OpenClaw Security Practice Guide: https://github.com/slowmist/openclaw-security-practice-guide
 - Open Policy Agent / Rego for policy-as-code: https://www.openpolicyagent.org/docs/latest/policy-language/
+- OPA v1.16.1 release for pinned CI/local Docker distribution: https://github.com/open-policy-agent/opa/releases/tag/v1.16.1
 - AWS IAM policy model as inspiration for principal/action/resource/condition policies: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements.html
 
 Important design idea from the Docker OpenClaw article:
@@ -498,15 +503,15 @@ Recommended first stack:
 - TypeScript monorepo.
 - `pnpm` workspaces with a committed lockfile and a pinned package manager via Corepack.
 - Zod as the TypeScript runtime validation source of truth, with generated JSON Schema for external contracts, docs, fixtures, and agent/tool interoperability.
-- OPA/Rego for final policy evaluation, running as a sidecar or local service in dev and deployment. Use a local OPA binary in tests.
+- OPA/Rego for final policy evaluation, running as a sidecar or local service in dev and deployment. Pin OPA v1.16.1, use official static Linux release binaries such as `opa_linux_amd64_static` in CI/tests, and use `openpolicyagent/opa:1.16.1-static` for local Docker with the image digest recorded during implementation.
 - TypeScript risk engine for live data checks that are awkward to express directly in Rego.
 - Thin broker-owned Binance signed REST client for the limited spot and USD-M futures endpoint set.
 - EVM connector for Ethereum Sepolia using `viem` and typed transaction simulation before signing.
 - Solana devnet connector using `@solana/web3.js`, explicit instruction parsing, and simulation before signing.
 - `gpt-5.5` as the first reviewer model/provider.
-- HashiCorp Vault as the first production-grade secret backend, plus a local development secret provider.
-- SQLite audit backend for MVP with an append-only audit table, hash-chain tamper evidence, and JSONL export.
-- CLI as the first human approval surface.
+- HashiCorp Vault as the first production-grade secret backend, plus a local development secret provider. Local development uses Vault dev server only; production profiles are added later.
+- SQLite audit backend for MVP with Drizzle Kit migrations, an append-only audit table, hash-chain tamper evidence, and JSONL export.
+- CLI as the first human approval surface using separate pending-request commands and watch mode.
 - Pluggable interfaces for agent adapters, secret providers, signer backends, exchange connectors, RPC providers, and deployment profiles.
 
 Why TypeScript first:
@@ -527,6 +532,19 @@ Why Vault first for production secrets:
 - Vault is deployment-neutral across local Docker, single VPS, Kubernetes, and cloud-managed environments.
 - Cloud secret managers, KMS, HSM, and MPC integrations can be added as provider adapters without changing the agent-facing API.
 
+Vault deployment roadmap:
+
+- Local Docker: Vault dev server for development and tests only.
+- Single VPS: single-node Vault with integrated storage and documented backup/unseal workflow.
+- Kubernetes: Vault Helm deployment with integrated Raft storage and HA mode.
+- Cloud-managed runtime: cloud-hosted Vault/HCP profile or cloud secret manager adapter.
+
+Why separate CLI approval commands first:
+
+- Agent execution can create pending approvals without blocking on an attached terminal.
+- Operators can review, approve, deny, or watch pending approvals from a separate process.
+- The same approval state machine can later power local web UI, Slack, Telegram, Discord, WhatsApp, and Signal adapters.
+
 ## Phased Execution Plan
 
 ### Phase 0: Threat Model and Specification
@@ -542,6 +560,8 @@ Deliverables:
 - Secret provider interface.
 - Deployment profile model for local Docker, single VPS, Kubernetes, and cloud-managed runtimes.
 - Human approval channel roadmap: CLI first, then local web UI, Slack, Telegram, Discord, WhatsApp, and Signal.
+- Vault deployment roadmap: dev server, single-node integrated storage, Kubernetes HA integrated storage, cloud-hosted Vault/HCP or cloud secret manager adapter.
+- CLI approval UX: separate `list`, `show`, `approve`, `deny`, and `watch` commands.
 
 Validation:
 
@@ -564,6 +584,7 @@ Deliverables:
 - OPA/Rego policy evaluation interface.
 - TypeScript dynamic risk-check interface.
 - Audit logging.
+- SQLite schema migration setup with Drizzle Kit.
 - Idempotency key support.
 
 Validation:
@@ -572,6 +593,7 @@ Validation:
 - Rego tests for allow/deny cases.
 - Risk-check tests for dynamic conditions such as stale data and exceeded limits.
 - Audit log completeness tests.
+- Migration tests for the initial SQLite audit schema.
 
 ### Phase 2: Broker MVP
 
@@ -627,7 +649,7 @@ Deliverables:
 - Firewall allowlist.
 - Secret injection only at proxy or broker layer.
 - Blocked metadata and internal network ranges.
-- Secret provider adapters for local development and the first production backend.
+- Secret provider adapters for local development, Vault dev server, and the first production Vault profile.
 
 Validation:
 
@@ -635,6 +657,7 @@ Validation:
 - Attempted CEX/RPC direct access from agent is blocked.
 - Attempted env secret exfiltration has no useful trading secrets.
 - Agent container cannot access Docker socket or host credentials.
+- Vault dev server is used only in local development profiles and cannot be selected by production profiles.
 
 ### Phase 5: Red Team and Hardening
 
@@ -684,6 +707,8 @@ Policy should be evaluated with explicit deny precedence:
 5. Otherwise, allow broker execution.
 
 OPA/Rego should be embedded from day one as the final authorization engine. TypeScript code should handle schema validation, normalization, live data fetching, and dynamic risk calculations, then pass normalized facts into OPA for the final policy decision.
+
+OPA distribution should be pinned to v1.16.1 for CI and local Docker until the project explicitly upgrades it. CI should verify the downloaded `opa_linux_amd64_static` checksum, and Docker deployments should use `openpolicyagent/opa:1.16.1-static` pinned by image digest instead of relying only on a mutable tag.
 
 Human approval thresholds must be configurable. If no explicit threshold policy exists for a live action, the system should fail closed and require human approval.
 
@@ -776,7 +801,9 @@ Resolved:
 - Support Binance spot and USD-M futures first; exclude margin lending, cross-margin, and COIN-M futures from first scope.
 - Support Ethereum Sepolia and Solana devnet as the first onchain targets.
 - Embed OPA/Rego from day one for deterministic authorization.
-- Use `pnpm` workspaces, Zod with generated JSON Schema, OPA sidecar/local service, `gpt-5.5` reviewer, Vault as the first production secret backend, SQLite/hash-chain audit backend, and CLI-first human approval.
+- Use `pnpm` workspaces, Zod with generated JSON Schema, OPA v1.16.1 sidecar/local service, `gpt-5.5` reviewer, Vault as the first production secret backend, SQLite plus Drizzle Kit/hash-chain audit backend, and CLI-first human approval.
+- Use Vault dev server for local development only, then add single-node integrated storage, Kubernetes HA integrated storage, and cloud-hosted Vault/HCP profiles.
+- Use separate CLI approval commands for listing, showing, approving, denying, and watching pending requests.
 - Aim for limited live trading as the first real-money target, but only behind explicit policy, canary limits, paper trading validation, testnet validation, and kill-switch coverage.
 - Design secret and deployment backends as pluggable interfaces so the framework can eventually support local development, cloud secret managers, Vault, KMS, HSM, MPC providers, local Docker, single VPS, Kubernetes, and cloud-managed runtimes.
 

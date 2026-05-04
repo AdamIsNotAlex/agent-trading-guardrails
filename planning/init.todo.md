@@ -26,6 +26,10 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 - [x] Use Vault as the first production-grade secret backend.
 - [x] Use SQLite append-only audit storage with hash-chain tamper evidence for MVP.
 - [x] Use CLI as the first human approval surface, then add local web UI, Slack, Telegram, Discord, WhatsApp, and Signal adapters.
+- [x] Use Vault dev server for local development only, with a roadmap for single-node integrated storage, Kubernetes HA integrated storage, and cloud-hosted Vault/HCP.
+- [x] Use separate CLI approval commands for `list`, `show`, `approve`, `deny`, and `watch` as the first CLI approval UX.
+- [x] Use Drizzle Kit for SQLite audit database migrations.
+- [x] Pin OPA v1.16.1: use `opa_linux_amd64_static` in CI and `openpolicyagent/opa:1.16.1-static` in local Docker, with checksums and image digest recorded during implementation.
 - [x] Use USD 10/order and USD 50/day as default spot canary-live limits.
 - [x] Use USD 5/order and USD 25/day as default USD-M futures canary-live limits.
 
@@ -67,6 +71,8 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 - [ ] Add unit test runner.
 - [ ] Add integration test structure.
 - [ ] Add security-oriented CI checks.
+- [ ] Pin `opa_linux_amd64_static` v1.16.1 for CI policy tests and verify checksum.
+- [ ] Pin `openpolicyagent/opa:1.16.1-static` by image digest for local Docker.
 - [ ] Add `README.md` with project scope and non-goals.
 - [ ] Add `docs/architecture.md` from the core plan.
 - [ ] Add `docs/security-boundaries.md`.
@@ -75,6 +81,7 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 - [ ] Add `.gitignore` for Node, build outputs, local secrets, logs, and test artifacts.
 - [ ] Add example environment files without real secrets.
 - [ ] Add contributor note that real keys and wallet seeds must never be committed.
+- [ ] Add Drizzle Kit configuration for SQLite migrations.
 
 ## Phase 2 - Schemas And Core Types
 
@@ -147,6 +154,7 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 - [ ] Add Rego unit tests for each allow/deny path.
 - [ ] Add policy fixtures for `dev`, `paper`, `testnet`, and `canary_live`.
 - [ ] Document how TypeScript normalization and live risk facts feed OPA.
+- [ ] Document OPA v1.16.1 upgrade process and checksum verification.
 
 ## Phase 5 - Dynamic Risk Engine
 
@@ -228,7 +236,12 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 - [ ] Define secret provider interface.
 - [ ] Implement local development secret provider.
 - [x] Choose Vault as the first production-grade secret backend.
+- [ ] Implement Vault dev server profile for local development only.
 - [ ] Implement Vault secret provider adapter.
+- [ ] Document Vault single-node integrated storage profile for single VPS.
+- [ ] Document Vault Kubernetes HA integrated storage profile.
+- [ ] Document cloud-hosted Vault/HCP profile.
+- [ ] Add guardrail that production profiles cannot use Vault dev server.
 - [ ] Define signer backend interface.
 - [ ] Implement local testnet signer backend.
 - [ ] Document KMS adapter requirements.
@@ -301,6 +314,8 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 - [ ] Include broker revalidation results in audit events.
 - [ ] Include CEX order ID or transaction hash in audit events.
 - [ ] Include human approval details in audit events.
+- [ ] Add Drizzle Kit migration for initial audit tables.
+- [ ] Add migration test that applies SQLite schema from an empty database.
 - [ ] Add hash-chain or tamper-evidence design.
 - [ ] Add tests for audit completeness on allow, deny, needs-human, and error flows.
 
@@ -311,7 +326,12 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 - [ ] Implement approval timeout behavior.
 - [ ] Implement approval audit logging.
 - [ ] Implement configurable approval thresholds.
-- [ ] Implement CLI approval surface first.
+- [ ] Implement `guardrail approvals list`.
+- [ ] Implement `guardrail approvals show <approvalId>`.
+- [ ] Implement `guardrail approvals approve <approvalId>`.
+- [ ] Implement `guardrail approvals deny <approvalId>`.
+- [ ] Implement `guardrail approvals watch`.
+- [ ] Ensure agent execution creates pending approvals without requiring an attached interactive terminal.
 - [ ] Design local web UI approval adapter.
 - [ ] Design Slack approval adapter.
 - [ ] Design Telegram approval adapter.
@@ -406,12 +426,16 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 - [x] Choose package manager: `pnpm` workspaces with committed lockfile.
 - [x] Choose schema validation: Zod source of truth plus generated JSON Schema.
 - [x] Choose OPA integration mode: sidecar/local service, with local OPA binary for tests.
+- [x] Choose OPA distribution: `opa_linux_amd64_static` v1.16.1 for CI and `openpolicyagent/opa:1.16.1-static` pinned by digest for Docker.
 - [x] Choose first reviewer model/provider: `gpt-5.5`.
 - [x] Choose first production secret backend: Vault.
+- [x] Choose first Vault deployment mode: dev server for local development only.
+- [x] Choose Vault deployment roadmap: single-node integrated storage, Kubernetes HA integrated storage, cloud-hosted Vault/HCP.
 - [x] Choose Binance connector approach: thin broker-owned signed REST client for limited spot and USD-M futures endpoints.
 - [x] Choose EVM library: `viem`.
 - [x] Choose Solana library: `@solana/web3.js`.
 - [x] Choose audit log storage backend: SQLite append-only audit table with hash-chain tamper evidence and JSONL export.
+- [x] Choose SQLite migration tool: Drizzle Kit.
 - [x] Choose container/network enforcement approach for local Docker: Docker Compose profile, dedicated agent network, egress proxy, and DOCKER-USER/nftables firewall rules.
 
 ## Resolved Follow-Up Decisions
@@ -420,16 +444,10 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 - [x] First Solana environment: devnet.
 - [x] First human approval surface: CLI.
 - [x] Later human approval adapters: local web UI, Slack, Telegram, Discord, WhatsApp, and Signal.
+- [x] First CLI approval UX: separate approval commands for `list`, `show`, `approve`, `deny`, and `watch`.
 - [x] Binance first account modes: spot and USD-M futures.
 - [x] Binance excluded first account modes: margin lending, cross-margin, and COIN-M futures.
 
 ## Open Questions
 
-- [x] Which exact Vault deployment mode should be used first: dev server for local only, single-node file storage, integrated storage, or cloud-hosted Vault?
-I guess dev server for local only. But at the end we need to support them all. You should either supprt them step by step in the plam, or give a clear plan on how to support them in the future.
-- [x] Which CLI approval UX should be used first: blocking command, TUI, or separate approval command polling pending requests?
-You can decide.
-- [x] Which SQLite migration tool should be used?
-You can decide.
-- [x] Which exact OPA distribution should be pinned in CI and local Docker?
-You can decide.
+None for the current planning stage.
