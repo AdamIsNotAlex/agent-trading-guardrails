@@ -425,7 +425,11 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 
 ## Open Questions
 
-- [ ] Which exact Vault deployment mode should be used first: dev server for local only, single-node file storage, integrated storage, or cloud-hosted Vault?
-- [ ] Which CLI approval UX should be used first: blocking command, TUI, or separate approval command polling pending requests?
-- [ ] Which SQLite migration tool should be used?
-- [ ] Which exact OPA distribution should be pinned in CI and local Docker?
+- [x] Which exact Vault deployment mode should be used first: dev server for local only, single-node file storage, integrated storage, or cloud-hosted Vault?
+I guess dev server for local only. But at the end we need to support them all. You should either supprt them step by step in the plam, or give a clear plan on how to support them in the future.
+- [x] Which CLI approval UX should be used first: blocking command, TUI, or separate approval command polling pending requests?
+You can decide.
+- [x] Which SQLite migration tool should be used?
+You can decide.
+- [x] Which exact OPA distribution should be pinned in CI and local Docker?
+You can decide.
