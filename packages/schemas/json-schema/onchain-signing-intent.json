@@ -1,0 +1,102 @@
+{
+  "$ref": "#/definitions/onchain-signing-intent",
+  "definitions": {
+    "onchain-signing-intent": {
+      "type": "object",
+      "properties": {
+        "intentId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "principal": {
+          "type": "string",
+          "minLength": 1
+        },
+        "action": {
+          "type": "string",
+          "const": "onchain.request_signature"
+        },
+        "resource": {
+          "type": "string",
+          "minLength": 1
+        },
+        "environment": {
+          "type": "string",
+          "enum": ["dev", "paper", "testnet", "canary_live", "production"]
+        },
+        "requestedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "chain": {
+          "type": "string",
+          "enum": ["ethereum", "solana"]
+        },
+        "chainEnvironment": {
+          "type": "string",
+          "enum": ["sepolia", "devnet", "mainnet"]
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "data": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        },
+        "programId": {
+          "type": "string"
+        },
+        "instructions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": {}
+          }
+        },
+        "simulationId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "maxTokenApprovalAmount": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "intentId",
+        "principal",
+        "action",
+        "resource",
+        "environment",
+        "requestedAt",
+        "idempotencyKey",
+        "rationale",
+        "evidence",
+        "chain",
+        "chainEnvironment",
+        "to",
+        "simulationId"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

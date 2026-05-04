@@ -92,32 +92,32 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 
 ## Phase 2 - Schemas And Core Types
 
-- [ ] Create Zod-based trading intent schema package.
-- [ ] Generate JSON Schema artifacts from Zod schemas.
-- [ ] Enforce strict schema mode that rejects unknown execution-intent fields.
-- [ ] Define common intent envelope:
-  - [ ] `intentId`
-  - [ ] `principal`
-  - [ ] `action`
-  - [ ] `resource`
-  - [ ] `environment`
-  - [ ] `requestedAt`
-  - [ ] `idempotencyKey`
-  - [ ] `rationale`
-  - [ ] `evidence`
-- [ ] Define CEX order intent schema.
-- [ ] Define CEX cancel intent schema.
-- [ ] Define onchain simulation intent schema.
-- [ ] Define onchain signing intent schema.
-- [ ] Define reviewer verdict schema.
-- [ ] Define policy input schema passed to OPA.
-- [ ] Define policy decision schema returned from OPA.
-- [ ] Define dynamic risk result schema.
-- [ ] Define broker execution result schema.
-- [ ] Define audit log event schema.
-- [ ] Add schema tests for valid and invalid examples.
-- [ ] Add canonical fixture examples for Binance spot, Binance USD-M futures, Ethereum Sepolia, and Solana devnet.
-- [ ] Reject ambiguous free-form execution requests in schema tests.
+- [x] Create Zod-based trading intent schema package.
+- [x] Generate JSON Schema artifacts from Zod schemas.
+- [x] Enforce strict schema mode that rejects unknown execution-intent fields.
+- [x] Define common intent envelope:
+  - [x] `intentId`
+  - [x] `principal`
+  - [x] `action`
+  - [x] `resource`
+  - [x] `environment`
+  - [x] `requestedAt`
+  - [x] `idempotencyKey`
+  - [x] `rationale`
+  - [x] `evidence`
+- [x] Define CEX order intent schema.
+- [x] Define CEX cancel intent schema.
+- [x] Define onchain simulation intent schema.
+- [x] Define onchain signing intent schema.
+- [x] Define reviewer verdict schema.
+- [x] Define policy input schema passed to OPA.
+- [x] Define policy decision schema returned from OPA.
+- [x] Define dynamic risk result schema.
+- [x] Define broker execution result schema.
+- [x] Define audit log event schema.
+- [x] Add schema tests for valid and invalid examples.
+- [x] Add canonical fixture examples for Binance spot, Binance USD-M futures, Ethereum Sepolia, and Solana devnet.
+- [x] Reject ambiguous free-form execution requests in schema tests.
 
 ## Phase 3 - Guardrail Service MVP
 

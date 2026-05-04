@@ -1,0 +1,79 @@
+{
+  "$ref": "#/definitions/audit-event",
+  "definitions": {
+    "audit-event": {
+      "type": "object",
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "eventType": {
+          "type": "string",
+          "enum": [
+            "intent.received",
+            "intent.validated",
+            "intent.rejected",
+            "reviewer.started",
+            "reviewer.completed",
+            "reviewer.failed",
+            "policy.evaluated",
+            "policy.failed",
+            "risk.evaluated",
+            "risk.failed",
+            "approval.created",
+            "approval.decided",
+            "approval.timeout",
+            "allowlist.updated",
+            "signer.requested",
+            "signer.completed",
+            "signer.failed",
+            "broker.revalidated",
+            "broker.executed",
+            "broker.failed",
+            "killswitch.activated",
+            "killswitch.blocked"
+          ]
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "correlationId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "environment": {
+          "type": "string",
+          "enum": ["dev", "paper", "testnet", "canary_live", "production"]
+        },
+        "intentId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "principal": {
+          "type": "string"
+        },
+        "data": {
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "previousHash": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "eventId",
+        "eventType",
+        "timestamp",
+        "correlationId",
+        "environment",
+        "data",
+        "previousHash"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

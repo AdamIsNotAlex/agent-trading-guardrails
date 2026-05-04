@@ -1,0 +1,61 @@
+{
+  "$ref": "#/definitions/policy-output",
+  "definitions": {
+    "policy-output": {
+      "type": "object",
+      "properties": {
+        "decision": {
+          "type": "string",
+          "enum": ["allow", "deny", "needs_human"]
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "rule": {
+                "type": "string",
+                "minLength": 1
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": ["rule", "message"],
+            "additionalProperties": false
+          }
+        },
+        "requiresHumanApproval": {
+          "type": "boolean"
+        },
+        "matchedAllowRules": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "matchedDenyRules": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "evaluatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "decision",
+        "reasons",
+        "requiresHumanApproval",
+        "matchedAllowRules",
+        "matchedDenyRules",
+        "evaluatedAt"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

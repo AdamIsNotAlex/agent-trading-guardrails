@@ -44,6 +44,7 @@
     }
   },
   "files": {
-    "includes": ["**/*.ts", "**/*.json"]
+    "includes": ["**/*.ts", "**/*.json", "!**/dist", "!**/node_modules", "!**/coverage"],
+    "ignoreUnknown": true
   }
 }

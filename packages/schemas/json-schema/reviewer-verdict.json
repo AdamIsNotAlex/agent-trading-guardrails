@@ -1,0 +1,76 @@
+{
+  "$ref": "#/definitions/reviewer-verdict",
+  "definitions": {
+    "reviewer-verdict": {
+      "type": "object",
+      "properties": {
+        "intentId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "verdict": {
+          "type": "string",
+          "enum": ["approve", "reject", "needs_human"]
+        },
+        "riskLevel": {
+          "type": "string",
+          "enum": ["low", "medium", "high", "critical"]
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "detectedIssues": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "prompt_injection",
+              "unsupported_claim",
+              "evidence_action_mismatch",
+              "suspicious_tool_behavior",
+              "hallucinated_data",
+              "excessive_risk"
+            ]
+          }
+        },
+        "requiredPolicyTags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "reviewerModel": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reviewerProvider": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reviewedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "intentId",
+        "verdict",
+        "riskLevel",
+        "reasons",
+        "detectedIssues",
+        "requiredPolicyTags",
+        "reviewerModel",
+        "reviewerProvider",
+        "reviewedAt"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

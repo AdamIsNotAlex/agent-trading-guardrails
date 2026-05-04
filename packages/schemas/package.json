@@ -1,0 +1,26 @@
+{
+  "name": "@guardrails/schemas",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "generate:json-schema": "tsx src/generate-json-schema.ts"
+  },
+  "dependencies": {
+    "zod": "^3.25.23",
+    "zod-to-json-schema": "^3.24.5"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "tsx": "^4.19.4"
+  }
+}

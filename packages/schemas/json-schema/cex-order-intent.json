@@ -1,0 +1,115 @@
+{
+  "$ref": "#/definitions/cex-order-intent",
+  "definitions": {
+    "cex-order-intent": {
+      "type": "object",
+      "properties": {
+        "intentId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "principal": {
+          "type": "string",
+          "minLength": 1
+        },
+        "action": {
+          "type": "string",
+          "const": "cex.place_order"
+        },
+        "resource": {
+          "type": "string",
+          "minLength": 1
+        },
+        "environment": {
+          "type": "string",
+          "enum": ["dev", "paper", "testnet", "canary_live", "production"]
+        },
+        "requestedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "exchange": {
+          "type": "string",
+          "const": "binance"
+        },
+        "account": {
+          "type": "string",
+          "minLength": 1
+        },
+        "accountMode": {
+          "type": "string",
+          "enum": ["spot", "usdm_futures"]
+        },
+        "symbol": {
+          "type": "string",
+          "minLength": 1
+        },
+        "side": {
+          "type": "string",
+          "enum": ["buy", "sell"]
+        },
+        "orderType": {
+          "type": "string",
+          "enum": ["limit", "market"]
+        },
+        "quantity": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "price": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "maxNotionalUsd": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "maxSlippageBps": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "leverage": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "intentId",
+        "principal",
+        "action",
+        "resource",
+        "environment",
+        "requestedAt",
+        "idempotencyKey",
+        "rationale",
+        "evidence",
+        "exchange",
+        "account",
+        "accountMode",
+        "symbol",
+        "side",
+        "orderType",
+        "maxNotionalUsd",
+        "maxSlippageBps"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}
