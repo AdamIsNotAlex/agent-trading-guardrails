@@ -7,4 +7,5 @@ export type {
   ReviewerAdapter,
   RiskEngine,
 } from "./interfaces.js";
+export { transformOpaOutput } from "./opa-transform.js";
 export { GuardrailService } from "./service.js";

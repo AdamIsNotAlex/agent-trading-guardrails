@@ -2,7 +2,6 @@ import {
   type DynamicRiskResult,
   type PolicyInput,
   type PolicyOutput,
-  PolicyOutput as PolicyOutputValidator,
   type ReviewerVerdictSchema,
   ReviewerVerdictSchema as ReviewerVerdictValidator,
   TradingIntent,
@@ -16,6 +15,7 @@ import type {
   ReviewerAdapter,
   RiskEngine,
 } from "./interfaces.js";
+import { transformOpaOutput } from "./opa-transform.js";
 
 export class GuardrailService {
   private idempotency = new IdempotencyStore();
@@ -199,7 +199,7 @@ export class GuardrailService {
     let policyOutput: PolicyOutput;
     try {
       const rawPolicy = await this.policy.evaluate(policyInput);
-      policyOutput = PolicyOutputValidator.parse(rawPolicy);
+      policyOutput = transformOpaOutput(rawPolicy as Record<string, unknown>);
     } catch {
       const decision: GuardrailDecision = {
         intentId: intent.intentId,

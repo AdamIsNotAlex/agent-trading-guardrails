@@ -11,7 +11,7 @@ export interface ReviewerAdapter {
 }
 
 export interface PolicyEvaluator {
-  evaluate(input: PolicyInput): Promise<PolicyOutput>;
+  evaluate(input: PolicyInput): Promise<unknown>;
   isHealthy(): Promise<boolean>;
 }
 

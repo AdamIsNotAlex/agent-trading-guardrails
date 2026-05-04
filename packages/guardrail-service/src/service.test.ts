@@ -138,6 +138,29 @@ describe("GuardrailService", () => {
       expect(result.riskResult).not.toBeNull();
       expect(result.requiresHumanApproval).toBe(false);
     });
+
+    it("accepts raw snake_case OPA output", async () => {
+      const policy: PolicyEvaluator = {
+        async evaluate() {
+          return {
+            decision: "allow",
+            reasons: [],
+            requires_human_approval: false,
+            matched_allow_rules: ["test-allow"],
+            matched_deny_rules: [],
+          };
+        },
+        async isHealthy() {
+          return true;
+        },
+      };
+      const svc = new GuardrailService(config, makeReviewer(), policy, makeRisk());
+      const result = await svc.evaluate(binanceSpotOrder);
+
+      expect(result.outcome).toBe("allow");
+      expect(result.policyOutput?.matchedAllowRules).toEqual(["test-allow"]);
+      expect(result.policyOutput?.evaluatedAt).toBeTruthy();
+    });
   });
 
   describe("deny flow", () => {

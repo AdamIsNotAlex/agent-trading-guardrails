@@ -51,14 +51,14 @@ The signing path in `packages/solana-connector/src/connector.ts` lines 69-74 cal
 
 Rego outputs `snake_case` field names (`requires_human_approval`, `matched_allow_rules`, `matched_deny_rules`) while `PolicyOutput` in `packages/schemas/src/policy.ts` expects `camelCase` (`requiresHumanApproval`, `matchedAllowRules`, `matchedDenyRules`). Additionally, Rego does not emit `evaluatedAt`. `PolicyOutputValidator.parse(rawPolicy)` at `service.ts:202` would fail at runtime.
 
-- [ ] Create a `transformOpaOutput(raw: Record<string, unknown>): PolicyOutput` function in a new file `packages/guardrail-service/src/opa-transform.ts` that:
+- [x] Create a `transformOpaOutput(raw: Record<string, unknown>): PolicyOutput` function in a new file `packages/guardrail-service/src/opa-transform.ts` that:
   - Maps `requires_human_approval` → `requiresHumanApproval`
   - Maps `matched_allow_rules` → `matchedAllowRules`
   - Maps `matched_deny_rules` → `matchedDenyRules`
   - Maps `hard_deny_reasons` + `escalation_reasons` → `reasons` array
   - Injects `evaluatedAt: new Date().toISOString()`
-- [ ] Call `transformOpaOutput` in `packages/guardrail-service/src/service.ts` before `PolicyOutputValidator.parse(...)`.
-- [ ] Add unit tests for the transform function covering all output permutations.
+- [x] Call `transformOpaOutput` in `packages/guardrail-service/src/service.ts` before `PolicyOutputValidator.parse(...)`.
+- [x] Add unit tests for the transform function covering all output permutations.
 - [ ] Add integration test that passes real Rego output (from `opa eval`) through the transform and validates against `PolicyOutputValidator`.
 
 ### P0.5 — Populate daily risk facts into OPA policy input (Phase 4)
