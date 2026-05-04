@@ -138,36 +138,36 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 
 ## Phase 4 - OPA/Rego Policy Layer
 
-- [ ] Create policy bundle layout.
-- [ ] Implement default deny.
-- [ ] Implement explicit deny precedence.
-- [ ] Implement required reviewer status checks.
-- [ ] Implement principal/action/resource matching.
-- [ ] Implement environment-aware policy.
-- [ ] Implement policy allowlist schema over `principal`, `action`, `resource`, and `condition`.
-- [ ] Implement automatic execution policy for reviewer-approved low-risk allowlisted actions.
-- [ ] Implement configurable human approval threshold policy.
-- [ ] Implement `needs_human` policy for valid but non-automatic escalation cases.
-- [ ] Implement hard-deny policy for forbidden actions that must not request human approval.
-- [ ] Implement Binance allowlist policy.
-- [ ] Implement Binance notional limit policy.
-- [ ] Implement Binance daily notional limit policy.
-- [ ] Implement Binance daily loss limit policy.
-- [ ] Implement spot margin and cross-margin denied policy.
-- [ ] Implement USD-M futures leverage cap policy.
-- [ ] Implement COIN-M futures denied policy.
-- [ ] Implement withdrawal denied policy.
-- [ ] Implement Ethereum Sepolia allowlist policy.
-- [ ] Implement Ethereum contract/function/token/spender allowlist policy.
-- [ ] Implement Ethereum unlimited approval denial policy.
-- [ ] Implement Solana devnet program/instruction/token/account allowlist policy.
-- [ ] Implement Solana authority-change denial or human approval policy.
-- [ ] Add Rego unit tests for auto-allow, needs-human, and hard-deny paths.
-- [ ] Add Rego tests that reviewer approval alone is insufficient without a matching allowlist.
-- [ ] Add Rego tests that hard-deny wins over human approval.
-- [ ] Add policy fixtures for `dev`, `paper`, `testnet`, and `canary_live`.
-- [ ] Document how TypeScript normalization and live risk facts feed OPA.
-- [ ] Document OPA v1.16.1 upgrade process and checksum verification.
+- [x] Create policy bundle layout.
+- [x] Implement default deny.
+- [x] Implement explicit deny precedence.
+- [x] Implement required reviewer status checks.
+- [x] Implement principal/action/resource matching.
+- [x] Implement environment-aware policy.
+- [x] Implement policy allowlist schema over `principal`, `action`, `resource`, and `condition`.
+- [x] Implement automatic execution policy for reviewer-approved low-risk allowlisted actions.
+- [x] Implement configurable human approval threshold policy.
+- [x] Implement `needs_human` policy for valid but non-automatic escalation cases.
+- [x] Implement hard-deny policy for forbidden actions that must not request human approval.
+- [x] Implement Binance allowlist policy.
+- [x] Implement Binance notional limit policy.
+- [x] Implement Binance daily notional limit policy.
+- [x] Implement Binance daily loss limit policy.
+- [x] Implement spot margin and cross-margin denied policy.
+- [x] Implement USD-M futures leverage cap policy.
+- [x] Implement COIN-M futures denied policy.
+- [x] Implement withdrawal denied policy.
+- [x] Implement Ethereum Sepolia allowlist policy.
+- [x] Implement Ethereum contract/function/token/spender allowlist policy.
+- [x] Implement Ethereum unlimited approval denial policy.
+- [x] Implement Solana devnet program/instruction/token/account allowlist policy.
+- [x] Implement Solana authority-change denial or human approval policy.
+- [x] Add Rego unit tests for auto-allow, needs-human, and hard-deny paths.
+- [x] Add Rego tests that reviewer approval alone is insufficient without a matching allowlist.
+- [x] Add Rego tests that hard-deny wins over human approval.
+- [x] Add policy fixtures for `dev`, `paper`, `testnet`, and `canary_live`.
+- [x] Document how TypeScript normalization and live risk facts feed OPA.
+- [x] Document OPA v1.16.1 upgrade process and checksum verification.
 
 ## Phase 5 - Dynamic Risk Engine
 

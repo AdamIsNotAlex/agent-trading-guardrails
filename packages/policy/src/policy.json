@@ -1,0 +1,194 @@
+{
+  "policy": {
+    "limits": {
+      "dev": {
+        "auto_max_notional_usd": 1000,
+        "auto_max_daily_notional_usd": 5000,
+        "auto_max_daily_loss_usd": 1000,
+        "max_leverage": 10,
+        "default_max_leverage": 3
+      },
+      "paper": {
+        "auto_max_notional_usd": 1000,
+        "auto_max_daily_notional_usd": 5000,
+        "auto_max_daily_loss_usd": 1000,
+        "max_leverage": 10,
+        "default_max_leverage": 3
+      },
+      "testnet": {
+        "auto_max_notional_usd": 500,
+        "auto_max_daily_notional_usd": 2000,
+        "auto_max_daily_loss_usd": 500,
+        "max_leverage": 5,
+        "default_max_leverage": 2
+      },
+      "canary_live": {
+        "auto_max_notional_usd": 10,
+        "auto_max_daily_notional_usd": 50,
+        "auto_max_daily_loss_usd": 25,
+        "max_leverage": 3,
+        "default_max_leverage": 1
+      },
+      "production": {
+        "auto_max_notional_usd": 500,
+        "auto_max_daily_notional_usd": 2000,
+        "auto_max_daily_loss_usd": 200,
+        "max_leverage": 5,
+        "default_max_leverage": 1
+      }
+    },
+    "allowlists": {
+      "ethereum_contracts": [
+        "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+      ],
+      "solana_programs": [
+        "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+        "11111111111111111111111111111111"
+      ],
+      "rules": [
+        {
+          "name": "binance-spot-low-notional",
+          "effect": "allow",
+          "principal": "*",
+          "action": "cex.place_order",
+          "resource": "cex:binance:",
+          "condition": {
+            "accountMode": "spot",
+            "maxNotionalUsd": 10,
+            "maxLeverage": 1,
+            "requiresHumanApproval": false,
+            "environment": "canary_live"
+          }
+        },
+        {
+          "name": "binance-futures-low-notional",
+          "effect": "allow",
+          "principal": "*",
+          "action": "cex.place_order",
+          "resource": "cex:binance:",
+          "condition": {
+            "accountMode": "usdm_futures",
+            "maxNotionalUsd": 5,
+            "maxLeverage": 1,
+            "requiresHumanApproval": false,
+            "environment": "canary_live"
+          }
+        },
+        {
+          "name": "binance-cancel-order",
+          "effect": "allow",
+          "principal": "*",
+          "action": "cex.cancel_order",
+          "resource": "cex:binance:",
+          "condition": {
+            "requiresHumanApproval": false
+          }
+        },
+        {
+          "name": "binance-read-orders",
+          "effect": "allow",
+          "principal": "*",
+          "action": "cex.get_open_orders",
+          "resource": "cex:binance:",
+          "condition": {
+            "requiresHumanApproval": false
+          }
+        },
+        {
+          "name": "binance-read-portfolio",
+          "effect": "allow",
+          "principal": "*",
+          "action": "cex.get_portfolio",
+          "resource": "cex:binance:",
+          "condition": {
+            "requiresHumanApproval": false
+          }
+        },
+        {
+          "name": "ethereum-sepolia-simulate",
+          "effect": "allow",
+          "principal": "*",
+          "action": "onchain.simulate_transaction",
+          "resource": "onchain:ethereum:sepolia:",
+          "condition": {
+            "requiresHumanApproval": false
+          }
+        },
+        {
+          "name": "ethereum-sepolia-sign",
+          "effect": "allow",
+          "principal": "*",
+          "action": "onchain.request_signature",
+          "resource": "onchain:ethereum:sepolia:",
+          "condition": {
+            "requiresHumanApproval": false
+          }
+        },
+        {
+          "name": "solana-devnet-simulate",
+          "effect": "allow",
+          "principal": "*",
+          "action": "onchain.simulate_transaction",
+          "resource": "onchain:solana:devnet:",
+          "condition": {
+            "requiresHumanApproval": false
+          }
+        },
+        {
+          "name": "solana-devnet-sign",
+          "effect": "allow",
+          "principal": "*",
+          "action": "onchain.request_signature",
+          "resource": "onchain:solana:devnet:",
+          "condition": {
+            "requiresHumanApproval": false
+          }
+        },
+        {
+          "name": "onchain-read-portfolio",
+          "effect": "allow",
+          "principal": "*",
+          "action": "onchain.get_portfolio",
+          "resource": "onchain:",
+          "condition": {
+            "requiresHumanApproval": false
+          }
+        },
+        {
+          "name": "dev-all-actions",
+          "effect": "allow",
+          "principal": "*",
+          "action": "*",
+          "resource": "*",
+          "condition": {
+            "environment": "dev",
+            "requiresHumanApproval": false
+          }
+        },
+        {
+          "name": "paper-all-actions",
+          "effect": "allow",
+          "principal": "*",
+          "action": "*",
+          "resource": "*",
+          "condition": {
+            "environment": "paper",
+            "requiresHumanApproval": false
+          }
+        },
+        {
+          "name": "testnet-all-actions",
+          "effect": "allow",
+          "principal": "*",
+          "action": "*",
+          "resource": "*",
+          "condition": {
+            "environment": "testnet",
+            "requiresHumanApproval": false
+          }
+        }
+      ]
+    }
+  }
+}
