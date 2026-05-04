@@ -1,7 +1,6 @@
 import { ExecutionBroker, InMemoryKillSwitch, PaperExecutionConnector } from "@guardrails/broker";
 import type {
   DynamicRiskResult,
-  PolicyInput,
   PolicyOutput,
   ReviewerVerdictSchema,
   TradingIntent,
