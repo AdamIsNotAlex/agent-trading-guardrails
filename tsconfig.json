@@ -23,6 +23,7 @@
     { "path": "packages/evm-connector" },
     { "path": "packages/solana-connector" },
     { "path": "packages/secrets" },
-    { "path": "packages/reviewer" }
+    { "path": "packages/reviewer" },
+    { "path": "packages/agent-adapters" }
   ]
 }

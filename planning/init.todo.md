@@ -280,17 +280,17 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 
 ## Phase 12 - Agent Integrations
 
-- [ ] Define common guarded tool surface.
-- [ ] Implement OpenClaw adapter.
-- [ ] Implement Hermes Agent adapter.
-- [ ] Expose only guarded proposal/query tools.
-- [ ] Prevent direct CEX tool exposure.
-- [ ] Prevent direct RPC/signing tool exposure.
-- [ ] Return structured reject reasons to agents.
-- [ ] Add example OpenClaw strategy using guarded tools.
-- [ ] Add example Hermes Agent strategy using guarded tools.
-- [ ] Add end-to-end tests that both agents can propose valid intents.
-- [ ] Add end-to-end tests that both agents cannot access keys or direct execution paths.
+- [x] Define common guarded tool surface.
+- [x] Implement OpenClaw adapter.
+- [x] Implement Hermes Agent adapter.
+- [x] Expose only guarded proposal/query tools.
+- [x] Prevent direct CEX tool exposure.
+- [x] Prevent direct RPC/signing tool exposure.
+- [x] Return structured reject reasons to agents.
+- [x] Add example OpenClaw strategy using guarded tools.
+- [x] Add example Hermes Agent strategy using guarded tools.
+- [x] Add end-to-end tests that both agents can propose valid intents.
+- [x] Add end-to-end tests that both agents cannot access keys or direct execution paths.
 
 ## Phase 13 - Runtime Isolation And Network Controls
 
