@@ -121,20 +121,20 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 
 ## Phase 3 - Guardrail Service MVP
 
-- [ ] Create guardrail service package.
-- [ ] Add health endpoint.
-- [ ] Add intent validation endpoint.
-- [ ] Add reviewer verdict ingestion interface.
-- [ ] Add OPA policy evaluation interface.
-- [ ] Add dynamic risk-check orchestration.
-- [ ] Add final decision endpoint.
-- [ ] Add idempotency handling.
-- [ ] Add structured rejection reasons.
-- [ ] Add request correlation IDs.
-- [ ] Add local development configuration loader.
-- [ ] Add fail-closed behavior when OPA is unavailable.
-- [ ] Add fail-closed behavior when required risk facts are unavailable.
-- [ ] Add tests for allow, deny, and needs-human flows.
+- [x] Create guardrail service package.
+- [x] Add health endpoint.
+- [x] Add intent validation endpoint.
+- [x] Add reviewer verdict ingestion interface.
+- [x] Add OPA policy evaluation interface.
+- [x] Add dynamic risk-check orchestration.
+- [x] Add final decision endpoint.
+- [x] Add idempotency handling.
+- [x] Add structured rejection reasons.
+- [x] Add request correlation IDs.
+- [x] Add local development configuration loader.
+- [x] Add fail-closed behavior when OPA is unavailable.
+- [x] Add fail-closed behavior when required risk facts are unavailable.
+- [x] Add tests for allow, deny, and needs-human flows.
 
 ## Phase 4 - OPA/Rego Policy Layer
 

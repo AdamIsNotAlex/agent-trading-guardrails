@@ -14,5 +14,5 @@
     "sourceMap": true
   },
   "include": [],
-  "references": [{ "path": "packages/schemas" }]
+  "references": [{ "path": "packages/schemas" }, { "path": "packages/guardrail-service" }]
 }
