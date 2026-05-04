@@ -681,12 +681,20 @@ Controls:
 ## Open Questions
 
 - Which language should be used for the first implementation: TypeScript, Python, Rust, or Go?
+You can decide. We aim at security and also need to support the above design.
 - Should the first integration target OpenClaw or Hermes Agent?
+Both.
 - Which CEX should be supported first?
+Binance.
 - Which chain should be supported first for onchain testnet execution?
+Ethereum and Solana.
 - Is the first target paper trading, testnet, or limited live trading?
+I guess we can go straight for limited live trading? But you can decide.
 - What value threshold requires human approval?
+Should be configurable.
 - Should OPA/Rego be embedded from day one, or should the MVP start with a simpler policy evaluator and migrate to OPA?
+You can decide. But if you decide to start with a simpler policy evaluator, you need to document clearly how to migrate to OPA.
 - Which secret backend should be used first: local dev secrets, cloud secret manager, Vault, KMS, HSM, or MPC provider?
+I think at the end we need to support them all?
 - What deployment target is assumed: local Docker, single VPS, Kubernetes, or cloud-managed runtime?
-
+I think at the end we need to support them all?
