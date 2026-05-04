@@ -1,4 +1,5 @@
 import type { BrokerExecutionResult, Environment, TradingIntent } from "@guardrails/schemas";
+import { assertNotVaultDevInProduction, redactSecrets } from "@guardrails/secrets";
 import type {
   AuditWriter,
   BrokerIdempotencyStore,
@@ -10,6 +11,7 @@ import type {
 export interface BrokerConfig {
   environment: Environment;
   canaryLiveEnabled: boolean;
+  vaultAddr?: string;
 }
 
 export interface GuardrailApproval {
@@ -26,7 +28,11 @@ export class ExecutionBroker {
     private killSwitch: KillSwitch,
     private audit: AuditWriter,
     private idempotency: BrokerIdempotencyStore,
-  ) {}
+  ) {
+    if (config.vaultAddr) {
+      assertNotVaultDevInProduction(config.environment, config.vaultAddr);
+    }
+  }
 
   async execute(approval: GuardrailApproval): Promise<BrokerExecutionResult> {
     const now = new Date().toISOString();
@@ -97,21 +103,16 @@ export class ExecutionBroker {
 
     const revalidation = await this.connector.revalidate(intent);
     if (!revalidation.passed) {
+      const reason = redactSecrets(revalidation.reason ?? "Broker-side revalidation failed.");
       this.audit.write({
         eventType: "broker.failed",
         environment: this.config.environment,
         intentId: intent.intentId,
         principal: intent.principal,
         correlationId: approval.correlationId,
-        data: { reason: revalidation.reason },
+        data: { reason },
       });
-      return this.reject(
-        intent,
-        now,
-        approval.correlationId,
-        "revalidation_failed",
-        revalidation.reason ?? "Broker-side revalidation failed.",
-      );
+      return this.reject(intent, now, approval.correlationId, "revalidation_failed", reason);
     }
 
     let executionResult: { orderId?: string; transactionHash?: string };
@@ -124,7 +125,7 @@ export class ExecutionBroker {
         intentId: intent.intentId,
         principal: intent.principal,
         correlationId: approval.correlationId,
-        data: { error: String(err) },
+        data: { error: redactSecrets(String(err)) },
       });
       const result: BrokerExecutionResult = {
         intentId: intent.intentId,

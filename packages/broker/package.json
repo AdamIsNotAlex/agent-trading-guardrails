@@ -15,7 +15,8 @@
     "build": "tsc"
   },
   "dependencies": {
-    "@guardrails/schemas": "workspace:*"
+    "@guardrails/schemas": "workspace:*",
+    "@guardrails/secrets": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^25.6.0"

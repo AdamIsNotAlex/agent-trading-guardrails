@@ -3,7 +3,7 @@ import { solanaDevnetSimulation } from "@guardrails/schemas/fixtures";
 import { describe, expect, it, vi } from "vitest";
 import { SolanaConnector } from "./connector.js";
 import { LocalDevSolanaSigner } from "./dev-signer.js";
-import type { ParsedInstruction, SolanaConfig, SolanaRpcProvider } from "./interfaces.js";
+import type { SolanaConfig, SolanaRpcProvider } from "./interfaces.js";
 import { hasAuthorityChange, parseInstructions } from "./parser.js";
 
 const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
@@ -109,7 +109,7 @@ describe("SolanaConnector execution", () => {
 
   it("simulates before signing with dev signer", async () => {
     const calls: string[] = [];
-    const simulateTransaction = vi.fn(async (instructions: ParsedInstruction[]) => {
+    const simulateTransaction = vi.fn(async () => {
       calls.push("simulate");
       return { success: true, logs: [], balanceChanges: [], error: null };
     });

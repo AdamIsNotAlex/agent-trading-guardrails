@@ -147,19 +147,19 @@ No concrete `OpenAiLlmProvider` HTTP client exists. `ReviewerAdapter` accepts a 
 
 `packages/secrets/src/env-guard.ts` exports the guard but it is never called from runtime code.
 
-- [ ] Call `assertNotVaultDevInProduction(environment, vaultAddr)` from `packages/guardrail-service/src/config.ts` during config loading (or from the service constructor).
-- [ ] Also call it from `packages/broker/src/broker.ts` constructor or config validation.
-- [ ] Fix the guard to also check for `localhost:8200` (not just `127.0.0.1:8200`) in `packages/secrets/src/env-guard.ts` line 8.
-- [ ] Add test that `localhost:8200` is also rejected in production environments.
+- [x] Call `assertNotVaultDevInProduction(environment, vaultAddr)` from `packages/guardrail-service/src/config.ts` during config loading (or from the service constructor).
+- [x] Also call it from `packages/broker/src/broker.ts` constructor or config validation.
+- [x] Fix the guard to also check for `localhost:8200` (not just `127.0.0.1:8200`) in `packages/secrets/src/env-guard.ts` line 8.
+- [x] Add test that `localhost:8200` is also rejected in production environments.
 
 ### P1.7 — Wire `redactSecrets` into broker error logging (Phase 10)
 
 `packages/broker/src/broker.ts` line 127 writes `data: { error: String(err) }` without redaction.
 
-- [ ] Import `redactSecrets` from `@guardrails/secrets` in `packages/broker/src/broker.ts`.
-- [ ] Change line 127 from `error: String(err)` to `error: redactSecrets(String(err))`.
-- [ ] Audit all other `String(err)` or `err.message` usages in the broker and guardrail-service for unredacted secret leakage.
-- [ ] Add test that an error containing a private key pattern is redacted in the audit event.
+- [x] Import `redactSecrets` from `@guardrails/secrets` in `packages/broker/src/broker.ts`.
+- [x] Change line 127 from `error: String(err)` to `error: redactSecrets(String(err))`.
+- [x] Audit all other `String(err)` or `err.message` usages in the broker and guardrail-service for unredacted secret leakage.
+- [x] Add test that an error containing a private key pattern is redacted in the audit event.
 
 ### P1.8 — Implement Binance order status polling (Phase 7)
 

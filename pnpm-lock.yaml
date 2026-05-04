@@ -93,6 +93,9 @@ importers:
       '@guardrails/schemas':
         specifier: workspace:*
         version: link:../schemas
+      '@guardrails/secrets':
+        specifier: workspace:*
+        version: link:../secrets
     devDependencies:
       '@types/node':
         specifier: ^25.6.0
@@ -119,6 +122,9 @@ importers:
       '@guardrails/schemas':
         specifier: workspace:*
         version: link:../schemas
+      '@guardrails/secrets':
+        specifier: workspace:*
+        version: link:../secrets
     devDependencies:
       '@types/node':
         specifier: ^25.6.0

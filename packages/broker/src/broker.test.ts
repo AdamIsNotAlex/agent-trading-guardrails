@@ -20,12 +20,14 @@ function makeApproval(intent: TradingIntent = binanceSpotOrder): GuardrailApprov
   };
 }
 
-function makeAudit(): AuditWriter & { events: Array<{ eventType: AuditEventType }> } {
-  const events: Array<{ eventType: AuditEventType }> = [];
+function makeAudit(): AuditWriter & {
+  events: Array<{ eventType: AuditEventType; data?: unknown }>;
+} {
+  const events: Array<{ eventType: AuditEventType; data?: unknown }> = [];
   return {
     events,
     write(event) {
-      events.push(event as { eventType: AuditEventType });
+      events.push(event as { eventType: AuditEventType; data?: unknown });
     },
   };
 }
@@ -166,6 +168,34 @@ describe("ExecutionBroker", () => {
     expect(result.rejectionReason).toContain("Stale market data");
   });
 
+  it("redacts secrets from revalidation failure reasons", async () => {
+    const privateKey = `0x${"a".repeat(64)}`;
+    const connector: ExecutionConnector = {
+      async execute() {
+        return { orderId: "test" };
+      },
+      async revalidate() {
+        return { passed: false, reason: `Stale market data privateKey=${privateKey}` };
+      },
+    };
+    const audit = makeAudit();
+    const broker = new ExecutionBroker(
+      config,
+      connector,
+      new InMemoryKillSwitch(),
+      audit,
+      makeIdempotency(),
+    );
+
+    const result = await broker.execute(makeApproval());
+    const failure = audit.events.find((event) => event.eventType === "broker.failed");
+
+    expect(result.rejectionReason).toContain("[REDACTED]");
+    expect(result.rejectionReason).not.toContain(privateKey);
+    expect(JSON.stringify(failure?.data)).toContain("[REDACTED]");
+    expect(JSON.stringify(failure?.data)).not.toContain(privateKey);
+  });
+
   it("returns cached result for same idempotency key", async () => {
     const idempotency = makeIdempotency();
     const broker = new ExecutionBroker(
@@ -199,6 +229,51 @@ describe("ExecutionBroker", () => {
     const result = await broker.execute(makeApproval());
     expect(result.status).toBe("failed");
     expect(result.revalidationPassed).toBe(true);
+  });
+
+  it("redacts secrets from execution failure audit events", async () => {
+    const privateKey = `0x${"a".repeat(64)}`;
+    const connector: ExecutionConnector = {
+      async execute() {
+        throw new Error(`CEX API error privateKey=${privateKey}`);
+      },
+      async revalidate() {
+        return { passed: true };
+      },
+    };
+    const audit = makeAudit();
+    const broker = new ExecutionBroker(
+      config,
+      connector,
+      new InMemoryKillSwitch(),
+      audit,
+      makeIdempotency(),
+    );
+
+    await broker.execute(makeApproval());
+
+    const failure = audit.events.find((event) => event.eventType === "broker.failed");
+    expect(JSON.stringify(failure?.data)).toContain("[REDACTED]");
+    expect(JSON.stringify(failure?.data)).not.toContain(privateKey);
+  });
+
+  it("rejects Vault dev server in production broker config", () => {
+    const prodConfig: BrokerConfig = {
+      environment: "production",
+      canaryLiveEnabled: false,
+      vaultAddr: "http://localhost:8200",
+    };
+
+    expect(
+      () =>
+        new ExecutionBroker(
+          prodConfig,
+          new PaperExecutionConnector(),
+          new InMemoryKillSwitch(),
+          makeAudit(),
+          makeIdempotency(),
+        ),
+    ).toThrow("cannot be used");
   });
 
   it("writes audit events for revalidation and execution", async () => {
