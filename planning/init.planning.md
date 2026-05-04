@@ -28,6 +28,20 @@ Future work:
 
 The repository is currently empty except for `.git`. The `master` branch has no commits yet. There are no existing code, framework, dependency, or architecture constraints, so this plan assumes a greenfield implementation.
 
+## Initial Decisions
+
+These decisions resolve the initial open questions and should guide the first implementation:
+
+- First implementation language: TypeScript.
+- First agent integrations: OpenClaw and Hermes Agent in parallel.
+- First CEX connector: Binance.
+- First onchain targets: Ethereum and Solana.
+- First live target: limited live trading, but only after paper trading, testnet signing, and canary limits pass.
+- Human approval thresholds: configurable by policy, environment, agent, action, asset, exchange, chain, and account.
+- Policy engine: embed OPA/Rego from day one for final authorization. Keep TypeScript schema validation and dynamic risk checks outside OPA where they require live data fetching.
+- Secret backends: design a pluggable secret provider interface from day one. Start with local development secrets and one production-grade backend, then add Vault, cloud secret managers, KMS, HSM, and MPC providers as adapters.
+- Deployment targets: design for local Docker first, with deployment profiles for single VPS, Kubernetes, and cloud-managed runtimes later.
+
 ## Key Architectural Judgment
 
 The two-agent design is useful, but incomplete by itself. A reviewer agent can catch suspicious reasoning, hallucinated assumptions, or prompt injection symptoms, but it is still an LLM and can be influenced or wrong.
@@ -269,7 +283,7 @@ Recommended model:
   - resource
   - condition
   - effect
-- OPA/Rego or equivalent policy-as-code engine for evaluation.
+- OPA/Rego policy-as-code engine for final authorization.
 
 Example policy concepts:
 
@@ -411,7 +425,7 @@ Pros:
 - Keeps trading credentials out of agent runtime.
 - Clear auditability.
 - Testable policy layer.
-- Can support paper trading first and live trading later.
+- Supports paper trading, testnet validation, and limited live trading within the same control plane.
 
 Cons:
 
@@ -457,7 +471,7 @@ Why this wins:
 - It allows reviewer-agent intelligence without trusting it as the final boundary.
 - It provides deterministic enforcement for risk, identity, action, and resource constraints.
 - It creates an audit trail suitable for debugging, red-teaming, and compliance-style review.
-- It can start with paper trading and evolve into live trading without rewriting the core control plane.
+- It can target limited live trading while still requiring paper trading, testnet, and canary gates before real execution is enabled.
 
 Recommended MVP should support:
 
@@ -465,11 +479,32 @@ Recommended MVP should support:
 - Hermes Agent adapter.
 - Structured trading intent schema.
 - Reviewer agent verdict.
-- Policy evaluation.
-- CEX paper trading broker.
-- Onchain testnet signer.
+- OPA/Rego policy evaluation.
+- Binance broker with paper, sandbox where available, and limited-live modes.
+- Ethereum testnet signer.
+- Solana testnet signer.
 - Append-only audit log.
 - Basic egress allowlist for agent runtime.
+
+## Implementation Stack
+
+Recommended first stack:
+
+- TypeScript monorepo.
+- JSON Schema or Zod for intent validation.
+- OPA/Rego for final policy evaluation.
+- TypeScript risk engine for live data checks that are awkward to express directly in Rego.
+- Binance connector behind the broker boundary.
+- EVM connector for Ethereum using typed transaction simulation before signing.
+- Solana connector using explicit instruction parsing and simulation before signing.
+- Pluggable interfaces for agent adapters, secret providers, signer backends, exchange connectors, RPC providers, and deployment profiles.
+
+Why TypeScript first:
+
+- Strong fit for structured JSON APIs, MCP-style tool adapters, and web service boundaries.
+- Good ecosystem coverage for Binance, EVM, Solana, schema validation, and policy integration.
+- Faster iteration for a greenfield MVP than Rust or Go while still allowing strict types and test coverage.
+- Security-critical signing can later move behind a Rust, Go, KMS, HSM, or MPC backend without changing the agent-facing API.
 
 ## Phased Execution Plan
 
@@ -479,10 +514,12 @@ Deliverables:
 
 - Threat model document.
 - Trading intent JSON schemas.
-- Policy schema.
+- OPA/Rego policy schema and module layout.
 - Risk tier definitions.
 - Supported action list.
 - Initial allow/deny matrix.
+- Secret provider interface.
+- Deployment profile model for local Docker, single VPS, Kubernetes, and cloud-managed runtimes.
 
 Validation:
 
@@ -498,25 +535,30 @@ Validation:
 
 Deliverables:
 
+- TypeScript monorepo skeleton.
 - Guardrail service skeleton.
 - Intent validation endpoint.
 - Reviewer verdict interface.
-- Policy evaluation interface.
+- OPA/Rego policy evaluation interface.
+- TypeScript dynamic risk-check interface.
 - Audit logging.
 - Idempotency key support.
 
 Validation:
 
 - Unit tests for schema validation.
-- Policy tests for allow/deny cases.
+- Rego tests for allow/deny cases.
+- Risk-check tests for dynamic conditions such as stale data and exceeded limits.
 - Audit log completeness tests.
 
 ### Phase 2: Broker MVP
 
 Deliverables:
 
-- CEX paper trading broker.
-- Onchain testnet transaction simulator/signer.
+- Binance broker with paper mode first.
+- Binance limited-live execution path gated behind explicit policy and canary limits.
+- Ethereum testnet transaction simulator/signer.
+- Solana testnet transaction simulator/signer.
 - Market data freshness checks.
 - Portfolio and balance snapshot support.
 - Kill switch.
@@ -524,6 +566,9 @@ Deliverables:
 Validation:
 
 - End-to-end paper order flow.
+- End-to-end Binance limited-live canary flow with tiny configurable notional.
+- End-to-end Ethereum testnet simulation and signing.
+- End-to-end Solana testnet simulation and signing.
 - Rejection for stale market data.
 - Rejection for over-limit notional.
 - Rejection for unknown contract.
@@ -550,12 +595,17 @@ Validation:
 Deliverables:
 
 - Docker sandbox profile.
+- Local Docker deployment profile.
+- Single VPS deployment profile.
+- Kubernetes deployment profile.
+- Cloud-managed runtime deployment notes.
 - Non-root agent container.
 - Read-only mounts where possible.
 - Egress proxy.
 - Firewall allowlist.
 - Secret injection only at proxy or broker layer.
 - Blocked metadata and internal network ranges.
+- Secret provider adapters for local development and the first production backend.
 
 Validation:
 
@@ -610,11 +660,15 @@ Policy should be evaluated with explicit deny precedence:
 4. If dynamic risk checks fail, reject.
 5. Otherwise, allow broker execution.
 
+OPA/Rego should be embedded from day one as the final authorization engine. TypeScript code should handle schema validation, normalization, live data fetching, and dynamic risk calculations, then pass normalized facts into OPA for the final policy decision.
+
+Human approval thresholds must be configurable. If no explicit threshold policy exists for a live action, the system should fail closed and require human approval.
+
 ## Onchain-Specific Guardrails
 
 Minimum controls:
 
-- Chain allowlist.
+- Chain allowlist, with Ethereum and Solana first.
 - Contract allowlist.
 - Function selector allowlist.
 - Token allowlist.
@@ -641,7 +695,7 @@ Human approval should be required for:
 
 Minimum controls:
 
-- Exchange allowlist.
+- Exchange allowlist, with Binance first.
 - Account/subaccount allowlist.
 - Symbol allowlist.
 - Order type allowlist.
@@ -654,6 +708,7 @@ Minimum controls:
 - Withdrawals denied.
 - Transfer between accounts denied unless explicitly allowed.
 - Cooldown after repeated rejections or losses.
+- Limited-live canary notional must be configurable and default to human approval unless explicitly enabled by policy.
 
 ## RPC Eclipse and BGP Split Future Work
 
@@ -678,23 +733,27 @@ Controls:
 - Broadcast through multiple paths when appropriate.
 - Confirm transaction inclusion from multiple independent sources.
 
-## Open Questions
+## Resolved Decisions and Remaining Configuration
 
-- Which language should be used for the first implementation: TypeScript, Python, Rust, or Go?
-You can decide. We aim at security and also need to support the above design.
-- Should the first integration target OpenClaw or Hermes Agent?
-Both.
-- Which CEX should be supported first?
-Binance.
-- Which chain should be supported first for onchain testnet execution?
-Ethereum and Solana.
-- Is the first target paper trading, testnet, or limited live trading?
-I guess we can go straight for limited live trading? But you can decide.
-- What value threshold requires human approval?
-Should be configurable.
-- Should OPA/Rego be embedded from day one, or should the MVP start with a simpler policy evaluator and migrate to OPA?
-You can decide. But if you decide to start with a simpler policy evaluator, you need to document clearly how to migrate to OPA.
-- Which secret backend should be used first: local dev secrets, cloud secret manager, Vault, KMS, HSM, or MPC provider?
-I think at the end we need to support them all?
-- What deployment target is assumed: local Docker, single VPS, Kubernetes, or cloud-managed runtime?
-I think at the end we need to support them all?
+Resolved:
+
+- Build the first implementation in TypeScript.
+- Support OpenClaw and Hermes Agent from the initial integration phase.
+- Support Binance as the first CEX.
+- Support Ethereum and Solana as the first onchain targets.
+- Embed OPA/Rego from day one for deterministic authorization.
+- Aim for limited live trading as the first real-money target, but only behind explicit policy, canary limits, paper trading validation, testnet validation, and kill-switch coverage.
+- Design secret and deployment backends as pluggable interfaces so the framework can eventually support local development, cloud secret managers, Vault, KMS, HSM, MPC providers, local Docker, single VPS, Kubernetes, and cloud-managed runtimes.
+
+Still configurable rather than hardcoded:
+
+- Human approval thresholds.
+- Per-order notional limits.
+- Daily notional limits.
+- Daily loss limits.
+- Allowed Binance accounts and subaccounts.
+- Allowed symbols.
+- Allowed Ethereum chains, contracts, functions, tokens, spenders, and destinations.
+- Allowed Solana programs, instructions, tokens, accounts, and authorities.
+- Secret backend per environment.
+- Deployment profile per environment.
