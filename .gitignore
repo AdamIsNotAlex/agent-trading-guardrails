@@ -25,7 +25,7 @@ dist/
 *.keystore
 
 # Local secrets directory
-secrets/
+/secrets/
 
 # Logs
 logs/

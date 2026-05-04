@@ -21,6 +21,7 @@
     { "path": "packages/broker" },
     { "path": "packages/binance-connector" },
     { "path": "packages/evm-connector" },
-    { "path": "packages/solana-connector" }
+    { "path": "packages/solana-connector" },
+    { "path": "packages/secrets" }
   ]
 }

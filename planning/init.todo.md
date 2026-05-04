@@ -246,23 +246,23 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 
 ## Phase 10 - Secret And Signing Boundary
 
-- [ ] Define secret provider interface.
-- [ ] Implement local development secret provider.
+- [x] Define secret provider interface.
+- [x] Implement local development secret provider.
 - [x] Choose Vault as the first production-grade secret backend.
-- [ ] Implement Vault dev server profile for local development only.
-- [ ] Implement Vault secret provider adapter.
-- [ ] Document Vault single-node integrated storage profile for single VPS.
-- [ ] Document Vault Kubernetes HA integrated storage profile.
-- [ ] Document cloud-hosted Vault/HCP profile.
-- [ ] Add guardrail that production profiles cannot use Vault dev server.
-- [ ] Define signer backend interface.
-- [ ] Implement local testnet signer backend.
-- [ ] Document KMS adapter requirements.
-- [ ] Document HSM adapter requirements.
-- [ ] Document MPC adapter requirements.
-- [ ] Add secret redaction utility for logs and errors.
-- [ ] Add tests that secrets are not returned through agent-facing APIs.
-- [ ] Add key rotation and emergency revocation runbook.
+- [x] Implement Vault dev server profile for local development only.
+- [x] Implement Vault secret provider adapter.
+- [x] Document Vault single-node integrated storage profile for single VPS.
+- [x] Document Vault Kubernetes HA integrated storage profile.
+- [x] Document cloud-hosted Vault/HCP profile.
+- [x] Add guardrail that production profiles cannot use Vault dev server.
+- [x] Define signer backend interface.
+- [x] Implement local testnet signer backend.
+- [x] Document KMS adapter requirements.
+- [x] Document HSM adapter requirements.
+- [x] Document MPC adapter requirements.
+- [x] Add secret redaction utility for logs and errors.
+- [x] Add tests that secrets are not returned through agent-facing APIs.
+- [x] Add key rotation and emergency revocation runbook.
 
 ## Phase 11 - Reviewer Agent Layer
 
