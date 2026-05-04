@@ -387,13 +387,22 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 ## Open Questions
 
 - [ ] Which package manager should the TypeScript monorepo use?
+You can decide.
 - [ ] Should schema validation use JSON Schema, Zod, or both?
+You can decide.
 - [ ] What is the first production-grade secret backend?
+You can decide.
 - [ ] Which reviewer model/provider should be used first?
+gpt-5.5
 - [ ] Which Binance account mode is in scope first: spot only, margin disabled, futures excluded?
+Spot + Futures
 - [ ] Which Ethereum testnet should be the first supported network?
+You can decide.
 - [ ] Which Solana environment should be the first supported network: devnet or testnet?
+You can decide.
 - [ ] What is the default tiny canary-live notional?
+You can decide.
 - [ ] What audit log backend should be used for MVP?
+You can decide.
 - [ ] What human approval surface should be used first: CLI, local web UI, Slack, Telegram, or GitHub issue/comment?
-
+At the end we need to support CLI, local web UI, Slack, Telegram, Discord, WhatsApp, Signal.

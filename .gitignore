@@ -1,0 +1,4 @@
+node_modules/
+.claude/ralph-loop*.local.md
+.env
+.env.local
