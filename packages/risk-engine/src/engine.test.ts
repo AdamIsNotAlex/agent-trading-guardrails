@@ -37,39 +37,51 @@ function makeVerdict(overrides?: Partial<ReviewerVerdictSchema>): ReviewerVerdic
   };
 }
 
+const defaults = {
+  marketData: (): MarketDataSnapshot => ({
+    symbol: "ETH-USDC",
+    price: 3500,
+    timestampMs: nowMs - 1000,
+  }),
+  portfolio: (): PortfolioSnapshot => ({
+    account: "subaccount-1",
+    timestampMs: nowMs - 5000,
+    positions: [{ symbol: "ETH-USDC", quantity: 1, notionalUsd: 3500 }],
+  }),
+  dailyStats: (): DailyStats => ({
+    account: "subaccount-1",
+    date: new Date().toISOString().slice(0, 10),
+    totalNotionalUsd: 20,
+    realizedLossUsd: 5,
+    orderCount: 3,
+  }),
+  lastOrderTs: (): number => nowMs - 60_000,
+};
+
 function makeProvider(overrides?: {
   marketData?: MarketDataSnapshot | null;
   portfolio?: PortfolioSnapshot | null;
   dailyStats?: DailyStats | null;
   lastOrderTs?: number | null;
 }): RiskDataProvider {
-  const hasKey = (key: string) => overrides !== undefined && key in overrides;
+  function resolve<T>(key: keyof typeof defaults, fallback: () => T): T | null {
+    if (overrides && key in overrides) {
+      return overrides[key] as T | null;
+    }
+    return fallback();
+  }
   return {
     async getMarketData() {
-      if (hasKey("marketData")) return overrides!.marketData!;
-      return { symbol: "ETH-USDC", price: 3500, timestampMs: nowMs - 1000 };
+      return resolve("marketData", defaults.marketData);
     },
     async getPortfolio() {
-      if (hasKey("portfolio")) return overrides!.portfolio!;
-      return {
-        account: "subaccount-1",
-        timestampMs: nowMs - 5000,
-        positions: [{ symbol: "ETH-USDC", quantity: 1, notionalUsd: 3500 }],
-      };
+      return resolve("portfolio", defaults.portfolio);
     },
     async getDailyStats() {
-      if (hasKey("dailyStats")) return overrides!.dailyStats!;
-      return {
-        account: "subaccount-1",
-        date: new Date().toISOString().slice(0, 10),
-        totalNotionalUsd: 20,
-        realizedLossUsd: 5,
-        orderCount: 3,
-      };
+      return resolve("dailyStats", defaults.dailyStats);
     },
     async getLastOrderTimestampMs() {
-      if (hasKey("lastOrderTs")) return overrides!.lastOrderTs!;
-      return nowMs - 60_000;
+      return resolve("lastOrderTs", defaults.lastOrderTs);
     },
   };
 }

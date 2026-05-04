@@ -17,6 +17,7 @@
   "references": [
     { "path": "packages/schemas" },
     { "path": "packages/guardrail-service" },
-    { "path": "packages/risk-engine" }
+    { "path": "packages/risk-engine" },
+    { "path": "packages/broker" }
   ]
 }

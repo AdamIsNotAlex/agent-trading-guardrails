@@ -187,15 +187,15 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 
 ## Phase 6 - Broker MVP
 
-- [ ] Create execution broker package.
-- [ ] Implement broker API that only accepts approved guardrail decisions.
-- [ ] Implement broker-side state revalidation before execution.
-- [ ] Implement broker-side idempotency.
-- [ ] Implement broker-side kill switch.
-- [ ] Implement broker-side audit events.
-- [ ] Implement paper execution mode.
-- [ ] Implement canary-live execution mode gate.
-- [ ] Ensure broker never trusts agent-provided balances, prices, or chain state as authoritative.
+- [x] Create execution broker package.
+- [x] Implement broker API that only accepts approved guardrail decisions.
+- [x] Implement broker-side state revalidation before execution.
+- [x] Implement broker-side idempotency.
+- [x] Implement broker-side kill switch.
+- [x] Implement broker-side audit events.
+- [x] Implement paper execution mode.
+- [x] Implement canary-live execution mode gate.
+- [x] Ensure broker never trusts agent-provided balances, prices, or chain state as authoritative.
 
 ## Phase 7 - Binance Connector
 
