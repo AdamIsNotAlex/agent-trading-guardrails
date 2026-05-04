@@ -334,33 +334,33 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 
 ## Phase 15 - Human Approval And Kill Switch
 
-- [ ] Define human approval API.
-- [ ] Define approval state machine.
-- [ ] Implement approval timeout behavior.
-- [ ] Implement approval audit logging.
-- [ ] Implement configurable approval thresholds.
-- [ ] Implement approval decision type: one-time execution approval.
-- [ ] Implement approval decision type: durable allowlist onboarding request.
-- [ ] Ensure durable allowlist onboarding creates an auditable policy change, not hidden runtime state.
-- [ ] Implement `guardrail approvals list`.
-- [ ] Implement `guardrail approvals show <approvalId>`.
-- [ ] Implement `guardrail approvals approve <approvalId>`.
-- [ ] Implement `guardrail approvals deny <approvalId>`.
-- [ ] Implement `guardrail approvals watch`.
-- [ ] Ensure agent execution creates pending approvals without requiring an attached interactive terminal.
-- [ ] Design local web UI approval adapter.
-- [ ] Design Slack approval adapter.
-- [ ] Design Telegram approval adapter.
-- [ ] Design Discord approval adapter.
-- [ ] Design WhatsApp approval adapter.
-- [ ] Design Signal approval adapter.
-- [ ] Implement global kill switch.
-- [ ] Implement per-agent kill switch.
-- [ ] Implement per-account kill switch.
-- [ ] Implement per-exchange kill switch.
-- [ ] Implement per-chain kill switch.
-- [ ] Add tests that live execution cannot bypass required approval.
-- [ ] Add tests that kill switch blocks broker execution.
+- [x] Define human approval API.
+- [x] Define approval state machine.
+- [x] Implement approval timeout behavior.
+- [x] Implement approval audit logging.
+- [x] Implement configurable approval thresholds.
+- [x] Implement approval decision type: one-time execution approval.
+- [x] Implement approval decision type: durable allowlist onboarding request.
+- [x] Ensure durable allowlist onboarding creates an auditable policy change, not hidden runtime state.
+- [x] Implement `guardrail approvals list`.
+- [x] Implement `guardrail approvals show <approvalId>`.
+- [x] Implement `guardrail approvals approve <approvalId>`.
+- [x] Implement `guardrail approvals deny <approvalId>`.
+- [x] Implement `guardrail approvals watch`.
+- [x] Ensure agent execution creates pending approvals without requiring an attached interactive terminal.
+- [x] Design local web UI approval adapter.
+- [x] Design Slack approval adapter.
+- [x] Design Telegram approval adapter.
+- [x] Design Discord approval adapter.
+- [x] Design WhatsApp approval adapter.
+- [x] Design Signal approval adapter.
+- [x] Implement global kill switch.
+- [x] Implement per-agent kill switch.
+- [x] Implement per-account kill switch.
+- [x] Implement per-exchange kill switch.
+- [x] Implement per-chain kill switch.
+- [x] Add tests that live execution cannot bypass required approval.
+- [x] Add tests that kill switch blocks broker execution.
 
 ## Phase 16 - Limited Live Trading Gates
 

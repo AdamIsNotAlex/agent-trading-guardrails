@@ -46,6 +46,16 @@ importers:
         specifier: ^25.6.0
         version: 25.6.0
 
+  packages/approval:
+    dependencies:
+      '@guardrails/schemas':
+        specifier: workspace:*
+        version: link:../schemas
+    devDependencies:
+      '@types/node':
+        specifier: ^25.6.0
+        version: 25.6.0
+
   packages/audit:
     dependencies:
       '@guardrails/schemas':

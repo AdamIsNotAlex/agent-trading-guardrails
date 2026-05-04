@@ -25,6 +25,7 @@
     { "path": "packages/secrets" },
     { "path": "packages/reviewer" },
     { "path": "packages/agent-adapters" },
-    { "path": "packages/audit" }
+    { "path": "packages/audit" },
+    { "path": "packages/approval" }
   ]
 }
