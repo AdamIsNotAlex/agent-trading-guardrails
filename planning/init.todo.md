@@ -294,25 +294,25 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 
 ## Phase 13 - Runtime Isolation And Network Controls
 
-- [ ] Create local Docker deployment profile.
-- [ ] Run agent container as non-root.
-- [ ] Drop unnecessary Linux capabilities.
-- [ ] Add read-only mounts where feasible.
-- [ ] Ensure Docker socket is not mounted into agent containers.
-- [ ] Block host home directory, SSH keys, cloud credentials, browser profiles, and wallet files from agent mounts.
-- [ ] Add egress proxy for agent runtime.
-- [ ] Allowlist LLM providers.
-- [ ] Allowlist guardrail service.
-- [ ] Allowlist explicitly approved data sources.
-- [ ] Block CEX APIs from agent containers.
-- [ ] Block RPC endpoints from agent containers.
-- [ ] Block metadata service endpoints.
-- [ ] Block RFC1918/internal ranges by default.
-- [ ] Log DNS and egress attempts.
-- [ ] Document single VPS deployment profile.
-- [ ] Document Kubernetes deployment profile.
-- [ ] Document cloud-managed runtime deployment profile.
-- [ ] Add tests or scripts that verify blocked egress paths.
+- [x] Create local Docker deployment profile.
+- [x] Run agent container as non-root.
+- [x] Drop unnecessary Linux capabilities.
+- [x] Add read-only mounts where feasible.
+- [x] Ensure Docker socket is not mounted into agent containers.
+- [x] Block host home directory, SSH keys, cloud credentials, browser profiles, and wallet files from agent mounts.
+- [x] Add egress proxy for agent runtime.
+- [x] Allowlist LLM providers.
+- [x] Allowlist guardrail service.
+- [x] Allowlist explicitly approved data sources.
+- [x] Block CEX APIs from agent containers.
+- [x] Block RPC endpoints from agent containers.
+- [x] Block metadata service endpoints.
+- [x] Block RFC1918/internal ranges by default.
+- [x] Log DNS and egress attempts.
+- [x] Document single VPS deployment profile.
+- [x] Document Kubernetes deployment profile.
+- [x] Document cloud-managed runtime deployment profile.
+- [x] Add tests or scripts that verify blocked egress paths.
 
 ## Phase 14 - Audit Log And Monitoring
 

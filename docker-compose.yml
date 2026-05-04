@@ -1,12 +1,94 @@
+networks:
+  agent-net:
+    driver: bridge
+    internal: true
+  broker-net:
+    driver: bridge
+  guardrail-net:
+    driver: bridge
+
 services:
   opa:
     image: openpolicyagent/opa:1.16.1-static@sha256:637ffdb793e146e50ec45cc023ee78fc5bc52c11816ce7adee41ce20e46e5ed8
-    ports:
-      - "8181:8181"
-    command:
-      - "run"
-      - "--server"
-      - "--addr=0.0.0.0:8181"
-      - "/policies"
+    command: ["run", "--server", "--addr=0.0.0.0:8181", "/policies"]
     volumes:
       - ./packages/policy/src:/policies:ro
+    networks:
+      - guardrail-net
+    read_only: true
+
+  vault:
+    image: hashicorp/vault:1.19
+    command: ["server", "-dev", "-dev-root-token-id=dev-only-token"]
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: dev-only-token
+    ports:
+      - "8200:8200"
+    networks:
+      - broker-net
+    cap_drop:
+      - ALL
+    cap_add:
+      - IPC_LOCK
+    profiles:
+      - dev
+
+  guardrail-service:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.broker
+    environment:
+      OPA_URL: http://opa:8181
+      VAULT_ADDR: http://vault:8200
+      GUARDRAIL_ENV: dev
+    networks:
+      - guardrail-net
+      - broker-net
+    depends_on:
+      - opa
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  agent:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.agent
+    environment:
+      GUARDRAIL_URL: http://guardrail-service:3000
+    networks:
+      - agent-net
+    # Agent cannot reach broker-net, guardrail-net directly
+    # Agent reaches guardrail-service via egress-proxy only
+    depends_on:
+      - guardrail-service
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    # No Docker socket, no host mounts
+    # volumes: intentionally empty — no host home, SSH, cloud creds, browser profiles, wallets
+
+  egress-proxy:
+    image: nginx:alpine
+    volumes:
+      - ./deploy/docker/nginx-egress.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - agent-net
+      - guardrail-net
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
