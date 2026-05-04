@@ -42,6 +42,7 @@ These decisions resolve the initial open questions and should guide the first im
 - First live target: limited live trading, but only after paper trading, testnet signing, and canary limits pass.
 - Default canary-live limits: spot max USD 10 per order and USD 50 per day; futures max USD 5 per order and USD 25 per day.
 - Human approval thresholds: configurable by policy, environment, agent, action, asset, exchange, chain, and account.
+- Human approval model: escalation-only. Low-risk allowlisted actions can auto-execute after reviewer approval and deterministic policy/risk checks pass.
 - First human approval surface: CLI. Later adapters should support local web UI, Slack, Telegram, Discord, WhatsApp, and Signal.
 - First CLI approval UX: separate approval commands that list/show/approve/deny pending requests, plus a watch mode. Do not make the agent execution path depend on an interactive blocking prompt.
 - Policy engine: embed OPA/Rego from day one for final authorization. Keep TypeScript schema validation and dynamic risk checks outside OPA where they require live data fetching.
@@ -693,7 +694,9 @@ Use an IAM-inspired model:
     "maxNotionalUsd": 500,
     "maxSlippageBps": 30,
     "maxLeverage": 1,
-    "requiresFreshMarketDataSeconds": 10
+    "requiresFreshMarketDataSeconds": 10,
+    "requiresReviewerVerdict": "approve",
+    "requiresHumanApproval": false
   }
 }
 ```
@@ -711,6 +714,56 @@ OPA/Rego should be embedded from day one as the final authorization engine. Type
 OPA distribution should be pinned to v1.16.1 for CI and local Docker until the project explicitly upgrades it. CI should verify the downloaded `opa_linux_amd64_static` checksum, and Docker deployments should use `openpolicyagent/opa:1.16.1-static` pinned by image digest instead of relying only on a mutable tag.
 
 Human approval thresholds must be configurable. If no explicit threshold policy exists for a live action, the system should fail closed and require human approval.
+
+Human approval is an escalation path, not the default path for every trade. The normal decision flow is:
+
+```text
+agent proposes structured intent
+  -> reviewer agent returns structured verdict
+  -> policy engine checks allowlist and static constraints
+  -> risk engine checks fresh live state and dynamic limits
+  -> broker decision: allow | needs_human | deny
+```
+
+Reviewer approval is necessary for automatic execution, but not sufficient. Automatic execution is allowed only when all of the following are true:
+
+- Reviewer verdict is `approve`.
+- Agent principal, action, resource, account mode, symbol, chain, contract, program, token, spender, and destination are allowlisted as applicable.
+- The action is inside configured notional, daily notional, daily loss, slippage, position delta, order frequency, and leverage limits.
+- Market data, portfolio data, simulation output, and evidence references are fresh and internally consistent.
+- No prompt injection, unsupported claim, suspicious tool behavior, RPC disagreement, or policy/risk-engine uncertainty is detected.
+- Audit log, kill switch, broker, signer, OPA, and required data providers are healthy.
+- The matching policy explicitly allows automatic execution with `requiresHumanApproval: false`.
+
+Human approval should be returned as `needs_human` when the request is potentially valid but outside the automatic execution envelope:
+
+- First live trading enablement, canary-live escalation, or production policy change.
+- New agent, strategy, account, subaccount, symbol, contract, token, spender, destination, Solana program, or onchain function before durable allowlist onboarding.
+- Notional, daily notional, daily loss, slippage, position delta, order frequency, or leverage above the automatic threshold but below the hard-deny threshold.
+- Binance USD-M futures leverage above the default cap.
+- Large transfer, bridge transaction, governance action, or token approval above configured threshold.
+- Reviewer verdict is `needs_human`, or reviewer risk is high enough to require operator review.
+- Evidence and rationale are incomplete or partially mismatched but not clearly malicious.
+- Onchain simulation is unclear, balance deltas are surprising, or RPC quorum disagrees within a recoverable tolerance.
+- Repeated rejection, cooldown, or loss-control logic asks for operator intervention.
+
+Some cases should hard-deny instead of asking for human approval:
+
+- Agent asks for private keys, seed phrases, CEX keys, raw signing access, direct CEX access, or direct RPC/signing paths.
+- CEX withdrawal, unauthorized account transfer, spot margin/cross-margin enablement, or out-of-scope COIN-M futures action.
+- Unlimited token approval.
+- Execution against an unknown contract/program/spender without prior onboarding.
+- Explicit high-confidence prompt injection or malicious tool behavior.
+- OPA unavailable, kill switch enabled, signer unavailable, missing critical state, stale critical market/portfolio data, or malformed policy input.
+
+Allowlists should be expressed as policy rules, not ad hoc code branches. A durable allowlist entry should bind:
+
+- `principal`: agent, strategy, or reviewer identity.
+- `action`: exact allowed operation.
+- `resource`: exchange/account/symbol, chain/contract/function, Solana program/instruction, token/spender/destination.
+- `condition`: max notional, slippage, leverage, freshness, risk tier, environment, and whether human approval is required.
+
+Human approval can approve a one-time execution or approve an allowlist onboarding change. Durable allowlist changes should be auditable policy changes, not hidden runtime state.
 
 Default canary-live thresholds:
 
@@ -804,6 +857,8 @@ Resolved:
 - Use `pnpm` workspaces, Zod with generated JSON Schema, OPA v1.16.1 sidecar/local service, `gpt-5.5` reviewer, Vault as the first production secret backend, SQLite plus Drizzle Kit/hash-chain audit backend, and CLI-first human approval.
 - Use Vault dev server for local development only, then add single-node integrated storage, Kubernetes HA integrated storage, and cloud-hosted Vault/HCP profiles.
 - Use separate CLI approval commands for listing, showing, approving, denying, and watching pending requests.
+- Treat human approval as escalation-only: allowlisted low-risk trades can auto-execute after reviewer approval plus deterministic policy and risk checks.
+- Treat allowlist onboarding as auditable policy change; human approval may approve a one-time execution or a durable allowlist update.
 - Aim for limited live trading as the first real-money target, but only behind explicit policy, canary limits, paper trading validation, testnet validation, and kill-switch coverage.
 - Design secret and deployment backends as pluggable interfaces so the framework can eventually support local development, cloud secret managers, Vault, KMS, HSM, MPC providers, local Docker, single VPS, Kubernetes, and cloud-managed runtimes.
 

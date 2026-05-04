@@ -26,6 +26,9 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 - [x] Use Vault as the first production-grade secret backend.
 - [x] Use SQLite append-only audit storage with hash-chain tamper evidence for MVP.
 - [x] Use CLI as the first human approval surface, then add local web UI, Slack, Telegram, Discord, WhatsApp, and Signal adapters.
+- [x] Treat human approval as escalation-only, not as the default for every trade.
+- [x] Allow low-risk allowlisted actions to auto-execute only after reviewer approval plus deterministic policy and risk checks.
+- [x] Model allowlists as policy rules over `principal`, `action`, `resource`, and `condition`.
 - [x] Use Vault dev server for local development only, with a roadmap for single-node integrated storage, Kubernetes HA integrated storage, and cloud-hosted Vault/HCP.
 - [x] Use separate CLI approval commands for `list`, `show`, `approve`, `deny`, and `watch` as the first CLI approval UX.
 - [x] Use Drizzle Kit for SQLite audit database migrations.
@@ -59,6 +62,10 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 - [ ] Define risk tiers: `low`, `medium`, `high`, `critical`.
 - [ ] Define human approval classes: `none`, `required`, `break_glass`.
 - [ ] Define policy decision states: `allow`, `deny`, `needs_human`.
+- [ ] Define automatic execution envelope for reviewer-approved low-risk allowlisted actions.
+- [ ] Define `needs_human` escalation criteria.
+- [ ] Define hard-deny criteria that must not be converted into human approval.
+- [ ] Define one-time approval versus durable allowlist onboarding semantics.
 - [ ] Define audit event taxonomy.
 - [ ] Define idempotency strategy for trading and signing requests.
 - [ ] Define environment profiles: `dev`, `paper`, `testnet`, `canary_live`, `production`.
@@ -137,7 +144,11 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 - [ ] Implement required reviewer status checks.
 - [ ] Implement principal/action/resource matching.
 - [ ] Implement environment-aware policy.
+- [ ] Implement policy allowlist schema over `principal`, `action`, `resource`, and `condition`.
+- [ ] Implement automatic execution policy for reviewer-approved low-risk allowlisted actions.
 - [ ] Implement configurable human approval threshold policy.
+- [ ] Implement `needs_human` policy for valid but non-automatic escalation cases.
+- [ ] Implement hard-deny policy for forbidden actions that must not request human approval.
 - [ ] Implement Binance allowlist policy.
 - [ ] Implement Binance notional limit policy.
 - [ ] Implement Binance daily notional limit policy.
@@ -151,7 +162,9 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 - [ ] Implement Ethereum unlimited approval denial policy.
 - [ ] Implement Solana devnet program/instruction/token/account allowlist policy.
 - [ ] Implement Solana authority-change denial or human approval policy.
-- [ ] Add Rego unit tests for each allow/deny path.
+- [ ] Add Rego unit tests for auto-allow, needs-human, and hard-deny paths.
+- [ ] Add Rego tests that reviewer approval alone is insufficient without a matching allowlist.
+- [ ] Add Rego tests that hard-deny wins over human approval.
 - [ ] Add policy fixtures for `dev`, `paper`, `testnet`, and `canary_live`.
 - [ ] Document how TypeScript normalization and live risk facts feed OPA.
 - [ ] Document OPA v1.16.1 upgrade process and checksum verification.
@@ -326,6 +339,9 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 - [ ] Implement approval timeout behavior.
 - [ ] Implement approval audit logging.
 - [ ] Implement configurable approval thresholds.
+- [ ] Implement approval decision type: one-time execution approval.
+- [ ] Implement approval decision type: durable allowlist onboarding request.
+- [ ] Ensure durable allowlist onboarding creates an auditable policy change, not hidden runtime state.
 - [ ] Implement `guardrail approvals list`.
 - [ ] Implement `guardrail approvals show <approvalId>`.
 - [ ] Implement `guardrail approvals approve <approvalId>`.
@@ -376,6 +392,10 @@ Build a TypeScript-based guardrails framework that lets OpenClaw and Hermes Agen
 - [ ] Test attempted direct RPC access from agent runtime.
 - [ ] Test hallucinated price/balance/position claims.
 - [ ] Test invalid reviewer output.
+- [ ] Test reviewer `approve` plus matching allowlist auto-executes within low-risk limits.
+- [ ] Test reviewer `approve` without matching allowlist does not auto-execute.
+- [ ] Test threshold breach returns `needs_human` when below hard-deny threshold.
+- [ ] Test hard-deny actions never become human approval requests.
 - [ ] Test malformed policy input.
 - [ ] Test OPA unavailable.
 - [ ] Test broker unavailable.
