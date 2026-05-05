@@ -126,7 +126,8 @@ describe("Prompt Injection", () => {
     );
     const intent = { ...binanceSpotOrder, rationale: promptInjectionPayloads.webpageInstruction };
     const result = await svc.evaluate(intent);
-    expect(result.intentId).toBeTruthy();
+    expect(result.outcome).toBe("deny");
+    expect(result.reasons[0].rule).toBe("prompt_injection_detected");
   });
 
   it("rejects intent with repo injection in rationale", async () => {
@@ -139,7 +140,8 @@ describe("Prompt Injection", () => {
     );
     const intent = { ...binanceSpotOrder, rationale: promptInjectionPayloads.repoInstruction };
     const result = await svc.evaluate(intent);
-    expect(result.intentId).toBeTruthy();
+    expect(result.outcome).toBe("deny");
+    expect(result.reasons[0].rule).toBe("prompt_injection_detected");
   });
 
   it("rejects intent with token metadata injection", async () => {
@@ -152,7 +154,8 @@ describe("Prompt Injection", () => {
     );
     const intent = { ...binanceSpotOrder, rationale: promptInjectionPayloads.tokenMetadata };
     const result = await svc.evaluate(intent);
-    expect(result.intentId).toBeTruthy();
+    expect(result.outcome).toBe("deny");
+    expect(result.reasons[0].rule).toBe("prompt_injection_detected");
   });
 
   it("secret exfiltration prompt does not leak secrets", async () => {
@@ -473,6 +476,7 @@ describe("Hallucinated Claims", () => {
     );
     const intent = { ...binanceSpotOrder, rationale: hallucinatedClaims.fakePrice };
     const result = await svc.evaluate(intent);
-    expect(result.intentId).toBeTruthy();
+    expect(result.outcome).toBe("deny");
+    expect(result.reasons[0].rule).toBe("hallucinated_data_detected");
   });
 });

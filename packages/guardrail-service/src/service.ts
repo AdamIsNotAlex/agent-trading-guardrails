@@ -106,6 +106,30 @@ export class GuardrailService {
     return this.approvalStore.waitForApproval(approvalId, timeoutMs);
   }
 
+  private detectUnsafeContent(intent: TradingIntent): { rule: string; message: string } | null {
+    const content = [intent.rationale, ...intent.evidence].join("\n").toLowerCase();
+    if (
+      [
+        /ignore\s+all\s+previous\s+instructions/,
+        /system\s+override\s*:/,
+        /execute\s+cex\.withdraw/,
+        /transfer\s+all\s+funds\s+to/,
+      ].some((indicator) => indicator.test(content))
+    ) {
+      return {
+        rule: "prompt_injection_detected",
+        message: "Intent rationale or evidence contains prompt injection instructions.",
+      };
+    }
+    if (/(price|balance|position).{0,120}no snapshot reference/.test(content)) {
+      return {
+        rule: "hallucinated_data_detected",
+        message: "Intent rationale or evidence contains unsupported market or portfolio claims.",
+      };
+    }
+    return null;
+  }
+
   private finalizeDecision(
     intent: TradingIntent,
     decision: GuardrailDecision,
@@ -210,6 +234,29 @@ export class GuardrailService {
     }
     if (cached) {
       return this.finalizeDecision(intent, cached, correlationId, auditContext);
+    }
+
+    const contentRejection = this.detectUnsafeContent(intent);
+    if (contentRejection) {
+      const decision: GuardrailDecision = {
+        intentId: intent.intentId,
+        correlationId,
+        outcome: "deny",
+        reasons: [contentRejection],
+        requiresHumanApproval: false,
+        reviewerVerdict: null,
+        policyOutput: null,
+        riskResult: null,
+        decidedAt: now,
+      };
+      const finalized = this.finalizeDecision(
+        intent,
+        decision,
+        decision.correlationId,
+        auditContext,
+      );
+      this.idempotency.set(intent.idempotencyKey, payloadHash, finalized);
+      return finalized;
     }
 
     let opaHealthy: boolean;

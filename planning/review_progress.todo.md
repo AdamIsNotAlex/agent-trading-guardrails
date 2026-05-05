@@ -245,11 +245,11 @@ Most live trading safety gates are docs-only with no enforcement code.
 
 Prompt injection tests at lines 116, 123, 130, 387 of `packages/red-team/src/red-team.test.ts` only assert `result.intentId` is truthy — never `outcome === "deny"`.
 
-- [ ] Change line 116 (webpage injection test): add `expect(result.outcome).toBe("deny")` or at minimum verify `result.outcome !== "allow"`.
-- [ ] Change line 123 (repo injection test): same fix.
-- [ ] Change line 130 (token metadata test): same fix.
-- [ ] Change line 387 (hallucinated price test): same fix.
-- [ ] If the guardrail service currently returns `"allow"` for these injection payloads (meaning the tests were masking real failures), investigate and fix the detection logic.
+- [x] Change line 116 (webpage injection test): add `expect(result.outcome).toBe("deny")` or at minimum verify `result.outcome !== "allow"`.
+- [x] Change line 123 (repo injection test): same fix.
+- [x] Change line 130 (token metadata test): same fix.
+- [x] Change line 387 (hallucinated price test): same fix.
+- [x] If the guardrail service currently returns `"allow"` for these injection payloads (meaning the tests were masking real failures), investigate and fix the detection logic.
 
 ### P2.5 — Add missing red-team tests (Phase 17)
 
