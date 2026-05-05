@@ -118,7 +118,7 @@ describe("EvmConnector execution", () => {
   });
 
   it("signs and broadcasts with dev signer", async () => {
-    const signer = new LocalDevSigner("0x1234567890abcdef1234567890abcdef12345678");
+    const signer = new LocalDevSigner("0x1234567890abcdef1234567890abcdef12345678", config);
     const connector = new EvmConnector(config, makeMockProvider(), signer);
     const result = await connector.execute(ethereumSepoliaSigning);
     expect(result.transactionHash).toBeTruthy();
@@ -135,15 +135,23 @@ describe("EvmConnector execution", () => {
 
 describe("LocalDevSigner", () => {
   it("returns configured address", () => {
-    const signer = new LocalDevSigner("0xtest");
+    const signer = new LocalDevSigner("0xtest", config);
     expect(signer.getAddress()).toBe("0xtest");
   });
 
   it("does not expose private keys", () => {
-    const signer = new LocalDevSigner("0xtest");
+    const signer = new LocalDevSigner("0xtest", config);
     const keys = Object.keys(signer);
     expect(keys).not.toContain("privateKey");
     expect(keys).not.toContain("key");
     expect(keys).not.toContain("secret");
+  });
+
+  it("rejects mainnet configuration", () => {
+    expect(() => new LocalDevSigner("0xtest", { chainEnvironment: "mainnet" })).toThrow("Sepolia");
+  });
+
+  it("rejects missing environment configuration", () => {
+    expect(() => new LocalDevSigner("0xtest", undefined as never)).toThrow("Sepolia");
   });
 });

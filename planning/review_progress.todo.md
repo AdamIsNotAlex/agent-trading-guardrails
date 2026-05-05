@@ -191,9 +191,9 @@ No concrete `OpenAiLlmProvider` HTTP client exists. `ReviewerAdapter` accepts a 
 
 `LocalDevSigner` (EVM) and `LocalDevSolanaSigner` (Solana) have no environment guards.
 
-- [ ] In `packages/evm-connector/src/dev-signer.ts`, add a constructor check: if `config.chainEnvironment` is `"mainnet"`, throw an error refusing to instantiate.
-- [ ] In `packages/solana-connector/src/dev-signer.ts`, add the same guard for non-devnet environments.
-- [ ] Add tests that instantiation throws for mainnet/production environments.
+- [x] In `packages/evm-connector/src/dev-signer.ts`, add a constructor check: if `config.chainEnvironment` is `"mainnet"`, throw an error refusing to instantiate.
+- [x] In `packages/solana-connector/src/dev-signer.ts`, add the same guard for non-devnet environments.
+- [x] Add tests that instantiation throws for mainnet/production environments.
 
 ### P1.12 — Implement durable allowlist onboarding (Phase 15)
 

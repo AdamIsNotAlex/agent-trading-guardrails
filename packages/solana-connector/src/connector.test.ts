@@ -122,7 +122,7 @@ describe("SolanaConnector execution", () => {
         return 12345;
       },
     };
-    const signer = new LocalDevSolanaSigner("devnet-pubkey-test");
+    const signer = new LocalDevSolanaSigner("devnet-pubkey-test", config);
     const signAndBroadcast = vi.spyOn(signer, "signAndBroadcast").mockImplementation(async () => {
       calls.push("sign");
       return "solana-tx-test";
@@ -141,7 +141,7 @@ describe("SolanaConnector execution", () => {
   });
 
   it("does not sign when request-signature simulation fails", async () => {
-    const signer = new LocalDevSolanaSigner("devnet-pubkey-test");
+    const signer = new LocalDevSolanaSigner("devnet-pubkey-test", config);
     const signAndBroadcast = vi.spyOn(signer, "signAndBroadcast");
     const connector = new SolanaConnector(
       config,
@@ -161,14 +161,24 @@ describe("SolanaConnector execution", () => {
 
 describe("LocalDevSolanaSigner", () => {
   it("returns configured public key", () => {
-    const signer = new LocalDevSolanaSigner("test-key");
+    const signer = new LocalDevSolanaSigner("test-key", config);
     expect(signer.getPublicKey()).toBe("test-key");
   });
 
   it("does not expose private keys", () => {
-    const signer = new LocalDevSolanaSigner("test-key");
+    const signer = new LocalDevSolanaSigner("test-key", config);
     const keys = Object.keys(signer);
     expect(keys).not.toContain("privateKey");
     expect(keys).not.toContain("secretKey");
+  });
+
+  it("rejects mainnet configuration", () => {
+    expect(() => new LocalDevSolanaSigner("test-key", { chainEnvironment: "mainnet" })).toThrow(
+      "devnet",
+    );
+  });
+
+  it("rejects missing environment configuration", () => {
+    expect(() => new LocalDevSolanaSigner("test-key", undefined as never)).toThrow("devnet");
   });
 });
