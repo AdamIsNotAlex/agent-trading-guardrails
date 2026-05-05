@@ -34,7 +34,22 @@ export interface AuditWriter {
   }): void;
 }
 
+export class IdempotencyConflictError extends Error {
+  constructor(key: string) {
+    super(`Idempotency key ${key} was already used with a different intent payload.`);
+    this.name = "IdempotencyConflictError";
+  }
+}
+
+export type BrokerIdempotencyReservation =
+  | {
+      status: "reserved";
+      complete(result: BrokerExecutionResult): void;
+      abort(error: unknown): void;
+    }
+  | { status: "cached"; result: BrokerExecutionResult }
+  | { status: "pending"; result: Promise<BrokerExecutionResult> };
+
 export interface BrokerIdempotencyStore {
-  get(key: string): BrokerExecutionResult | undefined;
-  set(key: string, result: BrokerExecutionResult): void;
+  begin(key: string, intent: TradingIntent): BrokerIdempotencyReservation;
 }

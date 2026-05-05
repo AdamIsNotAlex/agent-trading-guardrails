@@ -1,4 +1,9 @@
-import { ExecutionBroker, InMemoryKillSwitch, PaperExecutionConnector } from "@guardrails/broker";
+import {
+  ExecutionBroker,
+  InMemoryBrokerIdempotencyStore,
+  InMemoryKillSwitch,
+  PaperExecutionConnector,
+} from "@guardrails/broker";
 import type {
   DynamicRiskResult,
   PolicyOutput,
@@ -345,12 +350,7 @@ describe("Fail-Closed Behavior", () => {
       },
       new InMemoryKillSwitch(),
       { write() {} },
-      {
-        get() {
-          return undefined;
-        },
-        set() {},
-      },
+      new InMemoryBrokerIdempotencyStore(),
     );
     const result = await broker.execute({
       intentId: "test",
@@ -395,12 +395,7 @@ describe("Kill Switch", () => {
       new PaperExecutionConnector(),
       ks,
       { write() {} },
-      {
-        get() {
-          return undefined;
-        },
-        set() {},
-      },
+      new InMemoryBrokerIdempotencyStore(),
     );
     const result = await broker.execute({
       intentId: "test",
@@ -420,12 +415,7 @@ describe("Kill Switch", () => {
       new PaperExecutionConnector(),
       ks,
       { write() {} },
-      {
-        get() {
-          return undefined;
-        },
-        set() {},
-      },
+      new InMemoryBrokerIdempotencyStore(),
     );
     const result = await broker.execute({
       intentId: "test",

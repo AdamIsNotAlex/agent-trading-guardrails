@@ -182,10 +182,10 @@ No concrete `OpenAiLlmProvider` HTTP client exists. `ReviewerAdapter` accepts a 
 
 `BrokerIdempotencyStore` is interface-only — no concrete exported implementation, no conflict detection.
 
-- [ ] Create `packages/broker/src/idempotency-store.ts` exporting `InMemoryBrokerIdempotencyStore` implementing `BrokerIdempotencyStore`.
-- [ ] Implement payload-hash conflict detection: if the same `idempotencyKey` is submitted with a different intent payload hash, return a conflict error.
-- [ ] Add configurable retention/TTL for idempotency entries.
-- [ ] Add tests for replay (same key, same payload → return cached result), conflict (same key, different payload → error), and TTL expiry.
+- [x] Create `packages/broker/src/idempotency-store.ts` exporting `InMemoryBrokerIdempotencyStore` implementing `BrokerIdempotencyStore`.
+- [x] Implement payload-hash conflict detection: if the same `idempotencyKey` is submitted with a different intent payload hash, return a conflict error.
+- [x] Add configurable retention/TTL for idempotency entries.
+- [x] Add tests for replay (same key, same payload → return cached result), conflict (same key, different payload → error), and TTL expiry.
 
 ### P1.11 — Add devnet/testnet-only guards to dev signers (Phases 8, 9)
 
