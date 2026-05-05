@@ -348,12 +348,12 @@ Only slippage is implemented. No price-band check compares intent target price a
 
 ### P2.16 — Add max-orders-per-day limit to risk engine (Phase 5)
 
-`DailyStats.orderCount` exists in `packages/risk-engine/src/providers.ts` line 18 but is never used.
+`DailyStats.orderCount` was present in `packages/risk-engine/src/providers.ts` but was not enforced by the risk engine.
 
-- [ ] Add `maxOrdersPerDay: number` to `RiskLimits` in `packages/risk-engine/src/config.ts`.
-- [ ] In `checkOrderFrequency()` (or a new `checkDailyOrderCount()`) in `packages/risk-engine/src/checks.ts`, read `stats.orderCount` and fail if it exceeds `maxOrdersPerDay`.
-- [ ] Add default value to `DEFAULT_CANARY_LIVE_LIMITS`.
-- [ ] Add test for order count within limit and exceeding limit.
+- [x] Add `maxOrdersPerDay: number` to `RiskLimits` in `packages/risk-engine/src/config.ts`.
+- [x] In `checkOrderFrequency()` (or a new `checkDailyOrderCount()`) in `packages/risk-engine/src/checks.ts`, read `stats.orderCount` and fail if projected `stats.orderCount + 1` exceeds `maxOrdersPerDay`.
+- [x] Add default value to `DEFAULT_CANARY_LIVE_LIMITS`.
+- [x] Add test for order count within limit and exceeding limit.
 
 ### P2.17 — Add HTTP server layer for GuardrailService (Phase 3)
 

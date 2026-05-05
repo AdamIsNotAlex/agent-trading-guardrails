@@ -1,6 +1,6 @@
 import type { ReviewerVerdictSchema, RiskCheckResult, TradingIntent } from "@guardrails/schemas";
 import type { RiskLimits } from "./config.js";
-import type { RiskDataProvider } from "./providers.js";
+import type { DailyStats, RiskDataProvider } from "./providers.js";
 
 export async function checkMarketDataFreshness(
   provider: RiskDataProvider,
@@ -93,16 +93,18 @@ export function checkPerOrderNotional(intent: TradingIntent, limits: RiskLimits)
   };
 }
 
-export async function checkDailyNotional(
-  provider: RiskDataProvider,
+export function checkDailyNotional(
   intent: TradingIntent,
   limits: RiskLimits,
-): Promise<RiskCheckResult> {
-  if (!("account" in intent) || !("maxNotionalUsd" in intent)) {
+  stats: DailyStats | null | undefined,
+): RiskCheckResult {
+  if (
+    intent.action !== "cex.place_order" ||
+    !("account" in intent) ||
+    !("maxNotionalUsd" in intent)
+  ) {
     return { check: "daily_notional", status: "pass" };
   }
-  const today = new Date().toISOString().slice(0, 10);
-  const stats = await provider.getDailyStats(intent.account, today);
   if (!stats) {
     return {
       check: "daily_notional",
@@ -128,16 +130,14 @@ export async function checkDailyNotional(
   };
 }
 
-export async function checkDailyLoss(
-  provider: RiskDataProvider,
+export function checkDailyLoss(
   intent: TradingIntent,
   limits: RiskLimits,
-): Promise<RiskCheckResult> {
+  stats: DailyStats | null | undefined,
+): RiskCheckResult {
   if (intent.action !== "cex.place_order" || !("account" in intent)) {
     return { check: "daily_loss", status: "pass" };
   }
-  const today = new Date().toISOString().slice(0, 10);
-  const stats = await provider.getDailyStats(intent.account, today);
   if (!stats) {
     return { check: "daily_loss", status: "unavailable", message: "Daily stats not available." };
   }
@@ -242,6 +242,39 @@ export async function checkOrderFrequency(
     status: "pass",
     value: elapsed,
     threshold: limits.minOrderIntervalMs,
+  };
+}
+
+export function checkDailyOrderCount(
+  intent: TradingIntent,
+  limits: RiskLimits,
+  stats: DailyStats | null | undefined,
+): RiskCheckResult {
+  if (intent.action !== "cex.place_order" || !("account" in intent)) {
+    return { check: "daily_order_count", status: "pass" };
+  }
+  if (!stats) {
+    return {
+      check: "daily_order_count",
+      status: "unavailable",
+      message: "Daily stats not available.",
+    };
+  }
+  const projected = stats.orderCount + 1;
+  if (projected > limits.maxOrdersPerDay) {
+    return {
+      check: "daily_order_count",
+      status: "fail",
+      value: projected,
+      threshold: limits.maxOrdersPerDay,
+      message: `Projected daily order count ${projected} exceeds limit ${limits.maxOrdersPerDay}.`,
+    };
+  }
+  return {
+    check: "daily_order_count",
+    status: "pass",
+    value: projected,
+    threshold: limits.maxOrdersPerDay,
   };
 }
 

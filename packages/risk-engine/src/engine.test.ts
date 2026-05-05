@@ -20,6 +20,7 @@ const limits: RiskLimits = {
   maxSlippageBps: 50,
   maxPositionDeltaPct: 10,
   minOrderIntervalMs: 5_000,
+  maxOrdersPerDay: 25,
 };
 
 function makeVerdict(overrides?: Partial<ReviewerVerdictSchema>): ReviewerVerdictSchema {
@@ -91,7 +92,7 @@ describe("RiskEngine", () => {
     const engine = new RiskEngine(makeProvider(), limits);
     const result = await engine.evaluate(binanceSpotOrder, makeVerdict());
     expect(result.passed).toBe(true);
-    expect(result.checks.length).toBe(10);
+    expect(result.checks.length).toBe(11);
     expect(result.checks.every((c) => c.status === "pass")).toBe(true);
     expect(result.dailyStats).toEqual(defaults.dailyStats());
   });
@@ -118,13 +119,21 @@ describe("RiskEngine", () => {
   });
 
   it("does not require trading risk state for order status queries", async () => {
+    let dailyStatsCalls = 0;
+    const provider = makeProvider({
+      marketData: null,
+      portfolio: null,
+      dailyStats: null,
+      lastOrderTs: nowMs - 1000,
+    });
     const engine = new RiskEngine(
-      makeProvider({
-        marketData: null,
-        portfolio: null,
-        dailyStats: null,
-        lastOrderTs: nowMs - 1000,
-      }),
+      {
+        ...provider,
+        async getDailyStats() {
+          dailyStatsCalls += 1;
+          throw new Error("daily stats should not be read for order status queries");
+        },
+      },
       limits,
     );
     const result = await engine.evaluate(
@@ -140,6 +149,8 @@ describe("RiskEngine", () => {
     expect(result.checks.find((c) => c.check === "portfolio_freshness")?.status).toBe("pass");
     expect(result.checks.find((c) => c.check === "daily_loss")?.status).toBe("pass");
     expect(result.checks.find((c) => c.check === "order_frequency")?.status).toBe("pass");
+    expect(result.checks.find((c) => c.check === "daily_order_count")?.status).toBe("pass");
+    expect(dailyStatsCalls).toBe(0);
   });
 
   it("fails on stale portfolio data", async () => {
@@ -246,14 +257,68 @@ describe("RiskEngine", () => {
     expect(check?.status).toBe("fail");
   });
 
+  it("passes when projected daily order count is within limit", async () => {
+    const engine = new RiskEngine(
+      makeProvider({
+        dailyStats: {
+          account: "subaccount-1",
+          date: new Date().toISOString().slice(0, 10),
+          totalNotionalUsd: 20,
+          realizedLossUsd: 5,
+          orderCount: 24,
+        },
+      }),
+      limits,
+    );
+
+    const result = await engine.evaluate(binanceSpotOrder, makeVerdict());
+    const check = result.checks.find((c) => c.check === "daily_order_count");
+
+    expect(result.passed).toBe(true);
+    expect(check).toMatchObject({
+      status: "pass",
+      value: limits.maxOrdersPerDay,
+      threshold: limits.maxOrdersPerDay,
+    });
+  });
+
+  it("fails when projected daily order count exceeds limit", async () => {
+    const engine = new RiskEngine(
+      makeProvider({
+        dailyStats: {
+          account: "subaccount-1",
+          date: new Date().toISOString().slice(0, 10),
+          totalNotionalUsd: 20,
+          realizedLossUsd: 5,
+          orderCount: 25,
+        },
+      }),
+      limits,
+    );
+
+    const result = await engine.evaluate(binanceSpotOrder, makeVerdict());
+    const check = result.checks.find((c) => c.check === "daily_order_count");
+    const failedChecks = result.checks.filter((c) => c.status !== "pass");
+
+    expect(result.passed).toBe(false);
+    expect(failedChecks.map((c) => c.check)).toEqual(["daily_order_count"]);
+    expect(check).toMatchObject({
+      status: "fail",
+      value: limits.maxOrdersPerDay + 1,
+      threshold: limits.maxOrdersPerDay,
+    });
+  });
+
   it("fails when daily stats unavailable (fail-closed)", async () => {
     const engine = new RiskEngine(makeProvider({ dailyStats: null }), limits);
     const result = await engine.evaluate(binanceSpotOrder, makeVerdict());
     expect(result.passed).toBe(false);
     const checkNotional = result.checks.find((c) => c.check === "daily_notional");
     const checkLoss = result.checks.find((c) => c.check === "daily_loss");
+    const checkOrderCount = result.checks.find((c) => c.check === "daily_order_count");
     expect(checkNotional?.status).toBe("unavailable");
     expect(checkLoss?.status).toBe("unavailable");
+    expect(checkOrderCount?.status).toBe("unavailable");
   });
 
   it("fails on reviewer verdict intentId mismatch", async () => {
