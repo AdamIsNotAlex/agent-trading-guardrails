@@ -110,14 +110,14 @@ These items are needed for the system to work end-to-end against real infrastruc
 
 ### P1.3 — Implement concrete OPA HTTP PolicyEvaluator (Phase 4)
 
-No concrete implementation of `PolicyEvaluator` (defined in `packages/guardrail-service/src/interfaces.ts` lines 13-16) exists. Tests use mocks only.
+`OpaHttpPolicyEvaluator` in `packages/guardrail-service/src/opa-evaluator.ts` provides the concrete HTTP implementation for the repo's `package guardrail` policy. Tests use a mocked OPA HTTP server.
 
-- [ ] Create `packages/guardrail-service/src/opa-evaluator.ts` implementing `PolicyEvaluator`:
-  - [ ] `evaluate(input)` → HTTP POST to `${opaUrl}/v1/data/guardrails/main` with `{ input }`, parse response.
-  - [ ] `isHealthy()` → HTTP GET to `${opaUrl}/health`, return `true` if 200.
-- [ ] Apply the `transformOpaOutput` from P0.4 inside `evaluate()` before returning.
-- [ ] Accept OPA URL from config (default `http://localhost:8181`).
-- [ ] Add integration test that starts OPA (or mocks HTTP) and verifies the full evaluate→transform→parse pipeline.
+- [x] Create `packages/guardrail-service/src/opa-evaluator.ts` implementing `PolicyEvaluator`:
+  - [x] `evaluate(input)` → HTTP POST to `${opaUrl}/v1/data/guardrail` with `{ input }`, parse response.
+  - [x] `isHealthy()` → HTTP GET to `${opaUrl}/health`, return `true` if 200.
+- [x] Apply the `transformOpaOutput` from P0.4 inside `evaluate()` before returning.
+- [x] Accept OPA URL from config (default `http://localhost:8181`).
+- [x] Add integration test that starts OPA (or mocks HTTP) and verifies the full evaluate→transform→parse pipeline.
 
 ### P1.4 — Implement concrete OpenAI LLM provider (Phase 11)
 
