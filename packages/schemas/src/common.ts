@@ -15,20 +15,10 @@ export type ReviewerVerdict = z.infer<typeof ReviewerVerdict>;
 export const HumanApprovalClass = z.enum(["none", "required", "break_glass"]);
 export type HumanApprovalClass = z.infer<typeof HumanApprovalClass>;
 
-export const CexAction = z.enum([
-  "cex.place_order",
-  "cex.cancel_order",
-  "cex.get_order_status",
-  "cex.get_open_orders",
-  "cex.get_portfolio",
-]);
+export const CexAction = z.enum(["cex.place_order", "cex.cancel_order", "cex.get_order_status"]);
 export type CexAction = z.infer<typeof CexAction>;
 
-export const OnchainAction = z.enum([
-  "onchain.simulate_transaction",
-  "onchain.request_signature",
-  "onchain.get_portfolio",
-]);
+export const OnchainAction = z.enum(["onchain.simulate_transaction", "onchain.request_signature"]);
 export type OnchainAction = z.infer<typeof OnchainAction>;
 
 export const Action = z.enum([...CexAction.options, ...OnchainAction.options]);

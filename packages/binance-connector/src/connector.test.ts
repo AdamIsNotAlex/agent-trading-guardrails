@@ -171,6 +171,47 @@ describe("BinanceConnector (live mode with mock)", () => {
     expect(result.orderId).toBe("live-spot-001");
   });
 
+  it("passes stable client order ids for live spot orders", async () => {
+    const seenClientOrderIds: string[] = [];
+    const client: BinanceApiClient = {
+      ...makeMockClient(),
+      async placeSpotOrder(params) {
+        seenClientOrderIds.push(params.clientOrderId ?? "");
+        return makeMockClient().placeSpotOrder(params);
+      },
+    };
+    const connector = new BinanceConnector(config, client, "live");
+
+    await connector.execute(binanceSpotOrder);
+    await connector.execute(binanceSpotOrder);
+
+    expect(seenClientOrderIds).toHaveLength(2);
+    expect(seenClientOrderIds[0]).toMatch(/^guardrails-[0-9a-f]{24}$/);
+    expect(seenClientOrderIds[1]).toBe(seenClientOrderIds[0]);
+  });
+
+  it("passes stable client order ids for live futures orders", async () => {
+    const seenClientOrderIds: string[] = [];
+    const client: BinanceApiClient = {
+      ...makeMockClient(),
+      async getPrice(symbol) {
+        return { symbol, price: binanceFuturesOrder.price, timestampMs: Date.now() };
+      },
+      async placeFuturesOrder(params) {
+        seenClientOrderIds.push(params.clientOrderId ?? "");
+        return makeMockClient().placeFuturesOrder(params);
+      },
+    };
+    const connector = new BinanceConnector(config, client, "live");
+
+    await connector.execute(binanceFuturesOrder);
+    await connector.execute(binanceFuturesOrder);
+
+    expect(seenClientOrderIds).toHaveLength(2);
+    expect(seenClientOrderIds[0]).toMatch(/^guardrails-[0-9a-f]{24}$/);
+    expect(seenClientOrderIds[1]).toBe(seenClientOrderIds[0]);
+  });
+
   it("gets live order status via mock client", async () => {
     const connector = new BinanceConnector(config, makeMockClient(), "live");
     const result = await connector.getOrderStatus({

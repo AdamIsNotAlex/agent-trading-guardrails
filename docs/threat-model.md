@@ -65,7 +65,7 @@ The system fails closed — denying the action — in every case where required 
 | RPC providers disagree beyond tolerance | Deny. Potential eclipse or data integrity issue. |
 | Broker internal error | Deny. Do not partially execute. |
 | Kill switch enabled | Deny. All execution halted. |
-| Audit log writer unavailable | Deny. No unaudited execution allowed. |
+| Audit log writer unavailable | Deny before execution; after a connector call, retain the terminal idempotency result to avoid duplicate financial side effects. |
 | Missing evidence references | Deny. All intents require verifiable evidence. |
 | Missing idempotency key | Deny. All execution requests must be idempotent. |
 
@@ -76,11 +76,8 @@ The system fails closed — denying the action — in every case where required 
 | `cex.place_order` | Place a spot or USD-M futures order on Binance | Variable by notional, leverage, symbol |
 | `cex.cancel_order` | Cancel an existing order on Binance | Low |
 | `cex.get_order_status` | Query a Binance order status (read-only) | Low |
-| `cex.get_open_orders` | Query open orders (read-only) | Low |
-| `cex.get_portfolio` | Query account balances and positions (read-only) | Low |
 | `onchain.simulate_transaction` | Simulate an onchain transaction without signing | Low |
 | `onchain.request_signature` | Request signing and broadcast of a simulated transaction | Variable by contract, amount, approval |
-| `onchain.get_portfolio` | Query onchain balances and token holdings (read-only) | Low |
 
 ## Explicitly Denied Actions (MVP)
 

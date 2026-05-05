@@ -73,7 +73,7 @@ The agent runtime is untrusted. It may be compromised, manipulated by prompt inj
 
 - Submit structured trading intents through the guarded tool adapter
 - Receive structured rejection reasons
-- Query read-only market data and portfolio state through guarded endpoints
+- Query order status through guarded read-only endpoints
 
 ## Secret Isolation
 

@@ -1,4 +1,10 @@
-import { ConnectorRevalidationError, type ExecutionConnector } from "@guardrails/broker";
+import { createHash } from "node:crypto";
+import {
+  type BeforeConnectorSideEffect,
+  ConnectorRevalidationError,
+  type ExecutionConnector,
+  scopeIdempotencyKey,
+} from "@guardrails/broker";
 import type { TradingIntent } from "@guardrails/schemas";
 import type {
   BinanceApiClient,
@@ -137,7 +143,10 @@ export class BinanceConnector implements ExecutionConnector {
     return { passed: true };
   }
 
-  async execute(intent: TradingIntent): ReturnType<ExecutionConnector["execute"]> {
+  async execute(
+    intent: TradingIntent,
+    beforeSideEffect?: BeforeConnectorSideEffect,
+  ): ReturnType<ExecutionConnector["execute"]> {
     const validation = await this.revalidate(intent);
     if (!validation.passed) {
       throw new ConnectorRevalidationError(
@@ -150,15 +159,15 @@ export class BinanceConnector implements ExecutionConnector {
         throw new Error("Only limit orders are supported.");
       }
       if (intent.accountMode === "spot") {
-        return this.executeSpotOrder(intent);
+        return this.executeSpotOrder(intent, beforeSideEffect);
       }
       if (intent.accountMode === "usdm_futures") {
-        return this.executeFuturesOrder(intent);
+        return this.executeFuturesOrder(intent, beforeSideEffect);
       }
     }
 
     if (intent.action === "cex.cancel_order" && "orderId" in intent) {
-      return this.executeCancelOrder(intent);
+      return this.executeCancelOrder(intent, beforeSideEffect);
     }
 
     if (intent.action === "cex.get_order_status" && "orderId" in intent) {
@@ -170,10 +179,13 @@ export class BinanceConnector implements ExecutionConnector {
       return { orderId: orderStatus.orderId, orderStatus };
     }
 
-    return {};
+    throw new Error(`Binance connector does not execute ${intent.action}.`);
   }
 
-  private async executeSpotOrder(intent: TradingIntent): Promise<{ orderId?: string }> {
+  private async executeSpotOrder(
+    intent: TradingIntent,
+    beforeSideEffect?: BeforeConnectorSideEffect,
+  ): Promise<{ orderId?: string }> {
     if (!("symbol" in intent) || !("side" in intent) || !("orderType" in intent)) {
       throw new Error("Invalid spot order intent.");
     }
@@ -185,19 +197,25 @@ export class BinanceConnector implements ExecutionConnector {
       type: "LIMIT" as "LIMIT" | "MARKET",
       quantity: "quantity" in intent ? intent.quantity : undefined,
       price: "price" in intent ? intent.price : undefined,
+      clientOrderId: this.clientOrderId(intent),
     };
 
     if (this.mode === "paper") {
+      beforeSideEffect?.();
       const result = this.paper.placeSpotOrder(params);
       return { orderId: result.orderId };
     }
 
     if (!this.client) throw new Error("Binance API client not configured for live mode.");
+    beforeSideEffect?.();
     const result = await this.client.placeSpotOrder(params);
     return { orderId: result.orderId };
   }
 
-  private async executeFuturesOrder(intent: TradingIntent): Promise<{ orderId?: string }> {
+  private async executeFuturesOrder(
+    intent: TradingIntent,
+    beforeSideEffect?: BeforeConnectorSideEffect,
+  ): Promise<{ orderId?: string }> {
     if (!("symbol" in intent) || !("side" in intent) || !("orderType" in intent)) {
       throw new Error("Invalid futures order intent.");
     }
@@ -216,20 +234,26 @@ export class BinanceConnector implements ExecutionConnector {
       quantity: "quantity" in intent ? intent.quantity : undefined,
       price: "price" in intent ? intent.price : undefined,
       leverage,
+      clientOrderId: this.clientOrderId(intent),
     };
 
     if (this.mode === "paper") {
+      beforeSideEffect?.();
       const result = this.paper.placeFuturesOrder(params);
       return { orderId: result.orderId };
     }
 
     if (!this.client) throw new Error("Binance API client not configured for live mode.");
     await this.verifyFuturesIsolatedMargin({ account: params.account, symbol: params.symbol });
+    beforeSideEffect?.();
     const result = await this.client.placeFuturesOrder(params);
     return { orderId: result.orderId };
   }
 
-  private async executeCancelOrder(intent: TradingIntent): Promise<{ orderId?: string }> {
+  private async executeCancelOrder(
+    intent: TradingIntent,
+    beforeSideEffect?: BeforeConnectorSideEffect,
+  ): Promise<{ orderId?: string }> {
     if (!("orderId" in intent) || !("symbol" in intent) || !("account" in intent)) {
       throw new Error("Invalid cancel order intent.");
     }
@@ -241,13 +265,20 @@ export class BinanceConnector implements ExecutionConnector {
     };
 
     if (this.mode === "paper") {
+      beforeSideEffect?.();
       const result = this.paper.cancelOrder(params);
       return { orderId: result.orderId };
     }
 
     if (!this.client) throw new Error("Binance API client not configured for live mode.");
+    beforeSideEffect?.();
     const result = await this.client.cancelOrder(params);
     return { orderId: result.orderId };
+  }
+
+  private clientOrderId(intent: TradingIntent): string {
+    const scopedKey = scopeIdempotencyKey(intent.idempotencyKey, intent);
+    return `guardrails-${createHash("sha256").update(scopedKey).digest("hex").slice(0, 24)}`;
   }
 
   async getMarketData(symbol: string) {

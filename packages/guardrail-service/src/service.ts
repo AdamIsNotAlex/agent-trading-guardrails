@@ -171,19 +171,33 @@ export class GuardrailService {
       hasUnknown = true;
     }
 
-    return hasUnknown ? "unknown" : hasTransfer ? "transfer" : "unknown";
+    if (hasUnknown) {
+      return "unknown";
+    }
+    if (hasTransfer) {
+      return "transfer";
+    }
+    return "unknown";
   }
 
   private canonicalResource(intent: TradingIntent): string | null {
-    if ("exchange" in intent && "account" in intent) {
-      if ("symbol" in intent) return `cex:${intent.exchange}:${intent.account}:${intent.symbol}`;
-      return `cex:${intent.exchange}:${intent.account}`;
+    if ("exchange" in intent && "account" in intent && "symbol" in intent) {
+      return `cex:${intent.exchange}:${intent.account}:${intent.symbol}`;
     }
     if ("chain" in intent && "chainEnvironment" in intent) {
-      const target = "to" in intent ? intent.to : "address" in intent ? intent.address : "";
+      const target = "to" in intent ? intent.to : "";
       return `onchain:${intent.chain}:${intent.chainEnvironment}:${target}`;
     }
     return null;
+  }
+
+  private idempotencyScope(intent: TradingIntent): string {
+    return stableJson({
+      key: intent.idempotencyKey,
+      principal: intent.principal,
+      action: intent.action,
+      resource: intent.resource,
+    });
   }
 
   private projectedDailyNotionalUsd(
@@ -345,7 +359,8 @@ export class GuardrailService {
     });
 
     const payloadHash = hashPayload(rawIntent);
-    const cached = this.idempotency.get(intent.idempotencyKey, payloadHash);
+    const idempotencyScope = this.idempotencyScope(intent);
+    const cached = this.idempotency.get(idempotencyScope, payloadHash);
     if (cached === "conflict") {
       return this.finalizeDecision(
         intent,
@@ -373,7 +388,7 @@ export class GuardrailService {
       const cachedDecision = cached instanceof Promise ? await cached : cached;
       return this.finalizeDecision(intent, cachedDecision, correlationId, auditContext);
     }
-    this.idempotency.reserve(intent.idempotencyKey, payloadHash);
+    this.idempotency.reserve(idempotencyScope, payloadHash);
 
     try {
       const contentRejection = this.detectUnsafeContent(intent);
@@ -395,7 +410,7 @@ export class GuardrailService {
           decision.correlationId,
           auditContext,
         );
-        this.idempotency.set(intent.idempotencyKey, payloadHash, finalized);
+        this.idempotency.set(idempotencyScope, payloadHash, finalized);
         return finalized;
       }
 
@@ -423,7 +438,7 @@ export class GuardrailService {
           decision.correlationId,
           auditContext,
         );
-        this.idempotency.set(intent.idempotencyKey, payloadHash, finalized);
+        this.idempotency.set(idempotencyScope, payloadHash, finalized);
         return finalized;
       }
 
@@ -449,7 +464,7 @@ export class GuardrailService {
           decision.correlationId,
           auditContext,
         );
-        this.idempotency.set(intent.idempotencyKey, payloadHash, finalized);
+        this.idempotency.set(idempotencyScope, payloadHash, finalized);
         return finalized;
       }
       this.writeAudit({
@@ -489,7 +504,7 @@ export class GuardrailService {
           decision.correlationId,
           auditContext,
         );
-        this.idempotency.set(intent.idempotencyKey, payloadHash, finalized);
+        this.idempotency.set(idempotencyScope, payloadHash, finalized);
         return finalized;
       }
       this.writeAudit({
@@ -527,7 +542,7 @@ export class GuardrailService {
           decision.correlationId,
           auditContext,
         );
-        this.idempotency.set(intent.idempotencyKey, payloadHash, finalized);
+        this.idempotency.set(idempotencyScope, payloadHash, finalized);
         return finalized;
       }
 
@@ -582,7 +597,7 @@ export class GuardrailService {
           decision.correlationId,
           auditContext,
         );
-        this.idempotency.set(intent.idempotencyKey, payloadHash, finalized);
+        this.idempotency.set(idempotencyScope, payloadHash, finalized);
         return finalized;
       }
       this.writeAudit({
@@ -625,13 +640,13 @@ export class GuardrailService {
         if (approvalDecision.approvalId) {
           this.approvalStore.delete(approvalDecision.approvalId);
         }
-        this.idempotency.abort(intent.idempotencyKey, payloadHash, err);
+        this.idempotency.abort(idempotencyScope, payloadHash, err);
         throw err;
       }
-      this.idempotency.set(intent.idempotencyKey, payloadHash, finalized);
+      this.idempotency.set(idempotencyScope, payloadHash, finalized);
       return finalized;
     } catch (err) {
-      this.idempotency.abort(intent.idempotencyKey, payloadHash, err);
+      this.idempotency.abort(idempotencyScope, payloadHash, err);
       throw err;
     }
   }

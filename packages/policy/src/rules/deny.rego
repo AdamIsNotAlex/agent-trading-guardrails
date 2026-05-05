@@ -36,6 +36,11 @@ hard_deny_reasons contains {"rule": "unlimited_approval_denied", "message": "Unl
 	input.maxTokenApprovalAmount == "unlimited"
 }
 
+hard_deny_reasons contains {"rule": "mainnet_onchain_denied", "message": "Mainnet onchain signing is not permitted."} if {
+	input.action == "onchain.request_signature"
+	input.chainEnvironment == "mainnet"
+}
+
 hard_deny_reasons contains {"rule": "unknown_contract_denied", "message": "Interaction with unknown contracts is not permitted."} if {
 	input.action == "onchain.request_signature"
 	input.chain == "ethereum"

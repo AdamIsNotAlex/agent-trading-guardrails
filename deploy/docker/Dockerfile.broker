@@ -1,16 +1,22 @@
-FROM node:22-slim AS base
+FROM node:22-slim AS builder
+
+WORKDIR /app
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json ./
+COPY packages/ ./packages/
+
+RUN corepack enable && pnpm install --frozen-lockfile && pnpm build
+
+FROM node:22-slim AS runtime
 
 RUN groupadd -r broker && useradd -r -g broker -s /bin/false broker
 
 WORKDIR /app
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY packages/ ./packages/
-
-RUN corepack enable && pnpm install --frozen-lockfile --prod
+COPY --from=builder /app ./
 
 USER broker
 
 ENV NODE_ENV=production
 
-CMD ["node", "packages/broker/dist/index.js"]
+CMD ["node", "-e", "console.error('No standalone broker runtime entrypoint is defined yet.'); process.exit(1)"]

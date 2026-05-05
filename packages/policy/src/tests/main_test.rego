@@ -165,6 +165,21 @@ test_hard_deny_unlimited_approval if {
 	guardrail.decision == "deny" with input as inp
 }
 
+# Hard deny: mainnet onchain signing
+test_hard_deny_mainnet_onchain_signing if {
+	inp := object.union(base_input, {
+		"action": "onchain.request_signature",
+		"chain": "ethereum",
+		"resource": "onchain:ethereum:mainnet:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+		"chainEnvironment": "mainnet",
+		"contractAddress": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+		"environment": "testnet",
+	})
+	guardrail.decision == "deny" with input as inp
+	some reason in guardrail.hard_deny_reasons with input as inp
+	reason.rule == "mainnet_onchain_denied"
+}
+
 # Hard deny: unknown ethereum contract
 test_hard_deny_unknown_contract if {
 	inp := object.union(base_input, {

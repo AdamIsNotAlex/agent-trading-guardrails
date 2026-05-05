@@ -1,4 +1,14 @@
 import { createHmac, randomUUID } from "node:crypto";
+import {
+  closeSync,
+  existsSync,
+  fsyncSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AuditEventType, Environment } from "@guardrails/schemas";
@@ -9,6 +19,7 @@ import { readMigrationFiles } from "drizzle-orm/migrator";
 import { auditEvents } from "./schema.js";
 
 export interface AuditEventInput {
+  eventId?: string;
   eventType: AuditEventType;
   environment: Environment;
   correlationId: string;
@@ -23,20 +34,30 @@ export interface AuditEventInput {
 export interface AuditWriterOptions {
   environment: Environment;
   hashSecret?: string;
+  hashAnchorPath?: string;
+  repairHashAnchor?: boolean;
 }
 
 export class AuditWriter {
   private db;
   private lastHash = "0".repeat(64);
+  private pendingAnchorRepairHash?: string;
   private hashSecret: string;
+  private hashAnchorPath?: string;
 
-  constructor(sqlite: Database.Database, options: AuditWriterOptions) {
+  constructor(
+    private sqlite: Database.Database,
+    options: AuditWriterOptions,
+  ) {
     this.hashSecret =
       options.hashSecret ?? process.env.AUDIT_HASH_SECRET ?? "dev-audit-hash-secret";
+    this.hashAnchorPath = options.hashAnchorPath ?? process.env.AUDIT_HASH_ANCHOR_PATH;
     assertAuditHashSecret(options.environment, this.hashSecret);
+    assertAuditHashAnchor(options.environment, this.hashAnchorPath);
     this.db = drizzle(sqlite);
     this.initSchema(sqlite);
     this.recoverLastHash();
+    this.verifyAnchoredHash(options.repairHashAnchor ?? false);
   }
 
   private initSchema(sqlite: Database.Database) {
@@ -204,41 +225,149 @@ export class AuditWriter {
   }
 
   write(event: AuditEventInput): void {
-    this.recoverLastHash();
-    const eventId = randomUUID();
-    const timestamp = new Date().toISOString();
-    const redactedEvent = redactObject(event) as AuditEventInput;
-    const dataJson = JSON.stringify(redactedEvent.data);
-    const previousHash = this.lastHash;
-    const row = {
-      eventId,
-      eventType: redactedEvent.eventType,
-      timestamp,
-      correlationId: redactedEvent.correlationId,
-      environment: redactedEvent.environment,
-      intentId: redactedEvent.intentId ?? null,
-      principal: redactedEvent.principal ?? null,
-      promptId: redactedEvent.promptId ?? null,
-      sessionId: redactedEvent.sessionId ?? null,
-      inputRef: redactedEvent.inputRef ?? null,
-      data: dataJson,
-      previousHash,
-    };
-    const eventHash = this.computeEventHash(row);
+    let committedHash: string | undefined;
+    this.sqlite
+      .transaction(() => {
+        this.recoverLastHash();
+        const eventId = event.eventId ?? randomUUID();
+        const timestamp = new Date().toISOString();
+        const redactedEvent = redactObject(event) as AuditEventInput;
+        const dataJson = JSON.stringify(redactedEvent.data);
+        const existing = this.sqlite
+          .prepare(
+            `SELECT event_type, correlation_id, environment, intent_id, principal, prompt_id, session_id, input_ref, data, event_hash
+             FROM audit_events WHERE event_id = ? LIMIT 1`,
+          )
+          .get(eventId) as
+          | {
+              event_type: string;
+              correlation_id: string;
+              environment: string;
+              intent_id: string | null;
+              principal: string | null;
+              prompt_id: string | null;
+              session_id: string | null;
+              input_ref: string | null;
+              data: string;
+              event_hash: string;
+            }
+          | undefined;
+        if (existing) {
+          if (
+            existing.event_type !== redactedEvent.eventType ||
+            existing.correlation_id !== redactedEvent.correlationId ||
+            existing.environment !== redactedEvent.environment ||
+            existing.intent_id !== (redactedEvent.intentId ?? null) ||
+            existing.principal !== (redactedEvent.principal ?? null) ||
+            existing.prompt_id !== (redactedEvent.promptId ?? null) ||
+            existing.session_id !== (redactedEvent.sessionId ?? null) ||
+            existing.input_ref !== (redactedEvent.inputRef ?? null) ||
+            existing.data !== dataJson
+          ) {
+            throw new Error("Audit event id already exists with different content.");
+          }
+          if (existing.event_hash !== this.lastHash) {
+            this.verifyAnchoredHash(false);
+            return;
+          }
+          if (this.pendingAnchorRepairHash !== this.lastHash) {
+            this.verifyAnchoredHash(false);
+            return;
+          }
+          committedHash = this.lastHash;
+          return;
+        }
+        this.verifyAnchoredHash(false);
+        const previousHash = this.lastHash;
+        const row = {
+          eventId,
+          eventType: redactedEvent.eventType,
+          timestamp,
+          correlationId: redactedEvent.correlationId,
+          environment: redactedEvent.environment,
+          intentId: redactedEvent.intentId ?? null,
+          principal: redactedEvent.principal ?? null,
+          promptId: redactedEvent.promptId ?? null,
+          sessionId: redactedEvent.sessionId ?? null,
+          inputRef: redactedEvent.inputRef ?? null,
+          data: dataJson,
+          previousHash,
+        };
+        const eventHash = this.computeEventHash(row);
 
-    this.db
-      .insert(auditEvents)
-      .values({
-        ...row,
-        eventHash,
+        this.db
+          .insert(auditEvents)
+          .values({
+            ...row,
+            eventHash,
+          })
+          .run();
+
+        this.lastHash = eventHash;
+        committedHash = eventHash;
       })
-      .run();
+      .immediate();
 
-    this.lastHash = eventHash;
+    try {
+      this.writeAnchoredHash(committedHash);
+      if (committedHash && this.pendingAnchorRepairHash === committedHash) {
+        this.pendingAnchorRepairHash = undefined;
+      }
+    } catch (err) {
+      if (committedHash) this.pendingAnchorRepairHash = committedHash;
+      throw err;
+    }
   }
 
   getLastHash(): string {
     return this.lastHash;
+  }
+
+  private verifyAnchoredHash(repair: boolean): void {
+    if (!this.hashAnchorPath) return;
+    if (!existsSync(this.hashAnchorPath)) {
+      if (this.lastHash !== "0".repeat(64)) {
+        if (repair) {
+          this.writeAnchoredHash(this.lastHash);
+          return;
+        }
+        throw new Error("Audit hash anchor is missing for a non-empty hash chain.");
+      }
+      return;
+    }
+    const anchoredHash = readFileSync(this.hashAnchorPath, "utf8").trim();
+    if (anchoredHash !== this.lastHash) {
+      if (repair) {
+        this.writeAnchoredHash(this.lastHash);
+        return;
+      }
+      throw new Error("Audit hash anchor does not match the recovered hash chain.");
+    }
+  }
+
+  private writeAnchoredHash(hash: string | undefined): void {
+    if (!this.hashAnchorPath || !hash) return;
+
+    const tempPath = `${this.hashAnchorPath}.${process.pid}.${randomUUID()}.tmp`;
+    let fd: number | undefined;
+    try {
+      fd = openSync(tempPath, "w", 0o600);
+      writeFileSync(fd, `${hash}\n`);
+      fsyncSync(fd);
+      closeSync(fd);
+      fd = undefined;
+      renameSync(tempPath, this.hashAnchorPath);
+      const dirFd = openSync(dirname(this.hashAnchorPath), "r");
+      try {
+        fsyncSync(dirFd);
+      } finally {
+        closeSync(dirFd);
+      }
+    } catch (err) {
+      if (fd !== undefined) closeSync(fd);
+      if (existsSync(tempPath)) unlinkSync(tempPath);
+      throw err;
+    }
   }
 
   private computeEventHash(row: {
@@ -284,6 +413,13 @@ function assertAuditHashSecret(environment: string, secret: string): void {
     throw new Error(
       "Audit hash secret must be configured with at least 32 characters outside dev.",
     );
+  }
+}
+
+function assertAuditHashAnchor(environment: string, hashAnchorPath: string | undefined): void {
+  if (environment === "dev" || environment === "test") return;
+  if (!hashAnchorPath) {
+    throw new Error("Audit hash anchor path must be configured outside dev.");
   }
 }
 

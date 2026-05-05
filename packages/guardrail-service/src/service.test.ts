@@ -10,6 +10,7 @@ import type {
 import {
   binanceFuturesOrder,
   binanceSpotOrder,
+  ethereumSepoliaSigning,
   solanaDevnetSimulation,
 } from "@guardrails/schemas/fixtures";
 import { describe, expect, it, vi } from "vitest";
@@ -950,6 +951,46 @@ describe("GuardrailService", () => {
 
       expect(result.outcome).toBe("allow");
       expect(policyEvaluations).toBe(2);
+    });
+
+    it("passes chainEnvironment through to policy evaluation", async () => {
+      const capturedInputs: PolicyInput[] = [];
+      const policy: PolicyEvaluator = {
+        async evaluate(input) {
+          capturedInputs.push(input);
+          return {
+            decision: "deny",
+            reasons: [{ rule: "mainnet_onchain_denied", message: "Mainnet denied." }],
+            requiresHumanApproval: false,
+            matchedAllowRules: [],
+            matchedDenyRules: ["mainnet_onchain_denied"],
+            evaluatedAt: now,
+          };
+        },
+        async isHealthy() {
+          return true;
+        },
+      };
+      const svc = new GuardrailService(
+        { ...config, environment: "testnet" },
+        makeReviewer(),
+        policy,
+        makeRisk(),
+        nullAuditWriter,
+      );
+      const intent = {
+        ...ethereumSepoliaSigning,
+        chainEnvironment: "mainnet" as const,
+        resource: "onchain:ethereum:mainnet:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      };
+
+      const result = await svc.evaluate(intent);
+
+      expect(result.outcome).toBe("deny");
+      expect(capturedInputs[0]).toMatchObject({
+        chainEnvironment: "mainnet",
+        resource: intent.resource,
+      });
     });
 
     it("returns cached decision for same idempotency key and payload", async () => {

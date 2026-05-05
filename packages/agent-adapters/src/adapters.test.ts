@@ -172,30 +172,6 @@ describe("OpenClawAdapter", () => {
     expect(result.success).toBe(true);
   });
 
-  it("can query open orders", async () => {
-    const adapter = new OpenClawAdapter(makeService(), "agent.openclaw.alpha", "dev");
-    const result = await adapter.executeTool("get_open_orders", {
-      exchange: "binance",
-      account: "sub-1",
-      rationale: "Check orders",
-      evidence: ["check-1"],
-      idempotencyKey: "adapter-test-4",
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it("can query portfolio", async () => {
-    const adapter = new OpenClawAdapter(makeService(), "agent.openclaw.alpha", "dev");
-    const result = await adapter.executeTool("get_portfolio", {
-      exchange: "binance",
-      account: "sub-1",
-      rationale: "Check portfolio",
-      evidence: ["check-1"],
-      idempotencyKey: "adapter-test-5",
-    });
-    expect(result.success).toBe(true);
-  });
-
   it("rejects unknown tools", async () => {
     const adapter = new OpenClawAdapter(makeService(), "agent.openclaw.alpha", "dev");
     const result = await adapter.executeTool("direct_cex_access", {});
@@ -207,36 +183,7 @@ describe("OpenClawAdapter", () => {
     const adapter = new OpenClawAdapter(makeService(), "agent.openclaw.alpha", "dev");
     const tools = adapter.getToolDefinitions().map((t) => t.name);
     expect(tools).toContain("request_signature");
-    expect(tools).toContain("get_onchain_portfolio");
-  });
-
-  it("routes onchain portfolio queries through guardrails", async () => {
-    let capturedIntent: TradingIntent | undefined;
-    const adapter = new OpenClawAdapter(
-      makeCapturingService((intent) => {
-        capturedIntent = intent;
-      }),
-      "agent.openclaw.alpha",
-      "dev",
-    );
-
-    const result = await adapter.executeTool("get_onchain_portfolio", {
-      chain: "ethereum",
-      chainEnvironment: "sepolia",
-      address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-      rationale: "Check wallet holdings",
-      evidence: ["wallet-snapshot-1"],
-      idempotencyKey: "adapter-test-6",
-    });
-
-    expect(result.success).toBe(true);
-    expect(capturedIntent).toMatchObject({
-      action: "onchain.get_portfolio",
-      chain: "ethereum",
-      chainEnvironment: "sepolia",
-      address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-      resource: "onchain:ethereum:sepolia:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-    });
+    expect(tools).not.toContain("get_onchain_portfolio");
   });
 
   it("routes onchain signature requests through guardrails", async () => {
@@ -492,35 +439,6 @@ describe("HermesAgentAdapter", () => {
     ]);
   });
 
-  it("routes onchain portfolio queries through guardrails", async () => {
-    let capturedIntent: TradingIntent | undefined;
-    const adapter = new HermesAgentAdapter(
-      makeCapturingService((intent) => {
-        capturedIntent = intent;
-      }),
-      "agent.hermes.beta",
-      "dev",
-    );
-
-    const result = await adapter.executeTool("get_onchain_portfolio", {
-      chain: "solana",
-      chainEnvironment: "devnet",
-      address: "So11111111111111111111111111111111111111112",
-      rationale: "Check wallet holdings",
-      evidence: ["wallet-snapshot-1"],
-      idempotencyKey: "adapter-test-14",
-    });
-
-    expect(result.success).toBe(true);
-    expect(capturedIntent).toMatchObject({
-      action: "onchain.get_portfolio",
-      chain: "solana",
-      chainEnvironment: "devnet",
-      address: "So11111111111111111111111111111111111111112",
-      resource: "onchain:solana:devnet:So11111111111111111111111111111111111111112",
-    });
-  });
-
   it("fails closed when signing expected deltas are malformed", async () => {
     const adapter = new HermesAgentAdapter(makeService(), "agent.hermes.beta", "dev");
     const result = await adapter.executeTool("request_signature", {
@@ -542,7 +460,7 @@ describe("HermesAgentAdapter", () => {
     const adapter = new HermesAgentAdapter(makeService(), "agent.hermes.beta", "dev");
     const tools = adapter.getToolDefinitions().map((t) => t.name);
     expect(tools).toContain("request_signature");
-    expect(tools).toContain("get_onchain_portfolio");
+    expect(tools).not.toContain("get_onchain_portfolio");
   });
 
   it("can query order status", async () => {

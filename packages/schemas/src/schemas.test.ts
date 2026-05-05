@@ -12,12 +12,9 @@ import {
   AuditEvent,
   BrokerExecutionResult,
   CexCancelIntent,
-  CexGetOpenOrdersIntent,
-  CexGetPortfolioIntent,
   CexOrderIntent,
   CexOrderStatusIntent,
   DynamicRiskResult,
-  OnchainQueryIntent,
   OnchainSigningIntent,
   OnchainSimulationIntent,
   PolicyInput,
@@ -27,16 +24,6 @@ import {
 } from "./index.js";
 
 const now = "2026-05-04T12:00:00.000Z";
-const baseEnvelope = {
-  intentId: "550e8400-e29b-41d4-a716-446655440001",
-  principal: "agent.openclaw.strategy-alpha",
-  resource: "cex:binance:subaccount-1",
-  environment: "canary_live" as const,
-  requestedAt: now,
-  idempotencyKey: "test-001",
-  rationale: "Test query.",
-  evidence: ["test_evidence"],
-};
 
 describe("CexOrderIntent", () => {
   it("accepts valid Binance spot order", () => {
@@ -90,69 +77,6 @@ describe("CexOrderStatusIntent", () => {
   });
 });
 
-describe("CexGetOpenOrdersIntent", () => {
-  it("accepts valid get open orders query", () => {
-    const intent = {
-      ...baseEnvelope,
-      action: "cex.get_open_orders" as const,
-      exchange: "binance" as const,
-      account: "subaccount-1",
-    };
-    expect(CexGetOpenOrdersIntent.parse(intent)).toEqual(intent);
-  });
-
-  it("rejects unknown fields", () => {
-    expect(() =>
-      CexGetOpenOrdersIntent.parse({
-        ...baseEnvelope,
-        action: "cex.get_open_orders" as const,
-        exchange: "binance" as const,
-        account: "subaccount-1",
-        extra: true,
-      }),
-    ).toThrow();
-  });
-});
-
-describe("CexGetPortfolioIntent", () => {
-  it("accepts valid get portfolio query", () => {
-    const intent = {
-      ...baseEnvelope,
-      action: "cex.get_portfolio" as const,
-      exchange: "binance" as const,
-      account: "subaccount-1",
-    };
-    expect(CexGetPortfolioIntent.parse(intent)).toEqual(intent);
-  });
-});
-
-describe("OnchainQueryIntent", () => {
-  it("accepts valid onchain portfolio query", () => {
-    const intent = {
-      ...baseEnvelope,
-      action: "onchain.get_portfolio" as const,
-      resource: "onchain:ethereum:sepolia",
-      chain: "ethereum" as const,
-      chainEnvironment: "sepolia" as const,
-      address: "0x1234567890abcdef1234567890abcdef12345678",
-    };
-    expect(OnchainQueryIntent.parse(intent)).toEqual(intent);
-  });
-
-  it("rejects unknown fields", () => {
-    expect(() =>
-      OnchainQueryIntent.parse({
-        ...baseEnvelope,
-        action: "onchain.get_portfolio" as const,
-        chain: "ethereum" as const,
-        chainEnvironment: "sepolia" as const,
-        address: "0x1234",
-        extra: true,
-      }),
-    ).toThrow();
-  });
-});
-
 describe("OnchainSimulationIntent", () => {
   it("accepts valid Ethereum Sepolia simulation", () => {
     expect(OnchainSimulationIntent.parse(ethereumSepoliaSimulation)).toEqual(
@@ -196,41 +120,6 @@ describe("TradingIntent (union)", () => {
   it("parses order status via union", () => {
     const result = TradingIntent.parse(binanceOrderStatus);
     expect(result.action).toBe("cex.get_order_status");
-  });
-
-  it("parses get_open_orders via union", () => {
-    const intent = {
-      ...baseEnvelope,
-      action: "cex.get_open_orders" as const,
-      exchange: "binance" as const,
-      account: "subaccount-1",
-    };
-    const result = TradingIntent.parse(intent);
-    expect(result.action).toBe("cex.get_open_orders");
-  });
-
-  it("parses get_portfolio via union", () => {
-    const intent = {
-      ...baseEnvelope,
-      action: "cex.get_portfolio" as const,
-      exchange: "binance" as const,
-      account: "subaccount-1",
-    };
-    const result = TradingIntent.parse(intent);
-    expect(result.action).toBe("cex.get_portfolio");
-  });
-
-  it("parses onchain.get_portfolio via union", () => {
-    const intent = {
-      ...baseEnvelope,
-      action: "onchain.get_portfolio" as const,
-      resource: "onchain:ethereum:sepolia",
-      chain: "ethereum" as const,
-      chainEnvironment: "sepolia" as const,
-      address: "0x1234",
-    };
-    const result = TradingIntent.parse(intent);
-    expect(result.action).toBe("onchain.get_portfolio");
   });
 
   it("parses simulation via union", () => {

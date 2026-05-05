@@ -10,18 +10,17 @@ export class VaultSecretProvider implements SecretProvider {
   constructor(private config: VaultConfig) {}
 
   async get(key: string): Promise<string | null> {
-    const url = `${this.config.addr}/v1/${this.config.mountPath}/data/${key}`;
-    const res = await fetch(url, {
+    const res = await fetch(this.url("data", key), {
       headers: { "X-Vault-Token": this.config.token },
     });
-    if (!res.ok) return null;
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`Vault get failed: ${res.status}`);
     const body = (await res.json()) as { data?: { data?: Record<string, string> } };
     return body.data?.data?.value ?? null;
   }
 
   async set(key: string, value: string): Promise<void> {
-    const url = `${this.config.addr}/v1/${this.config.mountPath}/data/${key}`;
-    const res = await fetch(url, {
+    const res = await fetch(this.url("data", key), {
       method: "POST",
       headers: {
         "X-Vault-Token": this.config.token,
@@ -33,8 +32,7 @@ export class VaultSecretProvider implements SecretProvider {
   }
 
   async delete(key: string): Promise<void> {
-    const url = `${this.config.addr}/v1/${this.config.mountPath}/metadata/${key}`;
-    const res = await fetch(url, {
+    const res = await fetch(this.url("metadata", key), {
       method: "DELETE",
       headers: { "X-Vault-Token": this.config.token },
     });
@@ -42,12 +40,32 @@ export class VaultSecretProvider implements SecretProvider {
   }
 
   async list(): Promise<string[]> {
-    const url = `${this.config.addr}/v1/${this.config.mountPath}/metadata?list=true`;
-    const res = await fetch(url, {
+    const res = await fetch(`${this.url("metadata")}?list=true`, {
       headers: { "X-Vault-Token": this.config.token },
     });
-    if (!res.ok) return [];
+    if (res.status === 404) return [];
+    if (!res.ok) throw new Error(`Vault list failed: ${res.status}`);
     const body = (await res.json()) as { data?: { keys?: string[] } };
     return body.data?.keys ?? [];
+  }
+
+  private url(segment: "data" | "metadata", key?: string): string {
+    const addr = this.config.addr.replace(/\/+$/, "");
+    const mountPath = this.encodePath(this.config.mountPath);
+    const keyPath = key == null ? "" : `/${this.encodePath(key)}`;
+    return `${addr}/v1/${mountPath}/${segment}${keyPath}`;
+  }
+
+  private encodePath(path: string): string {
+    return path
+      .split("/")
+      .filter((part) => part.length > 0)
+      .map((part) => {
+        if (part === "." || part === "..") {
+          throw new Error("Vault paths must not include dot segments.");
+        }
+        return encodeURIComponent(part);
+      })
+      .join("/");
   }
 }

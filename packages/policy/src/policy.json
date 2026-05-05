@@ -87,30 +87,10 @@
           }
         },
         {
-          "name": "binance-read-orders",
-          "effect": "allow",
-          "principal": "*",
-          "action": "cex.get_open_orders",
-          "resource": "cex:binance:",
-          "condition": {
-            "requiresHumanApproval": false
-          }
-        },
-        {
           "name": "binance-read-order-status",
           "effect": "allow",
           "principal": "*",
           "action": "cex.get_order_status",
-          "resource": "cex:binance:",
-          "condition": {
-            "requiresHumanApproval": false
-          }
-        },
-        {
-          "name": "binance-read-portfolio",
-          "effect": "allow",
-          "principal": "*",
-          "action": "cex.get_portfolio",
           "resource": "cex:binance:",
           "condition": {
             "requiresHumanApproval": false
@@ -152,16 +132,6 @@
           "principal": "*",
           "action": "onchain.request_signature",
           "resource": "onchain:solana:devnet:",
-          "condition": {
-            "requiresHumanApproval": false
-          }
-        },
-        {
-          "name": "onchain-read-portfolio",
-          "effect": "allow",
-          "principal": "*",
-          "action": "onchain.get_portfolio",
-          "resource": "onchain:",
           "condition": {
             "requiresHumanApproval": false
           }

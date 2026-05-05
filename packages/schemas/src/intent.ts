@@ -2,7 +2,6 @@ import { z } from "zod";
 import {
   AccountMode,
   Action,
-  Chain,
   ChainEnvironment,
   Environment,
   MarginType,
@@ -59,28 +58,6 @@ export const CexOrderStatusIntent = IntentEnvelope.extend({
   symbol: z.string().min(1),
 }).strict();
 export type CexOrderStatusIntent = z.infer<typeof CexOrderStatusIntent>;
-
-export const CexGetOpenOrdersIntent = IntentEnvelope.extend({
-  action: z.literal("cex.get_open_orders"),
-  exchange: z.literal("binance"),
-  account: z.string().min(1),
-}).strict();
-export type CexGetOpenOrdersIntent = z.infer<typeof CexGetOpenOrdersIntent>;
-
-export const CexGetPortfolioIntent = IntentEnvelope.extend({
-  action: z.literal("cex.get_portfolio"),
-  exchange: z.literal("binance"),
-  account: z.string().min(1),
-}).strict();
-export type CexGetPortfolioIntent = z.infer<typeof CexGetPortfolioIntent>;
-
-export const OnchainQueryIntent = IntentEnvelope.extend({
-  action: z.literal("onchain.get_portfolio"),
-  chain: Chain,
-  chainEnvironment: ChainEnvironment,
-  address: z.string().min(1),
-}).strict();
-export type OnchainQueryIntent = z.infer<typeof OnchainQueryIntent>;
 
 const IntegerDelta = z.string().regex(/^-?\d+$/);
 
@@ -164,10 +141,7 @@ export const TradingIntent = z.union([
   CexOrderIntent,
   CexCancelIntent,
   CexOrderStatusIntent,
-  CexGetOpenOrdersIntent,
-  CexGetPortfolioIntent,
   OnchainSimulationIntent,
   OnchainSigningIntent,
-  OnchainQueryIntent,
 ]);
 export type TradingIntent = z.infer<typeof TradingIntent>;

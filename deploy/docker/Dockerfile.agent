@@ -1,19 +1,22 @@
-FROM node:22-slim AS base
+FROM node:22-slim AS builder
+
+WORKDIR /app
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json ./
+COPY packages/ ./packages/
+
+RUN corepack enable && pnpm install --frozen-lockfile && pnpm build
+
+FROM node:22-slim AS runtime
 
 RUN groupadd -r agent && useradd -r -g agent -s /bin/false agent
 
 WORKDIR /app
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY packages/ ./packages/
-
-RUN corepack enable && pnpm install --frozen-lockfile --prod
+COPY --from=builder /app ./
 
 USER agent
 
-# Read-only filesystem where possible
-# Agent has no access to: Docker socket, host home, SSH keys, cloud creds, browser profiles, wallets
-
 ENV NODE_ENV=production
 
-CMD ["node", "packages/agent-adapters/dist/index.js"]
+CMD ["node", "-e", "console.error('No standalone agent runtime entrypoint is defined yet.'); process.exit(1)"]

@@ -1,4 +1,8 @@
-import { ConnectorRevalidationError, type ExecutionConnector } from "@guardrails/broker";
+import {
+  type BeforeConnectorSideEffect,
+  ConnectorRevalidationError,
+  type ExecutionConnector,
+} from "@guardrails/broker";
 import type { TradingIntent } from "@guardrails/schemas";
 import { compareSolanaBalanceDeltas, type ExpectedSolanaBalanceDelta } from "./balance-delta.js";
 import type {
@@ -91,7 +95,10 @@ export class SolanaConnector implements ExecutionConnector {
     return { passed: true };
   }
 
-  async execute(intent: TradingIntent): Promise<{ orderId?: string; transactionHash?: string }> {
+  async execute(
+    intent: TradingIntent,
+    beforeSideEffect?: BeforeConnectorSideEffect,
+  ): Promise<{ orderId?: string; transactionHash?: string }> {
     const validation = await this.revalidate(intent);
     if (!validation.passed) {
       throw new ConnectorRevalidationError(
@@ -136,6 +143,7 @@ export class SolanaConnector implements ExecutionConnector {
         throw new Error(`Simulation failed: ${result.error}`);
       }
       this.assertExpectedDeltas(result, intent);
+      beforeSideEffect?.();
       const txHash = await this.signer.signAndBroadcast(instructions);
       return { transactionHash: txHash };
     }

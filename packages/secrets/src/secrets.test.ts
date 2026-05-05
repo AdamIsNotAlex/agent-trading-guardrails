@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { assertNotVaultDevInProduction } from "./env-guard.js";
 import { LocalSecretProvider } from "./local-provider.js";
 import { LocalTestnetSigner } from "./local-signer.js";
 import { redactObject, redactSecrets } from "./redaction.js";
+import { VaultSecretProvider } from "./vault-provider.js";
 
 describe("LocalSecretProvider", () => {
   it("stores and retrieves secrets", async () => {
@@ -28,6 +29,66 @@ describe("LocalSecretProvider", () => {
     const keys = await provider.list();
     expect(keys).toContain("a");
     expect(keys).toContain("b");
+  });
+});
+
+describe("VaultSecretProvider", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("encodes key path components", async () => {
+    const fetchMock = vi.fn(async () =>
+      Response.json({ data: { data: { value: "secret-value" } } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const provider = new VaultSecretProvider({
+      addr: "https://vault.example.com/",
+      token: "vault-token",
+      mountPath: "secret/team kv",
+    });
+
+    await expect(provider.get("agent one/api key")).resolves.toBe("secret-value");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://vault.example.com/v1/secret/team%20kv/data/agent%20one/api%20key",
+      { headers: { "X-Vault-Token": "vault-token" } },
+    );
+  });
+
+  it("throws on Vault auth and server failures", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 403 })),
+    );
+    const provider = new VaultSecretProvider({
+      addr: "https://vault.example.com",
+      token: "vault-token",
+      mountPath: "secret",
+    });
+
+    await expect(provider.get("api-key")).rejects.toThrow("Vault get failed: 403");
+  });
+
+  it("rejects dot segments in Vault keys and mount paths", async () => {
+    const fetchMock = vi.fn(async () => Response.json({ data: { data: { value: "secret" } } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const provider = new VaultSecretProvider({
+      addr: "https://vault.example.com",
+      token: "vault-token",
+      mountPath: "secret",
+    });
+    const providerWithBadMount = new VaultSecretProvider({
+      addr: "https://vault.example.com",
+      token: "vault-token",
+      mountPath: "secret/..",
+    });
+
+    await expect(provider.get("../metadata/foo")).rejects.toThrow("dot segments");
+    await expect(provider.set("./foo", "secret")).rejects.toThrow("dot segments");
+    await expect(provider.delete("foo/..")).rejects.toThrow("dot segments");
+    await expect(providerWithBadMount.list()).rejects.toThrow("dot segments");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 
@@ -65,62 +126,74 @@ describe("assertNotVaultDevInProduction", () => {
 
   it("rejects dev server in canary_live", () => {
     expect(() => assertNotVaultDevInProduction("canary_live", "http://127.0.0.1:8200")).toThrow(
-      "cannot be used",
+      "must use HTTPS",
     );
   });
 
   it("rejects dev server in production", () => {
     expect(() => assertNotVaultDevInProduction("production", "http://127.0.0.1:8200")).toThrow(
-      "cannot be used",
+      "must use HTTPS",
     );
   });
 
   it("rejects localhost dev server in production", () => {
     expect(() => assertNotVaultDevInProduction("production", "http://localhost:8200")).toThrow(
-      "cannot be used",
+      "must use HTTPS",
     );
   });
 
   it("rejects uppercase localhost dev server in production", () => {
     expect(() => assertNotVaultDevInProduction("production", "http://LOCALHOST:8200")).toThrow(
-      "cannot be used",
+      "must use HTTPS",
     );
   });
 
   it("rejects bare localhost dev server in production", () => {
     expect(() => assertNotVaultDevInProduction("production", "localhost:8200")).toThrow(
-      "cannot be used",
+      "must use HTTPS",
     );
   });
 
   it("rejects IPv6 loopback dev server in production", () => {
     expect(() => assertNotVaultDevInProduction("production", "http://[::1]:8200")).toThrow(
-      "cannot be used",
+      "must use HTTPS",
     );
   });
 
   it("rejects localhost with trailing dot in production", () => {
     expect(() => assertNotVaultDevInProduction("production", "http://localhost.:8200")).toThrow(
-      "cannot be used",
+      "must use HTTPS",
     );
   });
 
   it("rejects IPv4 loopback range in production", () => {
     expect(() => assertNotVaultDevInProduction("production", "http://127.0.0.2:8200")).toThrow(
-      "cannot be used",
+      "must use HTTPS",
     );
   });
 
   it("rejects IPv4-mapped IPv6 loopback in production", () => {
     expect(() =>
       assertNotVaultDevInProduction("production", "http://[::ffff:127.0.0.1]:8200"),
-    ).toThrow("cannot be used");
+    ).toThrow("must use HTTPS");
   });
 
   it("rejects hex IPv4-mapped IPv6 loopback range in production", () => {
     expect(() =>
       assertNotVaultDevInProduction("production", "http://[::ffff:7f00:2]:8200"),
-    ).toThrow("cannot be used");
+    ).toThrow("must use HTTPS");
+  });
+
+  it("rejects non-loopback HTTP Vault in production", () => {
+    expect(() => assertNotVaultDevInProduction("production", "http://vault:8200")).toThrow(
+      "must use HTTPS",
+    );
+  });
+
+  it("allows HTTPS loopback Vault in production", () => {
+    expect(() =>
+      assertNotVaultDevInProduction("production", "https://127.0.0.1:8200"),
+    ).not.toThrow();
   });
 
   it("allows non-dev vault in production", () => {

@@ -47,6 +47,7 @@ export interface SpotOrderParams {
   type: "LIMIT" | "MARKET";
   quantity?: number;
   price?: number;
+  clientOrderId?: string;
 }
 
 export interface FuturesMarginTypeParams {
@@ -62,6 +63,7 @@ export interface FuturesOrderParams {
   quantity?: number;
   price?: number;
   leverage: number;
+  clientOrderId?: string;
 }
 
 export interface CancelOrderParams {

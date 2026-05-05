@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { type ApprovalRequest, ApprovalStore } from "@guardrails/approval";
 import { type BrokerExecutionResult, type Environment, TradingIntent } from "@guardrails/schemas";
 import { assertNotVaultDevInProduction, redactSecrets } from "@guardrails/secrets";
@@ -200,66 +200,80 @@ export class ExecutionBroker {
       }
       throw err;
     }
-    if (reservation.status === "cached") return reservation.result;
+    if (reservation.status === "cached") {
+      this.flushPendingTerminalAudit(reservation);
+      return reservation.result;
+    }
     if (reservation.status === "pending") return reservation.result;
 
     let reservationCompleted = false;
-    const finish = (result: BrokerExecutionResult): BrokerExecutionResult => {
-      reservation.complete(result);
+    let terminalPersistenceStarted = false;
+    const finish = (
+      result: BrokerExecutionResult,
+      pendingAudit?: Parameters<AuditWriter["write"]>[0],
+    ): BrokerExecutionResult => {
+      reservation.complete(result, pendingAudit);
       reservationCompleted = true;
       return result;
     };
 
-    if (approvalId) {
-      const approvedRequest = this.approvalStore.get(approvalId);
-      if (approvedRequest?.state === "consumed") {
-        return finish(
-          this.reject(
+    try {
+      if (approvalId) {
+        const approvedRequest = this.approvalStore.get(approvalId);
+        if (approvedRequest?.state === "consumed") {
+          return finish(
+            this.reject(
+              intent,
+              now,
+              approval.correlationId,
+              "approval_consumed",
+              "Human approval has already been used.",
+            ),
+          );
+        }
+        if (!approvedRequest || approvedRequest.state !== "approved") {
+          const result = this.reject(
             intent,
             now,
             approval.correlationId,
-            "approval_consumed",
-            "Human approval has already been used.",
-          ),
-        );
+            "approval_missing",
+            "Human approval is required before execution.",
+          );
+          reservation.abort(new Error(result.rejectionReason));
+          reservationCompleted = true;
+          return result;
+        }
+        if (new Date() > new Date(approvedRequest.timeoutAt)) {
+          return finish(
+            this.reject(
+              intent,
+              now,
+              approval.correlationId,
+              "approval_expired",
+              "Human approval has expired.",
+            ),
+          );
+        }
+        if (
+          approvedRequest.approvalType !== "one_time" ||
+          !this.approvalMatchesIntent(approvedRequest, intent)
+        ) {
+          return finish(
+            this.reject(
+              intent,
+              now,
+              approval.correlationId,
+              "approval_mismatch",
+              "Human approval does not match the execution intent.",
+            ),
+          );
+        }
       }
-      if (!approvedRequest || approvedRequest.state !== "approved") {
-        const result = this.reject(
-          intent,
-          now,
-          approval.correlationId,
-          "approval_missing",
-          "Human approval is required before execution.",
-        );
-        reservation.abort(new Error(result.rejectionReason));
-        reservationCompleted = true;
-        return result;
+    } catch (err) {
+      if (!reservationCompleted && !terminalPersistenceStarted) {
+        reservation.abort(err);
       }
-      if (new Date() > new Date(approvedRequest.timeoutAt)) {
-        return finish(
-          this.reject(
-            intent,
-            now,
-            approval.correlationId,
-            "approval_expired",
-            "Human approval has expired.",
-          ),
-        );
-      }
-      if (
-        approvedRequest.approvalType !== "one_time" ||
-        !this.approvalMatchesIntent(approvedRequest, intent)
-      ) {
-        return finish(
-          this.reject(
-            intent,
-            now,
-            approval.correlationId,
-            "approval_mismatch",
-            "Human approval does not match the execution intent.",
-          ),
-        );
-      }
+      throw err;
     }
 
     try {
@@ -298,16 +312,18 @@ export class ExecutionBroker {
         );
       }
 
+      const revalidation = await this.connector.revalidate(intent);
       this.audit.write({
         eventType: "broker.revalidated",
         environment: this.config.environment,
         intentId: intent.intentId,
         principal: intent.principal,
         correlationId: approval.correlationId,
-        data: { status: "starting" },
+        data: {
+          passed: revalidation.passed,
+          reason: revalidation.reason ? redactSecrets(revalidation.reason) : undefined,
+        },
       });
-
-      const revalidation = await this.connector.revalidate(intent);
       if (!revalidation.passed) {
         const reason = redactSecrets(revalidation.reason ?? "Broker-side revalidation failed.");
         this.audit.write({
@@ -359,7 +375,9 @@ export class ExecutionBroker {
 
       let executionResult: Awaited<ReturnType<ExecutionConnector["execute"]>>;
       try {
-        executionResult = await this.connector.execute(intent);
+        executionResult = await this.connector.execute(intent, () => {
+          this.assertKillSwitchInactive(scopes, intent, approval.correlationId);
+        });
       } catch (err) {
         const executionError = String(err);
         const revalidationFailed = err instanceof ConnectorRevalidationError;
@@ -373,16 +391,19 @@ export class ExecutionBroker {
             : "Execution failed.",
           executedAt: now,
         };
-        finish(result);
-        this.audit.write({
-          eventType: "broker.failed",
+        const auditEvent = {
+          eventId: this.terminalAuditEventId(intent, approval.correlationId, "broker.failed"),
+          eventType: "broker.failed" as const,
           environment: this.config.environment,
           intentId: intent.intentId,
           principal: intent.principal,
           correlationId: approval.correlationId,
           data: { error: redactSecrets(executionError) },
+        };
+        terminalPersistenceStarted = true;
+        return this.finishExecutionWithAudit(reservation, result, auditEvent, () => {
+          reservationCompleted = true;
         });
-        return result;
       }
 
       const result: BrokerExecutionResult = {
@@ -396,10 +417,9 @@ export class ExecutionBroker {
         executedAt: now,
       };
 
-      finish(result);
-
-      this.audit.write({
-        eventType: "broker.executed",
+      const auditEvent = {
+        eventId: this.terminalAuditEventId(intent, approval.correlationId, "broker.executed"),
+        eventType: "broker.executed" as const,
         environment: this.config.environment,
         intentId: intent.intentId,
         principal: intent.principal,
@@ -409,15 +429,63 @@ export class ExecutionBroker {
           transactionHash: executionResult.transactionHash,
           orderStatus: executionResult.orderStatus,
         },
-      });
+      };
 
-      return result;
+      terminalPersistenceStarted = true;
+      return this.finishExecutionWithAudit(reservation, result, auditEvent, () => {
+        reservationCompleted = true;
+      });
     } catch (err) {
-      if (!reservationCompleted) {
+      if (!reservationCompleted && !terminalPersistenceStarted) {
         reservation.abort(err);
       }
       throw err;
     }
+  }
+
+  private finishExecutionWithAudit(
+    reservation: Extract<BrokerIdempotencyReservation, { status: "reserved" }>,
+    result: BrokerExecutionResult,
+    auditEvent: Parameters<AuditWriter["write"]>[0],
+    markCompleted: () => void,
+  ): BrokerExecutionResult {
+    let completionError: unknown;
+    try {
+      reservation.complete(result, auditEvent);
+    } catch (err) {
+      completionError = err;
+    }
+    markCompleted();
+    try {
+      this.audit.write(auditEvent);
+    } catch (err) {
+      reservation.failAudit(err);
+      throw err;
+    }
+    if (completionError) throw completionError;
+    reservation.completeAudit();
+    return result;
+  }
+
+  private flushPendingTerminalAudit(
+    reservation: Extract<BrokerIdempotencyReservation, { status: "cached" }>,
+  ): void {
+    if (!reservation.pendingAudit) return;
+    this.audit.write(reservation.pendingAudit);
+    reservation.completeAudit();
+  }
+
+  private terminalAuditEventId(
+    intent: TradingIntent,
+    correlationId: string,
+    eventType: "broker.executed" | "broker.failed",
+  ): string {
+    const hash = createHash("sha256")
+      .update(
+        `${eventType}:${intent.intentId}:${intent.idempotencyKey}:${intent.principal}:${intent.action}:${intent.resource}:${correlationId}`,
+      )
+      .digest("hex");
+    return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-8${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
   }
 
   private findApprovalForIntent(intent: TradingIntent): ApprovalRequest | undefined {
@@ -490,6 +558,26 @@ export class ExecutionBroker {
       Buffer.from(approval.decisionToken, "hex"),
       Buffer.from(expected, "hex"),
     );
+  }
+
+  private assertKillSwitchInactive(
+    scopes: KillSwitchScope[],
+    intent: TradingIntent,
+    correlationId: string,
+  ): void {
+    for (const scope of scopes) {
+      if (this.killSwitch.isActive(scope)) {
+        this.audit.write({
+          eventType: "killswitch.blocked",
+          environment: this.config.environment,
+          intentId: intent.intentId,
+          principal: intent.principal,
+          correlationId,
+          data: { scope },
+        });
+        throw new ConnectorRevalidationError("Kill switch is active.");
+      }
+    }
   }
 
   private getKillSwitchScopes(intent: TradingIntent): KillSwitchScope[] {

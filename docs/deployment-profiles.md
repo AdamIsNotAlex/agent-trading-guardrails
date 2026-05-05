@@ -6,11 +6,11 @@ The framework supports multiple deployment profiles. Each profile defines how co
 
 ## Local Docker (Development)
 
-- All components run in Docker Compose.
-- Agent runs in a dedicated container with egress restrictions.
+- Docker Compose currently starts only supporting services: OPA and optional dev Vault.
+- Standalone agent, guardrail-service, broker, and egress-proxy runtime containers are not implemented yet.
 - OPA runs as `openpolicyagent/opa:1.16.1-static`.
 - Vault runs in dev mode (dev server only — not for production).
-- SQLite audit database on local volume.
+- SQLite audit databases should use `AUDIT_HASH_ANCHOR_PATH` outside dev/test; keep the anchor outside the database directory, mode `0600`, and back it up after writes.
 - No real CEX keys or wallet keys required for `dev` and `paper` profiles.
 
 ## Single VPS
@@ -223,7 +223,7 @@ IAM binding pattern:
 | Kubernetes | Helm with HA integrated Raft | Scalable production |
 | Cloud | HCP Vault or cloud secret manager | Cloud-native production |
 
-A guardrail enforces that production profiles cannot use Vault dev server.
+A guardrail enforces HTTPS Vault addresses for `canary_live` and `production`; runtime bootstrap must still verify that production Vault is not running in dev mode.
 
 ## OPA Distribution
 

@@ -1,3 +1,6 @@
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
 import { AuditWriter } from "./writer.js";
@@ -7,6 +10,134 @@ function createTestDb() {
 }
 
 describe("AuditWriter", () => {
+  it("anchors the recovered hash chain head", () => {
+    const dir = mkdtempSync(join(tmpdir(), "audit-anchor-"));
+    try {
+      const anchorPath = join(dir, "head");
+      const db = createTestDb();
+      const writer = new AuditWriter(db, { environment: "dev", hashAnchorPath: anchorPath });
+      writer.write({
+        eventType: "intent.received",
+        environment: "dev",
+        correlationId: "corr-001",
+        data: { action: "cex.place_order" },
+      });
+      db.prepare("DELETE FROM audit_events").run();
+
+      expect(() => new AuditWriter(db, { environment: "dev", hashAnchorPath: anchorPath })).toThrow(
+        "hash anchor",
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects missing anchors for non-empty hash chains", () => {
+    const db = createTestDb();
+    const writer = new AuditWriter(db, { environment: "dev" });
+    writer.write({
+      eventType: "intent.received",
+      environment: "dev",
+      correlationId: "corr-001",
+      data: { action: "cex.place_order" },
+    });
+
+    expect(
+      () => new AuditWriter(db, { environment: "dev", hashAnchorPath: "/tmp/missing-anchor" }),
+    ).toThrow("anchor is missing");
+  });
+
+  it("repairs anchors with explicit repair option", () => {
+    const dir = mkdtempSync(join(tmpdir(), "audit-anchor-repair-"));
+    try {
+      const anchorPath = join(dir, "head");
+      const db = createTestDb();
+      const writer = new AuditWriter(db, { environment: "dev", hashAnchorPath: anchorPath });
+      writer.write({
+        eventType: "intent.received",
+        environment: "dev",
+        correlationId: "corr-001",
+        data: { action: "cex.place_order" },
+      });
+      rmSync(anchorPath);
+
+      expect(() => new AuditWriter(db, { environment: "dev", hashAnchorPath: anchorPath })).toThrow(
+        "anchor is missing",
+      );
+      expect(
+        () =>
+          new AuditWriter(db, {
+            environment: "dev",
+            hashAnchorPath: anchorPath,
+            repairHashAnchor: true,
+          }),
+      ).not.toThrow();
+      expect(existsSync(anchorPath)).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("repairs anchors when replaying an already-written event", () => {
+    const dir = mkdtempSync(join(tmpdir(), "audit-anchor-replay-"));
+    try {
+      const anchorDir = join(dir, "missing");
+      const anchorPath = join(anchorDir, "head");
+      const db = createTestDb();
+      const writer = new AuditWriter(db, { environment: "dev", hashAnchorPath: anchorPath });
+      const event = {
+        eventId: "11111111-1111-4111-8111-111111111111",
+        eventType: "broker.executed" as const,
+        environment: "dev" as const,
+        correlationId: "corr-001",
+        intentId: "intent-001",
+        data: { orderId: "order-001" },
+      };
+
+      expect(() => writer.write(event)).toThrow();
+      expect(db.prepare("SELECT COUNT(*) AS count FROM audit_events").get()).toMatchObject({
+        count: 1,
+      });
+      mkdirSync(anchorDir);
+      writer.write(event);
+
+      expect(db.prepare("SELECT COUNT(*) AS count FROM audit_events").get()).toMatchObject({
+        count: 1,
+      });
+      expect(existsSync(anchorPath)).toBe(true);
+      expect(readFileSync(anchorPath, "utf8").trim()).toBe(writer.getLastHash());
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects duplicate event IDs with different content", () => {
+    const writer = new AuditWriter(createTestDb(), { environment: "dev" });
+    const event = {
+      eventId: "22222222-2222-4222-8222-222222222222",
+      eventType: "broker.executed" as const,
+      environment: "dev" as const,
+      correlationId: "corr-001",
+      data: { orderId: "order-001" },
+    };
+
+    writer.write(event);
+
+    expect(() => writer.write({ ...event, data: { orderId: "order-002" } })).toThrow(
+      "different content",
+    );
+  });
+
+  it("requires audit hash anchors outside dev", () => {
+    expect(
+      () =>
+        new AuditWriter(createTestDb(), {
+          environment: "canary_live",
+          hashSecret: "test-audit-secret-with-at-least-32-bytes",
+        }),
+    ).toThrow("hash anchor path");
+  });
+
   it("writes and retrieves audit events", () => {
     const writer = new AuditWriter(createTestDb(), { environment: "dev" });
     writer.write({

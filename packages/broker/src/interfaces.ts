@@ -14,8 +14,13 @@ export interface ConnectorOrderStatus {
   avgPrice: number;
 }
 
+export type BeforeConnectorSideEffect = () => void;
+
 export interface ExecutionConnector {
-  execute(intent: TradingIntent): Promise<{
+  execute(
+    intent: TradingIntent,
+    beforeSideEffect?: BeforeConnectorSideEffect,
+  ): Promise<{
     orderId?: string;
     transactionHash?: string;
     orderStatus?: ConnectorOrderStatus;
@@ -37,14 +42,17 @@ export type KillSwitchScope =
   | { type: "chain"; chain: string };
 
 export interface AuditWriter {
-  write(event: {
-    eventType: AuditEventType;
-    environment: Environment;
-    intentId?: string;
-    principal?: string;
-    correlationId: string;
-    data: Record<string, unknown>;
-  }): void;
+  write(event: BrokerAuditEvent): void;
+}
+
+export interface BrokerAuditEvent {
+  eventId?: string;
+  eventType: AuditEventType;
+  environment: Environment;
+  intentId?: string;
+  principal?: string;
+  correlationId: string;
+  data: Record<string, unknown>;
 }
 
 export class ConnectorRevalidationError extends Error {
@@ -64,10 +72,17 @@ export class IdempotencyConflictError extends Error {
 export type BrokerIdempotencyReservation =
   | {
       status: "reserved";
-      complete(result: BrokerExecutionResult): void;
+      complete(result: BrokerExecutionResult, pendingAudit?: BrokerAuditEvent): void;
+      completeAudit(): void;
+      failAudit(error: unknown): void;
       abort(error: unknown): void;
     }
-  | { status: "cached"; result: BrokerExecutionResult }
+  | {
+      status: "cached";
+      result: BrokerExecutionResult;
+      pendingAudit?: BrokerAuditEvent;
+      completeAudit(): void;
+    }
   | { status: "pending"; result: Promise<BrokerExecutionResult> };
 
 export interface BrokerIdempotencyStore {

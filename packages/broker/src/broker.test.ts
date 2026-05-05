@@ -1,9 +1,12 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { ApprovalStore } from "@guardrails/approval";
 import type { TradingIntent } from "@guardrails/schemas";
 import {
   binanceOrderStatus,
   binanceSpotOrder,
-  ethereumSepoliaSimulation,
+  ethereumSepoliaSigning,
   solanaDevnetSimulation,
 } from "@guardrails/schemas/fixtures";
 import { describe, expect, it, vi } from "vitest";
@@ -13,7 +16,7 @@ import {
   ExecutionBroker,
   type GuardrailApproval,
 } from "./broker.js";
-import { InMemoryBrokerIdempotencyStore } from "./idempotency-store.js";
+import { FileBrokerIdempotencyStore, InMemoryBrokerIdempotencyStore } from "./idempotency-store.js";
 import type { AuditWriter, BrokerIdempotencyStore, ExecutionConnector } from "./interfaces.js";
 import { InMemoryKillSwitch } from "./kill-switch.js";
 import { PaperExecutionConnector } from "./paper-connector.js";
@@ -147,6 +150,52 @@ describe("ExecutionBroker", () => {
     expect(result.orderId).toBeTruthy();
     expect(result.revalidationPassed).toBe(true);
     expect(audit.events.some((e) => e.eventType === "broker.executed")).toBe(true);
+  });
+
+  it("rejects unsupported paper connector actions", async () => {
+    const connector = new PaperExecutionConnector();
+
+    await expect(connector.revalidate(binanceOrderStatus)).resolves.toMatchObject({
+      passed: false,
+    });
+    await expect(connector.execute(binanceOrderStatus)).rejects.toThrow(
+      "does not execute cex.get_order_status",
+    );
+  });
+
+  it("retries pending execution audit without retrying execution", async () => {
+    const execute = vi.fn().mockResolvedValue({ orderId: "order-1" });
+    let auditFailures = 1;
+    const audit = makeAudit();
+    const connector: ExecutionConnector = {
+      execute,
+      async revalidate() {
+        return { passed: true };
+      },
+    };
+    const broker = new ExecutionBroker(
+      config,
+      connector,
+      new InMemoryKillSwitch(),
+      {
+        write(event) {
+          if (event.eventType === "broker.executed" && auditFailures > 0) {
+            auditFailures -= 1;
+            throw new Error("audit unavailable");
+          }
+          audit.write(event);
+        },
+      },
+      makeIdempotency(),
+    );
+    const approval = makeApproval();
+
+    await expect(broker.execute(approval)).rejects.toThrow("audit unavailable");
+    const result = await broker.execute(approval);
+
+    expect(result).toMatchObject({ status: "executed", orderId: "order-1" });
+    expect(audit.events.some((event) => event.eventType === "broker.executed")).toBe(true);
+    expect(execute).toHaveBeenCalledOnce();
   });
 
   it("returns and audits connector order status", async () => {
@@ -681,14 +730,42 @@ describe("ExecutionBroker", () => {
       makeIdempotency(),
     );
     const ethereumIntent: TradingIntent = {
-      ...ethereumSepoliaSimulation,
+      ...ethereumSepoliaSigning,
       intentId: "550e8400-e29b-41d4-a716-446655440010",
-      idempotencyKey: "sim-eth-other-chain",
+      idempotencyKey: "sign-eth-other-chain",
     };
 
     const result = await broker.execute(makeApproval(ethereumIntent));
 
     expect(result.status).toBe("executed");
+  });
+
+  it("blocks side effects when kill switch activates inside connector execution", async () => {
+    let sideEffects = 0;
+    const killSwitch = new InMemoryKillSwitch();
+    const connector: ExecutionConnector = {
+      async execute(_intent, beforeSideEffect) {
+        killSwitch.activate({ type: "global" });
+        beforeSideEffect?.();
+        sideEffects += 1;
+        return { orderId: "order-1" };
+      },
+      async revalidate() {
+        return { passed: true };
+      },
+    };
+    const broker = new ExecutionBroker(
+      config,
+      connector,
+      killSwitch,
+      makeAudit(),
+      makeIdempotency(),
+    );
+
+    const result = await broker.execute(makeApproval());
+
+    expect(result).toMatchObject({ status: "failed", revalidationPassed: false });
+    expect(sideEffects).toBe(0);
   });
 
   it("rejects when canary_live is not enabled", async () => {
@@ -994,6 +1071,141 @@ describe("ExecutionBroker", () => {
     expect(execute).toHaveBeenCalledOnce();
   });
 
+  it("audits terminal execution even when result persistence fails", async () => {
+    const audit = makeAudit();
+    const execute = vi.fn().mockResolvedValue({ orderId: "order-1" });
+    const abort = vi.fn();
+    const idempotency: BrokerIdempotencyStore = {
+      begin() {
+        return {
+          status: "reserved",
+          complete() {
+            throw new Error("idempotency disk down");
+          },
+          completeAudit() {},
+          failAudit() {},
+          abort,
+        };
+      },
+    };
+    const connector: ExecutionConnector = {
+      execute,
+      async revalidate() {
+        return { passed: true };
+      },
+    };
+    const broker = new ExecutionBroker(
+      config,
+      connector,
+      new InMemoryKillSwitch(),
+      audit,
+      idempotency,
+    );
+
+    await expect(broker.execute(makeApproval())).rejects.toThrow("idempotency disk down");
+
+    expect(execute).toHaveBeenCalledOnce();
+    expect(abort).not.toHaveBeenCalled();
+    expect(audit.events.some((event) => event.eventType === "broker.executed")).toBe(true);
+  });
+
+  it("persists completed idempotency results across store instances", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "broker-idempotency-"));
+    try {
+      const path = join(dir, "store.json");
+      const firstStore = new FileBrokerIdempotencyStore(path);
+      const firstExecute = vi.fn().mockResolvedValue({ orderId: "order-1" });
+      const connector: ExecutionConnector = {
+        execute: firstExecute,
+        async revalidate() {
+          return { passed: true };
+        },
+      };
+      const firstBroker = new ExecutionBroker(
+        config,
+        connector,
+        new InMemoryKillSwitch(),
+        makeAudit(),
+        firstStore,
+      );
+
+      await firstBroker.execute(makeApproval());
+
+      const secondExecute = vi.fn().mockResolvedValue({ orderId: "order-2" });
+      const secondBroker = new ExecutionBroker(
+        config,
+        {
+          execute: secondExecute,
+          async revalidate() {
+            return { passed: true };
+          },
+        },
+        new InMemoryKillSwitch(),
+        makeAudit(),
+        new FileBrokerIdempotencyStore(path),
+      );
+      const result = await secondBroker.execute(makeApproval());
+
+      expect(result).toMatchObject({ status: "executed", orderId: "order-1" });
+      expect(firstExecute).toHaveBeenCalledOnce();
+      expect(secondExecute).not.toHaveBeenCalled();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects pending waiters when terminal audit fails", async () => {
+    const store = new InMemoryBrokerIdempotencyStore();
+    const reservation = store.begin(binanceSpotOrder.idempotencyKey, binanceSpotOrder);
+    const replay = store.begin(binanceSpotOrder.idempotencyKey, binanceSpotOrder);
+    expect(reservation.status).toBe("reserved");
+    expect(replay.status).toBe("pending");
+    if (reservation.status !== "reserved" || replay.status !== "pending") {
+      throw new Error("Unexpected reservation state.");
+    }
+
+    reservation.complete(
+      {
+        intentId: binanceSpotOrder.intentId,
+        idempotencyKey: binanceSpotOrder.idempotencyKey,
+        status: "executed",
+        orderId: "order-1",
+        revalidationPassed: true,
+        executedAt: "2026-05-04T12:00:04.000Z",
+      },
+      {
+        eventType: "broker.executed",
+        environment: "canary_live",
+        intentId: binanceSpotOrder.intentId,
+        principal: binanceSpotOrder.principal,
+        correlationId: "corr-001",
+        data: { orderId: "order-1" },
+      },
+    );
+    reservation.failAudit(new Error("audit down"));
+
+    await expect(replay.result).rejects.toThrow("audit down");
+  });
+
+  it("blocks retries for in-progress file idempotency entries after restart", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "broker-idempotency-"));
+    try {
+      const path = join(dir, "store.json");
+      const firstStore = new FileBrokerIdempotencyStore(path, { now: () => 1_000 });
+      const reservation = firstStore.begin(binanceSpotOrder.idempotencyKey, binanceSpotOrder);
+      expect(reservation.status).toBe("reserved");
+
+      const secondStore = new FileBrokerIdempotencyStore(path, { now: () => 2_000 });
+      const replay = secondStore.begin(binanceSpotOrder.idempotencyKey, binanceSpotOrder);
+
+      expect(replay.status).toBe("pending");
+      if (replay.status !== "pending") throw new Error("Expected pending replay.");
+      await expect(replay.result).rejects.toThrow("already in progress");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("clears pending idempotency reservation when revalidation throws", async () => {
     const revalidate = vi
       .fn()
@@ -1023,7 +1235,7 @@ describe("ExecutionBroker", () => {
     );
   });
 
-  it("allows same idempotency key with different payload after TTL expires", async () => {
+  it("keeps idempotency conflicts after TTL", async () => {
     let now = 1_000;
     const idempotency = new InMemoryBrokerIdempotencyStore({ ttlMs: 100, now: () => now });
     const broker = new ExecutionBroker(
@@ -1042,10 +1254,11 @@ describe("ExecutionBroker", () => {
     now = 1_101;
     const result = await broker.execute(makeApproval(changedIntent));
 
-    expect(result.status).toBe("executed");
+    expect(result.status).toBe("rejected");
+    expect(result.rejectionReason).toContain("Idempotency key");
   });
 
-  it("re-executes after idempotency entry TTL expires", async () => {
+  it("does not re-execute after idempotency entry TTL", async () => {
     let now = 1_000;
     const idempotency = new InMemoryBrokerIdempotencyStore({ ttlMs: 100, now: () => now });
     const execute = vi.fn().mockResolvedValue({ orderId: "order-1" });
@@ -1069,7 +1282,7 @@ describe("ExecutionBroker", () => {
 
     expect(first.status).toBe("executed");
     expect(second.status).toBe("executed");
-    expect(execute).toHaveBeenCalledTimes(2);
+    expect(execute).toHaveBeenCalledOnce();
   });
 
   it("handles execution failure gracefully", async () => {
@@ -1136,7 +1349,7 @@ describe("ExecutionBroker", () => {
           makeAudit(),
           makeIdempotency(),
         ),
-    ).toThrow("cannot be used");
+    ).toThrow("must use HTTPS");
   });
 
   it("writes audit events for revalidation and execution", async () => {

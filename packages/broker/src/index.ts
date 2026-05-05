@@ -1,9 +1,19 @@
 export type { BrokerConfig, GuardrailApproval } from "./broker.js";
 export { createGuardrailDecisionToken, ExecutionBroker } from "./broker.js";
-export type { InMemoryBrokerIdempotencyStoreOptions } from "./idempotency-store.js";
-export { hashIntentPayload, InMemoryBrokerIdempotencyStore } from "./idempotency-store.js";
+export type {
+  FileBrokerIdempotencyStoreOptions,
+  InMemoryBrokerIdempotencyStoreOptions,
+} from "./idempotency-store.js";
+export {
+  FileBrokerIdempotencyStore,
+  hashIntentPayload,
+  InMemoryBrokerIdempotencyStore,
+  scopeIdempotencyKey,
+} from "./idempotency-store.js";
 export type {
   AuditWriter,
+  BeforeConnectorSideEffect,
+  BrokerAuditEvent,
   BrokerIdempotencyStore,
   ExecutionConnector,
   KillSwitch,

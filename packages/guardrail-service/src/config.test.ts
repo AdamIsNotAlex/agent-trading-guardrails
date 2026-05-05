@@ -12,14 +12,14 @@ describe("loadDevConfig", () => {
     process.env.GUARDRAIL_ENV = "production";
     process.env.VAULT_ADDR = "http://localhost:8200";
 
-    expect(() => loadDevConfig()).toThrow("cannot be used");
+    expect(() => loadDevConfig()).toThrow("must use HTTPS");
   });
 
   it("rejects Vault dev server with normalized production environment", () => {
     process.env.GUARDRAIL_ENV = "PRODUCTION ";
     process.env.VAULT_ADDR = "http://localhost:8200";
 
-    expect(() => loadDevConfig()).toThrow("cannot be used");
+    expect(() => loadDevConfig()).toThrow("must use HTTPS");
   });
 
   it("rejects invalid environment values", () => {
