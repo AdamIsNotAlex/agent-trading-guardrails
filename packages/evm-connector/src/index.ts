@@ -8,6 +8,8 @@ export type {
   EvmSigner,
   SimulationResult,
 } from "./interfaces.js";
+export type { SepoliaRpcProviderConfig } from "./sepolia-provider.js";
+export { SepoliaRpcProvider } from "./sepolia-provider.js";
 export {
   validateContract,
   validateFunction,

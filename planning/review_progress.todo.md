@@ -88,13 +88,13 @@ These items are needed for the system to work end-to-end against real infrastruc
 
 `EvmRpcProvider` in `packages/evm-connector/src/interfaces.ts` lines 29-33 is interface-only. No `viem`/`ethers` dependency exists.
 
-- [ ] Add `viem` as a dependency to `packages/evm-connector/package.json`.
-- [ ] Create `packages/evm-connector/src/sepolia-provider.ts` implementing `EvmRpcProvider`:
-  - [ ] `simulateTransaction()` → use `viem` `simulateContract` or `eth_call` against Sepolia RPC.
-  - [ ] `getBalance()` → use `viem` `getBalance`.
-  - [ ] `getBlockNumber()` → use `viem` `getBlockNumber`.
-- [ ] Accept RPC URL via constructor config (not hardcoded).
-- [ ] Add integration test with a mock HTTP server or Sepolia testnet (env-gated).
+- [x] Add `viem` as a dependency to `packages/evm-connector/package.json`.
+- [x] Create `packages/evm-connector/src/sepolia-provider.ts` implementing `EvmRpcProvider`:
+  - [x] `simulateTransaction()` → use `viem` `simulateContract` or `eth_call` against Sepolia RPC.
+  - [x] `getBalance()` → use `viem` `getBalance`.
+  - [x] `getBlockNumber()` → use `viem` `getBlockNumber`.
+- [x] Accept RPC URL via constructor config (not hardcoded).
+- [x] Add integration test with a mock HTTP server or Sepolia testnet (env-gated).
 
 ### P1.2 — Implement concrete Solana RPC provider (Phase 9)
 
