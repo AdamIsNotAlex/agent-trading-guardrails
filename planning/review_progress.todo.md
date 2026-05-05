@@ -307,9 +307,9 @@ Per-account and per-chain kill switches have code but zero test coverage.
 
 The hard-deny rule for Solana authority changes in `packages/policy/src/rules/deny.rego` lines 46-50 references `input.instructionType`, but this field is absent from `PolicyInput` and never populated.
 
-- [ ] Add `instructionType?: string` to `PolicyInput` in `packages/schemas/src/policy.ts`.
-- [ ] Populate `instructionType` in `packages/guardrail-service/src/service.ts` when the action is `onchain.request_signature` and the chain is Solana — extract from the parsed instructions.
-- [ ] Add Rego test that a Solana `setAuthority` instruction type triggers the hard-deny rule.
+- [x] Add `instructionType?: string` to `PolicyInput` in `packages/schemas/src/policy.ts`.
+- [x] Populate `instructionType` in `packages/guardrail-service/src/service.ts` when the action is `onchain.request_signature` and the chain is Solana — extract from the parsed instructions.
+- [x] Add Rego test that a Solana `setAuthority` instruction type triggers the hard-deny rule.
 
 ### P2.12 — Add Binance USD-M futures isolated-mode enforcement (Phase 7)
 

@@ -45,6 +45,9 @@
         "programId": {
           "type": "string"
         },
+        "instructionType": {
+          "type": "string"
+        },
         "maxNotionalUsd": {
           "type": "number"
         },

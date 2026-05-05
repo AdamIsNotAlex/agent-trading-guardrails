@@ -7,7 +7,7 @@ import type {
   ReviewerVerdictSchema,
   TradingIntent,
 } from "@guardrails/schemas";
-import { binanceSpotOrder } from "@guardrails/schemas/fixtures";
+import { binanceSpotOrder, solanaDevnetSimulation } from "@guardrails/schemas/fixtures";
 import { describe, expect, it, vi } from "vitest";
 import type { GuardrailConfig } from "./config.js";
 import type { PolicyEvaluator, ReviewerAdapter, RiskEngine } from "./interfaces.js";
@@ -314,6 +314,118 @@ describe("GuardrailService", () => {
       expect(result.outcome).toBe("allow");
       expect(policyInput?.dailyNotionalUsd).toBe(42);
       expect(policyInput?.dailyRealizedLossUsd).toBe(7);
+    });
+
+    it("passes Solana authority instruction type to policy evaluation", async () => {
+      let policyInput: PolicyInput | undefined;
+      const policy: PolicyEvaluator = {
+        async evaluate(input: PolicyInput): Promise<PolicyOutput> {
+          policyInput = input;
+          return {
+            decision: "deny",
+            reasons: [
+              {
+                rule: "solana_authority_change_denied",
+                message: "Solana authority changes are not permitted without human approval.",
+              },
+            ],
+            requiresHumanApproval: false,
+            matchedAllowRules: [],
+            matchedDenyRules: ["solana_authority_change_denied"],
+            evaluatedAt: now,
+          };
+        },
+        async isHealthy() {
+          return true;
+        },
+      };
+      const svc = new GuardrailService(config, makeReviewer(), policy, makeRisk(), nullAuditWriter);
+      const intent = {
+        ...solanaDevnetSimulation,
+        intentId: "550e8400-e29b-41d4-a716-446655440009",
+        action: "onchain.request_signature" as const,
+        idempotencyKey: "sign-sol-authority-001",
+        simulationId: "550e8400-e29b-41d4-a716-446655440005",
+        instructions: [
+          {
+            programId: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+            type: "closeAccount",
+          },
+          {
+            programId: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+            type: "setAuthority",
+          },
+        ],
+      };
+
+      const result = await svc.evaluate(intent);
+
+      expect(result.outcome).toBe("deny");
+      expect(policyInput?.instructionType).toBe("setAuthority");
+    });
+
+    it.each([
+      { instructions: undefined, expected: "unknown" },
+      {
+        instructions: [{ programId: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" }],
+        expected: "unknown",
+      },
+      {
+        instructions: [
+          { programId: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", type: "closeAccount" },
+        ],
+        expected: "unknown",
+      },
+      {
+        instructions: [
+          { programId: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", type: "transfer" },
+          { programId: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", type: "closeAccount" },
+        ],
+        expected: "unknown",
+      },
+    ])("fails closed for Solana signing instruction type %s", async ({
+      instructions,
+      expected,
+    }) => {
+      let policyInput: PolicyInput | undefined;
+      const policy: PolicyEvaluator = {
+        async evaluate(input: PolicyInput): Promise<PolicyOutput> {
+          policyInput = input;
+          const unknownInstruction = input.instructionType === "unknown";
+          return {
+            decision: unknownInstruction ? "deny" : "allow",
+            reasons: unknownInstruction
+              ? [
+                  {
+                    rule: "solana_instruction_type_unknown",
+                    message: "Solana instruction type is unavailable or unsupported.",
+                  },
+                ]
+              : [],
+            requiresHumanApproval: false,
+            matchedAllowRules: unknownInstruction ? [] : ["test-allow"],
+            matchedDenyRules: unknownInstruction ? ["solana_instruction_type_unknown"] : [],
+            evaluatedAt: now,
+          };
+        },
+        async isHealthy() {
+          return true;
+        },
+      };
+      const svc = new GuardrailService(config, makeReviewer(), policy, makeRisk(), nullAuditWriter);
+      const intent = {
+        ...solanaDevnetSimulation,
+        intentId: "550e8400-e29b-41d4-a716-446655440010",
+        action: "onchain.request_signature" as const,
+        idempotencyKey: `sign-sol-${expected}-${instructions?.length ?? 0}`,
+        simulationId: "550e8400-e29b-41d4-a716-446655440005",
+        ...(instructions === undefined ? {} : { instructions }),
+      };
+
+      const result = await svc.evaluate(intent);
+
+      expect(result.outcome).toBe("deny");
+      expect(policyInput?.instructionType).toBe(expected);
     });
 
     it("returns policy escalation when daily facts exceed policy thresholds", async () => {

@@ -165,9 +165,48 @@ test_hard_deny_solana_authority_change if {
 		"action": "onchain.request_signature",
 		"chain": "solana",
 		"resource": "onchain:solana:devnet:TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
-		"instructionType": "authority_change",
+		"instructionType": "setAuthority",
 	})
 	guardrail.decision == "deny" with input as inp
+	some reason in guardrail.hard_deny_reasons with input as inp
+	reason.rule == "solana_authority_change_denied"
+}
+
+# Hard deny: missing Solana instruction type
+_test_hard_deny_solana_missing_instruction_type_input := object.union(base_input, {
+	"action": "onchain.request_signature",
+	"chain": "solana",
+	"resource": "onchain:solana:devnet:TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+})
+
+test_hard_deny_solana_missing_instruction_type if {
+	guardrail.decision == "deny" with input as _test_hard_deny_solana_missing_instruction_type_input
+	some reason in guardrail.hard_deny_reasons with input as _test_hard_deny_solana_missing_instruction_type_input
+	reason.rule == "solana_instruction_type_unknown"
+}
+
+# Hard deny: unsupported Solana instruction type
+test_hard_deny_solana_unsupported_instruction_type if {
+	inp := object.union(_test_hard_deny_solana_missing_instruction_type_input, {"instructionType": "closeAccount"})
+	guardrail.decision == "deny" with input as inp
+	some reason in guardrail.hard_deny_reasons with input as inp
+	reason.rule == "solana_instruction_type_unknown"
+}
+
+# Hard deny: empty Solana instruction type
+test_hard_deny_solana_empty_instruction_type if {
+	inp := object.union(_test_hard_deny_solana_missing_instruction_type_input, {"instructionType": ""})
+	guardrail.decision == "deny" with input as inp
+	some reason in guardrail.hard_deny_reasons with input as inp
+	reason.rule == "solana_instruction_type_unknown"
+}
+
+# Hard deny: unknown Solana instruction type
+test_hard_deny_solana_unknown_instruction_type if {
+	inp := object.union(_test_hard_deny_solana_missing_instruction_type_input, {"instructionType": "unknown"})
+	guardrail.decision == "deny" with input as inp
+	some reason in guardrail.hard_deny_reasons with input as inp
+	reason.rule == "solana_instruction_type_unknown"
 }
 
 # Hard deny wins over human approval: withdrawal even with reviewer approve
@@ -242,6 +281,7 @@ test_solana_devnet_sign_known_program if {
 		"resource": "onchain:solana:devnet:TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
 		"environment": "testnet",
 		"chain": "solana",
+		"instructionType": "transfer",
 		"reviewerVerdict": "approve",
 		"reviewerRiskLevel": "low",
 	}

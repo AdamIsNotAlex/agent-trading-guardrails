@@ -138,6 +138,35 @@ export class GuardrailService {
     return null;
   }
 
+  private extractSolanaInstructionType(intent: TradingIntent): string | undefined {
+    if (intent.action !== "onchain.request_signature" || intent.chain !== "solana") {
+      return undefined;
+    }
+    if (!intent.instructions || intent.instructions.length === 0) {
+      return "unknown";
+    }
+
+    let hasTransfer = false;
+    let hasUnknown = false;
+    for (const instruction of intent.instructions) {
+      if (typeof instruction.type !== "string" || instruction.type.length === 0) {
+        hasUnknown = true;
+        continue;
+      }
+      const type = instruction.type;
+      if (type === "setAuthority" || type === "SetAuthority" || type === "authority_change") {
+        return "setAuthority";
+      }
+      if (type === "transfer") {
+        hasTransfer = true;
+        continue;
+      }
+      hasUnknown = true;
+    }
+
+    return hasUnknown ? "unknown" : hasTransfer ? "transfer" : "unknown";
+  }
+
   private finalizeDecision(
     intent: TradingIntent,
     decision: GuardrailDecision,
@@ -415,6 +444,8 @@ export class GuardrailService {
     if ("symbol" in intent) policyInput.symbol = intent.symbol;
     if ("chain" in intent) policyInput.chain = intent.chain;
     if ("chainEnvironment" in intent) policyInput.chainEnvironment = intent.chainEnvironment;
+    const instructionType = this.extractSolanaInstructionType(intent);
+    if (instructionType) policyInput.instructionType = instructionType;
     if ("maxNotionalUsd" in intent) policyInput.maxNotionalUsd = intent.maxNotionalUsd;
     if ("leverage" in intent && intent.leverage != null) policyInput.leverage = intent.leverage;
     if ("maxTokenApprovalAmount" in intent)

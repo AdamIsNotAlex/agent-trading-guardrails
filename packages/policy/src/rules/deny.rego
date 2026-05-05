@@ -46,7 +46,17 @@ hard_deny_reasons contains {"rule": "unknown_program_denied", "message": "Intera
 hard_deny_reasons contains {"rule": "solana_authority_change_denied", "message": "Solana authority changes are not permitted without human approval."} if {
 	input.action == "onchain.request_signature"
 	input.chain == "solana"
-	input.instructionType == "authority_change"
+	input.instructionType in {"setAuthority", "SetAuthority", "authority_change"}
+}
+
+hard_deny_reasons contains {"rule": "solana_instruction_type_unknown", "message": "Solana instruction type is unavailable or unsupported."} if {
+	input.action == "onchain.request_signature"
+	input.chain == "solana"
+	not supported_solana_instruction_type
+}
+
+supported_solana_instruction_type if {
+	input.instructionType in {"transfer", "setAuthority", "SetAuthority", "authority_change"}
 }
 
 contract_allowed(resource) if {

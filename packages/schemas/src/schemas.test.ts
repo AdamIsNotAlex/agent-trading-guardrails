@@ -393,6 +393,7 @@ describe("PolicyInput", () => {
       accountMode: "spot",
       exchange: "binance",
       symbol: "ETH-USDC",
+      instructionType: "setAuthority",
       maxNotionalUsd: 10,
       reviewerVerdict: "approve",
       reviewerRiskLevel: "low" as const,

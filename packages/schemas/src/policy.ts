@@ -15,6 +15,7 @@ export const PolicyInput = z
     chainEnvironment: z.string().optional(),
     contractAddress: z.string().optional(),
     programId: z.string().optional(),
+    instructionType: z.string().optional(),
     maxNotionalUsd: z.number().optional(),
     leverage: z.number().optional(),
     maxTokenApprovalAmount: z.string().optional(),
