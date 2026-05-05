@@ -223,9 +223,9 @@ These items close out checklist accuracy, improve test quality, and fill documen
 
 No example strategy files exist in the repo.
 
-- [ ] Create `examples/openclaw-strategy.ts` demonstrating how an OpenClaw agent uses guarded tools to propose a Binance spot order, handle rejection, and react to `needs_human` escalation.
-- [ ] Create `examples/hermes-strategy.ts` demonstrating how a Hermes Agent uses guarded tools for an onchain simulation followed by a signing request.
-- [ ] Both examples should import from the adapter packages and use only the guarded tool surface — no direct CEX/RPC access.
+- [x] Create `examples/openclaw-strategy.ts` demonstrating how an OpenClaw agent uses guarded tools to propose a Binance spot order, handle rejection, and react to `needs_human` escalation.
+- [x] Create `examples/hermes-strategy.ts` demonstrating how a Hermes Agent uses guarded tools for an onchain simulation followed by a signing request.
+- [x] Both examples should import from the adapter packages and use only the guarded tool surface — no direct CEX/RPC access.
 
 ### P2.3 — Implement live trading preflight gates (Phase 16)
 

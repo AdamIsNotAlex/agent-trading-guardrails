@@ -223,13 +223,17 @@ describe("OpenClawAdapter", () => {
       ],
       rationale: "Request signature after simulation",
       evidence: ["sim-1"],
+      intentId: "550e8400-e29b-41d4-a716-446655440006",
+      requestedAt: now,
     });
 
     expect(result.success).toBe(true);
     expect(capturedIntent).toMatchObject({
+      intentId: "550e8400-e29b-41d4-a716-446655440006",
       action: "onchain.request_signature",
       chain: "ethereum",
       chainEnvironment: "sepolia",
+      requestedAt: now,
       to: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
       resource: "onchain:ethereum:sepolia:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
       simulationId: "550e8400-e29b-41d4-a716-446655440005",

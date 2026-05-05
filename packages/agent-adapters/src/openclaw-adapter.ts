@@ -33,6 +33,8 @@ export class OpenClawAdapter {
       rationale: String(params.rationale ?? ""),
       evidence: Array.isArray(params.evidence) ? params.evidence.map(String) : [],
       idempotencyKey: String(params.idempotencyKey ?? crypto.randomUUID()),
+      intentId: params.intentId != null ? String(params.intentId) : undefined,
+      requestedAt: params.requestedAt != null ? String(params.requestedAt) : undefined,
     };
 
     switch (toolName) {
