@@ -143,16 +143,44 @@ describe("AuditWriter", () => {
     expect(rows[1].previous_hash).not.toBe(rows[0].previous_hash);
   });
 
-  it("creates schema from empty database", () => {
+  it("applies Drizzle migrations from an empty database", () => {
     const db = createTestDb();
     new AuditWriter(db);
     const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as Array<
       Record<string, unknown>
     >;
-    expect(tables.some((t) => t.name === "audit_events")).toBe(true);
+    const columns = db.prepare("PRAGMA table_info(audit_events)").all() as Array<
+      Record<string, unknown>
+    >;
+    const columnNames = columns.map((column) => column.name);
+
+    expect(tables.some((table) => table.name === "audit_events")).toBe(true);
+    expect(columnNames).toEqual([
+      "id",
+      "event_id",
+      "event_type",
+      "timestamp",
+      "correlation_id",
+      "environment",
+      "intent_id",
+      "principal",
+      "prompt_id",
+      "session_id",
+      "input_ref",
+      "data",
+      "previous_hash",
+    ]);
+    expect(db.prepare("SELECT COUNT(*) AS count FROM __drizzle_migrations").get()).toMatchObject({
+      count: 1,
+    });
+    expect(
+      db
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name = ?")
+        .get("audit_events_event_id_unique"),
+    ).toMatchObject({ name: "audit_events_event_id_unique" });
   });
 
-  it("adds new metadata columns to existing audit tables", () => {
+  it("baselines legacy audit tables before applying Drizzle migrations", () => {
     const db = createTestDb();
     db.prepare(`
       CREATE TABLE audit_events (
@@ -168,6 +196,7 @@ describe("AuditWriter", () => {
         previous_hash TEXT NOT NULL
       )
     `).run();
+
     const writer = new AuditWriter(db);
     writer.write({
       eventType: "intent.received",
@@ -185,6 +214,76 @@ describe("AuditWriter", () => {
     expect(row.prompt_id).toBe("prompt-123");
     expect(row.session_id).toBe("session-123");
     expect(row.input_ref).toBe("input-123");
+    expect(db.prepare("SELECT COUNT(*) AS count FROM __drizzle_migrations").get()).toMatchObject({
+      count: 1,
+    });
+    expect(
+      db
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name = ?")
+        .get("audit_events_event_id_unique"),
+    ).toMatchObject({ name: "audit_events_event_id_unique" });
+  });
+
+  it("baselines legacy audit tables with empty migration metadata", () => {
+    const db = createTestDb();
+    db.prepare(`
+      CREATE TABLE audit_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_id TEXT NOT NULL UNIQUE,
+        event_type TEXT NOT NULL,
+        timestamp TEXT NOT NULL,
+        correlation_id TEXT NOT NULL,
+        environment TEXT NOT NULL,
+        intent_id TEXT,
+        principal TEXT,
+        prompt_id TEXT,
+        session_id TEXT,
+        input_ref TEXT,
+        data TEXT NOT NULL,
+        previous_hash TEXT NOT NULL
+      )
+    `).run();
+    db.prepare(`
+      CREATE TABLE __drizzle_migrations (
+        id SERIAL PRIMARY KEY,
+        hash text NOT NULL,
+        created_at numeric
+      )
+    `).run();
+
+    new AuditWriter(db);
+
+    expect(db.prepare("SELECT COUNT(*) AS count FROM __drizzle_migrations").get()).toMatchObject({
+      count: 1,
+    });
+  });
+
+  it("repairs legacy migration metadata tables with missing columns", () => {
+    const db = createTestDb();
+    db.prepare(`
+      CREATE TABLE audit_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_id TEXT NOT NULL UNIQUE,
+        event_type TEXT NOT NULL,
+        timestamp TEXT NOT NULL,
+        correlation_id TEXT NOT NULL,
+        environment TEXT NOT NULL,
+        intent_id TEXT,
+        principal TEXT,
+        prompt_id TEXT,
+        session_id TEXT,
+        input_ref TEXT,
+        data TEXT NOT NULL,
+        previous_hash TEXT NOT NULL
+      )
+    `).run();
+    db.prepare("CREATE TABLE __drizzle_migrations (id SERIAL PRIMARY KEY)").run();
+
+    new AuditWriter(db);
+
+    expect(db.prepare("SELECT COUNT(*) AS count FROM __drizzle_migrations").get()).toMatchObject({
+      count: 1,
+    });
   });
 
   it("records complete allow flow", () => {

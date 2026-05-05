@@ -1,7 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { AuditEventType, Environment } from "@guardrails/schemas";
 import type Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
+import { migrate } from "drizzle-orm/better-sqlite3/migrator";
+import { readMigrationFiles } from "drizzle-orm/migrator";
 import { auditEvents } from "./schema.js";
 
 export interface AuditEventInput {
@@ -27,24 +31,21 @@ export class AuditWriter {
   }
 
   private initSchema(sqlite: Database.Database) {
-    const createTableSql = `
-      CREATE TABLE IF NOT EXISTS audit_events (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        event_id TEXT NOT NULL UNIQUE,
-        event_type TEXT NOT NULL,
-        timestamp TEXT NOT NULL,
-        correlation_id TEXT NOT NULL,
-        environment TEXT NOT NULL,
-        intent_id TEXT,
-        principal TEXT,
-        prompt_id TEXT,
-        session_id TEXT,
-        input_ref TEXT,
-        data TEXT NOT NULL,
-        previous_hash TEXT NOT NULL
-      )
-    `;
-    sqlite.prepare(createTableSql).run();
+    const migrationsFolder = resolve(dirname(fileURLToPath(import.meta.url)), "../drizzle");
+    this.baselineLegacySchema(sqlite, migrationsFolder);
+    migrate(this.db, { migrationsFolder });
+  }
+
+  private baselineLegacySchema(sqlite: Database.Database, migrationsFolder: string) {
+    if (!this.tableExists(sqlite, "audit_events")) {
+      return;
+    }
+
+    const baselineMigration = [...readMigrationFiles({ migrationsFolder })].sort(
+      (left, right) => left.folderMillis - right.folderMillis,
+    )[0];
+    if (!baselineMigration) return;
+
     const columns = sqlite.prepare("PRAGMA table_info(audit_events)").all() as Array<{
       name: string;
     }>;
@@ -58,6 +59,55 @@ export class AuditWriter {
         sqlite.prepare(`ALTER TABLE audit_events ADD COLUMN ${column} ${definition}`).run();
       }
     }
+
+    sqlite
+      .prepare(
+        "CREATE UNIQUE INDEX IF NOT EXISTS audit_events_event_id_unique ON audit_events (event_id)",
+      )
+      .run();
+    this.ensureMigrationTable(sqlite);
+
+    const existingBaseline = sqlite
+      .prepare("SELECT id FROM __drizzle_migrations WHERE hash = ? AND created_at = ?")
+      .get(baselineMigration.hash, baselineMigration.folderMillis);
+    if (!existingBaseline) {
+      sqlite
+        .prepare('INSERT INTO __drizzle_migrations ("hash", "created_at") VALUES (?, ?)')
+        .run(baselineMigration.hash, baselineMigration.folderMillis);
+    }
+  }
+
+  private ensureMigrationTable(sqlite: Database.Database) {
+    sqlite
+      .prepare(`
+      CREATE TABLE IF NOT EXISTS __drizzle_migrations (
+        id SERIAL PRIMARY KEY,
+        hash text NOT NULL,
+        created_at numeric
+      )
+    `)
+      .run();
+
+    const columns = sqlite.prepare("PRAGMA table_info(__drizzle_migrations)").all() as Array<{
+      name: string;
+    }>;
+    const existingColumns = new Set(columns.map((column) => column.name));
+    for (const [column, definition] of [
+      ["id", "SERIAL"],
+      ["hash", "text"],
+      ["created_at", "numeric"],
+    ] as const) {
+      if (!existingColumns.has(column)) {
+        sqlite.prepare(`ALTER TABLE __drizzle_migrations ADD COLUMN ${column} ${definition}`).run();
+      }
+    }
+  }
+
+  private tableExists(sqlite: Database.Database, tableName: string): boolean {
+    const row = sqlite
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+      .get(tableName);
+    return row != null;
   }
 
   private recoverLastHash() {

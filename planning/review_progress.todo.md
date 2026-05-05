@@ -214,10 +214,10 @@ These items close out checklist accuracy, improve test quality, and fill documen
 
 `drizzle.config.ts` references `packages/audit/drizzle/` but the directory is empty.
 
-- [ ] Run `pnpm drizzle-kit generate` to produce migration SQL from `packages/audit/src/schema.ts`.
-- [ ] Verify generated migration creates the `audit_events` table with all columns including `prompt_id` and `session_id` (added in P0.1).
-- [ ] Update `packages/audit/src/writer.ts` `initSchema()` to use Drizzle Kit migrations instead of raw `CREATE TABLE IF NOT EXISTS` SQL.
-- [ ] Update the migration test in `packages/audit/src/audit.test.ts` to apply the Drizzle migration from an empty database (not the raw SQL fallback).
+- [x] Run `pnpm drizzle-kit generate` to produce migration SQL from `packages/audit/src/schema.ts`.
+- [x] Verify generated migration creates the `audit_events` table with all columns including `prompt_id` and `session_id` (added in P0.1).
+- [x] Update `packages/audit/src/writer.ts` `initSchema()` to use Drizzle Kit migrations instead of raw `CREATE TABLE IF NOT EXISTS` SQL.
+- [x] Update the migration test in `packages/audit/src/audit.test.ts` to apply the Drizzle migration from an empty database (not the raw SQL fallback).
 
 ### P2.2 — Add example strategies for OpenClaw and Hermes (Phase 12)
 
