@@ -378,7 +378,7 @@ No testnet/sandbox test flow exists.
 
 `checkPositionDelta` exists but has no dedicated failure test.
 
-- [ ] Add test in `packages/risk-engine/src/engine.test.ts` where the position delta exceeds `maxPositionDeltaPct` and verify the check returns a failure result.
+- [x] Add test in `packages/risk-engine/src/engine.test.ts` where the position delta exceeds `maxPositionDeltaPct` and verify the check returns a failure result.
 
 ### P2.20 — Add LLM provider and data source entries to nginx egress config (Phase 13)
 

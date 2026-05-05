@@ -215,6 +215,29 @@ describe("RiskEngine", () => {
     expect(check?.status).toBe("fail");
   });
 
+  it("fails when position delta exceeds limit", async () => {
+    const engine = new RiskEngine(
+      makeProvider({
+        portfolio: {
+          account: "subaccount-1",
+          timestampMs: nowMs - 5000,
+          positions: [{ symbol: "ETH-USDC", quantity: 0.01, notionalUsd: 50 }],
+        },
+      }),
+      limits,
+    );
+
+    const result = await engine.evaluate(binanceSpotOrder, makeVerdict());
+    const check = result.checks.find((c) => c.check === "position_delta");
+
+    expect(result.passed).toBe(false);
+    expect(check).toMatchObject({
+      status: "fail",
+      value: 20,
+      threshold: limits.maxPositionDeltaPct,
+    });
+  });
+
   it("fails on order frequency cooldown", async () => {
     const engine = new RiskEngine(makeProvider({ lastOrderTs: nowMs - 1000 }), limits);
     const result = await engine.evaluate(binanceSpotOrder, makeVerdict());
