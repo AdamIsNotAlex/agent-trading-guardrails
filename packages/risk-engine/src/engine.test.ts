@@ -18,6 +18,7 @@ const limits: RiskLimits = {
   maxDailyNotionalUsd: 50,
   maxDailyLossUsd: 25,
   maxSlippageBps: 50,
+  maxPriceBandBps: 100,
   maxPositionDeltaPct: 10,
   minOrderIntervalMs: 5_000,
   maxOrdersPerDay: 25,
@@ -92,9 +93,47 @@ describe("RiskEngine", () => {
     const engine = new RiskEngine(makeProvider(), limits);
     const result = await engine.evaluate(binanceSpotOrder, makeVerdict());
     expect(result.passed).toBe(true);
-    expect(result.checks.length).toBe(11);
+    expect(result.checks.length).toBe(12);
     expect(result.checks.every((c) => c.status === "pass")).toBe(true);
     expect(result.dailyStats).toEqual(defaults.dailyStats());
+  });
+
+  it("reads market data once for priced orders", async () => {
+    let marketDataCalls = 0;
+    const provider = makeProvider();
+    const engine = new RiskEngine(
+      {
+        ...provider,
+        async getMarketData(symbol) {
+          marketDataCalls += 1;
+          return provider.getMarketData(symbol);
+        },
+      },
+      limits,
+    );
+
+    const result = await engine.evaluate(binanceSpotOrder, makeVerdict());
+
+    expect(result.passed).toBe(true);
+    expect(marketDataCalls).toBe(1);
+  });
+
+  it("accepts market data stamped during provider read", async () => {
+    const provider = makeProvider();
+    const engine = new RiskEngine(
+      {
+        ...provider,
+        async getMarketData() {
+          await new Promise((resolve) => setTimeout(resolve, 2));
+          return { symbol: "ETH-USDC", price: 3500, timestampMs: Date.now() };
+        },
+      },
+      limits,
+    );
+
+    const result = await engine.evaluate(binanceSpotOrder, makeVerdict());
+
+    expect(result.passed).toBe(true);
   });
 
   it("fails on stale market data", async () => {
@@ -107,7 +146,9 @@ describe("RiskEngine", () => {
     const result = await engine.evaluate(binanceSpotOrder, makeVerdict());
     expect(result.passed).toBe(false);
     const check = result.checks.find((c) => c.check === "market_data_freshness");
+    const priceBand = result.checks.find((c) => c.check === "price_band");
     expect(check?.status).toBe("fail");
+    expect(priceBand?.status).toBe("unavailable");
   });
 
   it("fails on missing market data (unavailable)", async () => {
@@ -118,7 +159,56 @@ describe("RiskEngine", () => {
     expect(check?.status).toBe("unavailable");
   });
 
+  it("fails closed when market data timestamp is invalid", async () => {
+    const engine = new RiskEngine(
+      makeProvider({
+        marketData: { symbol: "ETH-USDC", price: 3500, timestampMs: Number.NaN },
+      }),
+      limits,
+    );
+    const result = await engine.evaluate(binanceSpotOrder, makeVerdict());
+    const freshness = result.checks.find((c) => c.check === "market_data_freshness");
+    const priceBand = result.checks.find((c) => c.check === "price_band");
+
+    expect(result.passed).toBe(false);
+    expect(freshness?.status).toBe("unavailable");
+    expect(priceBand?.status).toBe("unavailable");
+  });
+
+  it("fails closed when market data timestamp is in the future", async () => {
+    const engine = new RiskEngine(
+      makeProvider({
+        marketData: { symbol: "ETH-USDC", price: 3500, timestampMs: Date.now() + 60_000 },
+      }),
+      limits,
+    );
+    const result = await engine.evaluate(binanceSpotOrder, makeVerdict());
+    const freshness = result.checks.find((c) => c.check === "market_data_freshness");
+    const priceBand = result.checks.find((c) => c.check === "price_band");
+
+    expect(result.passed).toBe(false);
+    expect(freshness?.status).toBe("unavailable");
+    expect(priceBand?.status).toBe("unavailable");
+  });
+
+  it("fails closed when market data is from a different symbol", async () => {
+    const engine = new RiskEngine(
+      makeProvider({
+        marketData: { symbol: "BTC-USDC", price: 3500, timestampMs: nowMs - 1000 },
+      }),
+      limits,
+    );
+    const result = await engine.evaluate(binanceSpotOrder, makeVerdict());
+    const freshness = result.checks.find((c) => c.check === "market_data_freshness");
+    const priceBand = result.checks.find((c) => c.check === "price_band");
+
+    expect(result.passed).toBe(false);
+    expect(freshness?.status).toBe("unavailable");
+    expect(priceBand?.status).toBe("unavailable");
+  });
+
   it("does not require trading risk state for order status queries", async () => {
+    let marketDataCalls = 0;
     let dailyStatsCalls = 0;
     const provider = makeProvider({
       marketData: null,
@@ -129,6 +219,10 @@ describe("RiskEngine", () => {
     const engine = new RiskEngine(
       {
         ...provider,
+        async getMarketData() {
+          marketDataCalls += 1;
+          throw new Error("market data should not be read for order status queries");
+        },
         async getDailyStats() {
           dailyStatsCalls += 1;
           throw new Error("daily stats should not be read for order status queries");
@@ -146,10 +240,12 @@ describe("RiskEngine", () => {
     expect(result.passed).toBe(true);
     expect(result.dailyStats).toBeUndefined();
     expect(result.checks.find((c) => c.check === "market_data_freshness")?.status).toBe("pass");
+    expect(result.checks.find((c) => c.check === "price_band")?.status).toBe("pass");
     expect(result.checks.find((c) => c.check === "portfolio_freshness")?.status).toBe("pass");
     expect(result.checks.find((c) => c.check === "daily_loss")?.status).toBe("pass");
     expect(result.checks.find((c) => c.check === "order_frequency")?.status).toBe("pass");
     expect(result.checks.find((c) => c.check === "daily_order_count")?.status).toBe("pass");
+    expect(marketDataCalls).toBe(0);
     expect(dailyStatsCalls).toBe(0);
   });
 
@@ -224,6 +320,195 @@ describe("RiskEngine", () => {
     expect(result.passed).toBe(false);
     const check = result.checks.find((c) => c.check === "slippage");
     expect(check?.status).toBe("fail");
+  });
+
+  it("passes when order price is within market price band", async () => {
+    const engine = new RiskEngine(
+      makeProvider({
+        marketData: { symbol: "ETH-USDC", price: 3470, timestampMs: nowMs - 1000 },
+      }),
+      limits,
+    );
+
+    const result = await engine.evaluate(binanceSpotOrder, makeVerdict());
+    const check = result.checks.find((c) => c.check === "price_band");
+
+    expect(result.passed).toBe(true);
+    expect(check).toMatchObject({
+      status: "pass",
+      threshold: limits.maxPriceBandBps,
+    });
+  });
+
+  it("passes when order price is exactly at the market price band limit", async () => {
+    const orderPrice = binanceSpotOrder.price;
+    expect(orderPrice).toBeDefined();
+    if (orderPrice === undefined) {
+      throw new Error("Fixture order price is required for price-band boundary test.");
+    }
+    const marketPrice = orderPrice / (1 + limits.maxPriceBandBps / 10_000);
+    const engine = new RiskEngine(
+      makeProvider({
+        marketData: { symbol: "ETH-USDC", price: marketPrice, timestampMs: nowMs - 1000 },
+      }),
+      limits,
+    );
+
+    const result = await engine.evaluate(binanceSpotOrder, makeVerdict());
+    const check = result.checks.find((c) => c.check === "price_band");
+
+    expect(result.passed).toBe(true);
+    expect(check).toMatchObject({
+      status: "pass",
+      threshold: limits.maxPriceBandBps,
+    });
+    expect(check?.value).toBeCloseTo(limits.maxPriceBandBps);
+  });
+
+  it("fails when order price is above market price band", async () => {
+    const engine = new RiskEngine(
+      makeProvider({
+        marketData: { symbol: "ETH-USDC", price: 3000, timestampMs: nowMs - 1000 },
+      }),
+      limits,
+    );
+
+    const result = await engine.evaluate(binanceSpotOrder, makeVerdict());
+    const check = result.checks.find((c) => c.check === "price_band");
+    const failedChecks = result.checks.filter((c) => c.status !== "pass");
+
+    expect(result.passed).toBe(false);
+    expect(failedChecks.map((c) => c.check)).toEqual(["price_band"]);
+    expect(check).toMatchObject({
+      status: "fail",
+      threshold: limits.maxPriceBandBps,
+    });
+  });
+
+  it("fails when order price is below market price band", async () => {
+    const engine = new RiskEngine(makeProvider(), limits);
+
+    const result = await engine.evaluate({ ...binanceSpotOrder, price: 3000 }, makeVerdict());
+    const check = result.checks.find((c) => c.check === "price_band");
+    const failedChecks = result.checks.filter((c) => c.status !== "pass");
+
+    expect(result.passed).toBe(false);
+    expect(failedChecks.map((c) => c.check)).toEqual(["price_band"]);
+    expect(check).toMatchObject({
+      status: "fail",
+      threshold: limits.maxPriceBandBps,
+    });
+  });
+
+  it("fails closed for price band when market data is missing", async () => {
+    const engine = new RiskEngine(makeProvider({ marketData: null }), limits);
+
+    const result = await engine.evaluate(binanceSpotOrder, makeVerdict());
+    const freshness = result.checks.find((c) => c.check === "market_data_freshness");
+    const priceBand = result.checks.find((c) => c.check === "price_band");
+
+    expect(result.passed).toBe(false);
+    expect(freshness?.status).toBe("unavailable");
+    expect(priceBand?.status).toBe("unavailable");
+  });
+
+  it("fails closed for price band when market price is not positive", async () => {
+    const engine = new RiskEngine(
+      makeProvider({
+        marketData: { symbol: "ETH-USDC", price: 0, timestampMs: nowMs - 1000 },
+      }),
+      limits,
+    );
+
+    const result = await engine.evaluate(binanceSpotOrder, makeVerdict());
+    const priceBand = result.checks.find((c) => c.check === "price_band");
+
+    expect(result.passed).toBe(false);
+    expect(priceBand?.status).toBe("unavailable");
+  });
+
+  it("fails closed for price band when market price is not finite", async () => {
+    const engine = new RiskEngine(
+      makeProvider({
+        marketData: {
+          symbol: "ETH-USDC",
+          price: Number.POSITIVE_INFINITY,
+          timestampMs: nowMs - 1000,
+        },
+      }),
+      limits,
+    );
+
+    const result = await engine.evaluate(binanceSpotOrder, makeVerdict());
+    const priceBand = result.checks.find((c) => c.check === "price_band");
+
+    expect(result.passed).toBe(false);
+    expect(priceBand?.status).toBe("unavailable");
+  });
+
+  it.each([
+    null,
+    undefined,
+    Number.NaN,
+    0,
+    -1,
+  ])("fails closed for price band when intent price is invalid (%s)", async (price) => {
+    const engine = new RiskEngine(makeProvider(), limits);
+    const intent = { ...binanceSpotOrder, price } as unknown as typeof binanceSpotOrder;
+
+    const result = await engine.evaluate(intent, makeVerdict());
+    const priceBand = result.checks.find((c) => c.check === "price_band");
+
+    expect(result.passed).toBe(false);
+    expect(priceBand).toMatchObject({
+      status: "unavailable",
+      message: "Intent price unavailable or invalid.",
+    });
+  });
+
+  it("fails closed for price band when intent price is omitted", async () => {
+    const engine = new RiskEngine(makeProvider(), limits);
+    const intent = { ...binanceSpotOrder };
+    delete intent.price;
+
+    const result = await engine.evaluate(intent, makeVerdict());
+    const priceBand = result.checks.find((c) => c.check === "price_band");
+
+    expect(result.passed).toBe(false);
+    expect(priceBand).toMatchObject({
+      status: "unavailable",
+      message: "Intent price unavailable or invalid.",
+    });
+  });
+
+  it.each([
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    -1,
+  ])("fails closed when the market data age limit is invalid (%s)", async (maxMarketDataAgeMs) => {
+    const engine = new RiskEngine(makeProvider(), { ...limits, maxMarketDataAgeMs });
+
+    const result = await engine.evaluate(binanceSpotOrder, makeVerdict());
+    const freshness = result.checks.find((c) => c.check === "market_data_freshness");
+    const priceBand = result.checks.find((c) => c.check === "price_band");
+
+    expect(result.passed).toBe(false);
+    expect(freshness?.status).toBe("unavailable");
+    expect(priceBand?.status).toBe("unavailable");
+  });
+
+  it.each([
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    -1,
+  ])("fails closed for price band when the limit is invalid (%s)", async (maxPriceBandBps) => {
+    const engine = new RiskEngine(makeProvider(), { ...limits, maxPriceBandBps });
+
+    const result = await engine.evaluate(binanceSpotOrder, makeVerdict());
+    const priceBand = result.checks.find((c) => c.check === "price_band");
+
+    expect(result.passed).toBe(false);
+    expect(priceBand?.status).toBe("unavailable");
   });
 
   it("fails when position delta exceeds limit", async () => {

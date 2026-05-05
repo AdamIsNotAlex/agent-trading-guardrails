@@ -14,6 +14,7 @@ import {
   checkPerOrderNotional,
   checkPortfolioFreshness,
   checkPositionDelta,
+  checkPriceBand,
   checkReviewerConsistency,
   checkSlippage,
 } from "./checks.js";
@@ -30,14 +31,19 @@ export class RiskEngine {
     intent: TradingIntent,
     reviewerVerdict: ReviewerVerdictSchema,
   ): Promise<DynamicRiskResult> {
-    const nowMs = Date.now();
     const checks: RiskCheckResult[] = [];
     const dailyStatsSnapshot =
       intent.action === "cex.place_order" && "account" in intent
         ? await this.provider.getDailyStats(intent.account, new Date().toISOString().slice(0, 10))
         : undefined;
+    const marketDataSnapshot =
+      intent.action === "cex.place_order" && "symbol" in intent
+        ? await this.provider.getMarketData(intent.symbol)
+        : undefined;
+    const nowMs = Date.now();
 
-    checks.push(await checkMarketDataFreshness(this.provider, intent, this.limits, nowMs));
+    checks.push(checkMarketDataFreshness(intent, this.limits, nowMs, marketDataSnapshot));
+    checks.push(checkPriceBand(intent, this.limits, nowMs, marketDataSnapshot));
     checks.push(await checkPortfolioFreshness(this.provider, intent, this.limits, nowMs));
     checks.push(checkPerOrderNotional(intent, this.limits));
     checks.push(checkDailyNotional(intent, this.limits, dailyStatsSnapshot));

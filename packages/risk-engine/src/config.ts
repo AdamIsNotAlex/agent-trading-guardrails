@@ -5,6 +5,7 @@ export interface RiskLimits {
   maxDailyNotionalUsd: number;
   maxDailyLossUsd: number;
   maxSlippageBps: number;
+  maxPriceBandBps: number;
   maxPositionDeltaPct: number;
   minOrderIntervalMs: number;
   maxOrdersPerDay: number;
@@ -17,6 +18,7 @@ export const DEFAULT_CANARY_LIVE_LIMITS: RiskLimits = {
   maxDailyNotionalUsd: 50,
   maxDailyLossUsd: 25,
   maxSlippageBps: 50,
+  maxPriceBandBps: 100,
   maxPositionDeltaPct: 10,
   minOrderIntervalMs: 5_000,
   maxOrdersPerDay: 25,

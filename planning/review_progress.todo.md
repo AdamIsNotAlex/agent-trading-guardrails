@@ -338,13 +338,13 @@ Docs are summary-level only for all three Vault profiles.
 
 ### P2.15 — Add price band check to risk engine (Phase 5)
 
-Only slippage is implemented. No price-band check compares intent target price against live market price.
+Price-band enforcement now compares priced order intents against live market price and fails closed when required market data is unavailable or invalid.
 
-- [ ] Add `maxPriceBandBps: number` to `RiskLimits` in `packages/risk-engine/src/config.ts`.
-- [ ] Add `checkPriceBand()` in `packages/risk-engine/src/checks.ts` that compares `intent.price` against `marketData.price` and fails if the deviation exceeds `maxPriceBandBps`.
-- [ ] Wire the check into the risk engine orchestrator.
-- [ ] Add default value to `DEFAULT_CANARY_LIVE_LIMITS`.
-- [ ] Add tests for price within band, price outside band, and missing market data (fail-closed).
+- [x] Add `maxPriceBandBps: number` to `RiskLimits` in `packages/risk-engine/src/config.ts`.
+- [x] Add `checkPriceBand()` in `packages/risk-engine/src/checks.ts` that compares `intent.price` against `marketData.price` and fails if the deviation exceeds `maxPriceBandBps`.
+- [x] Wire the check into the risk engine orchestrator.
+- [x] Add default value to `DEFAULT_CANARY_LIVE_LIMITS`.
+- [x] Add tests for price within band, price above/outside band, price below/outside band, missing/invalid/stale/future/symbol-mismatched market data (fail-closed), missing/invalid intent prices, invalid market-data age limits, and invalid price-band limits.
 
 ### P2.16 — Add max-orders-per-day limit to risk engine (Phase 5)
 

@@ -1,25 +1,38 @@
 import type { ReviewerVerdictSchema, RiskCheckResult, TradingIntent } from "@guardrails/schemas";
 import type { RiskLimits } from "./config.js";
-import type { DailyStats, RiskDataProvider } from "./providers.js";
+import type { DailyStats, MarketDataSnapshot, RiskDataProvider } from "./providers.js";
 
-export async function checkMarketDataFreshness(
-  provider: RiskDataProvider,
+export function checkMarketDataFreshness(
   intent: TradingIntent,
   limits: RiskLimits,
   nowMs: number,
-): Promise<RiskCheckResult> {
+  data: MarketDataSnapshot | null | undefined,
+): RiskCheckResult {
   if (intent.action !== "cex.place_order" || !("symbol" in intent)) {
     return { check: "market_data_freshness", status: "pass" };
   }
-  const data = await provider.getMarketData(intent.symbol);
-  if (!data) {
+  if (!Number.isFinite(limits.maxMarketDataAgeMs) || limits.maxMarketDataAgeMs < 0) {
     return {
       check: "market_data_freshness",
       status: "unavailable",
-      message: "Market data not available.",
+      message: "Market data freshness limit unavailable or invalid.",
+    };
+  }
+  if (!data || data.symbol !== intent.symbol || !Number.isFinite(data.timestampMs)) {
+    return {
+      check: "market_data_freshness",
+      status: "unavailable",
+      message: "Market data unavailable or invalid.",
     };
   }
   const ageMs = nowMs - data.timestampMs;
+  if (ageMs < 0) {
+    return {
+      check: "market_data_freshness",
+      status: "unavailable",
+      message: "Market data unavailable or invalid.",
+    };
+  }
   if (ageMs > limits.maxMarketDataAgeMs) {
     return {
       check: "market_data_freshness",
@@ -176,6 +189,80 @@ export function checkSlippage(intent: TradingIntent, limits: RiskLimits): RiskCh
     status: "pass",
     value: intent.maxSlippageBps,
     threshold: limits.maxSlippageBps,
+  };
+}
+
+export function checkPriceBand(
+  intent: TradingIntent,
+  limits: RiskLimits,
+  nowMs: number,
+  data: MarketDataSnapshot | null | undefined,
+): RiskCheckResult {
+  if (intent.action !== "cex.place_order" || !("symbol" in intent)) {
+    return { check: "price_band", status: "pass" };
+  }
+  if (
+    !("price" in intent) ||
+    intent.price == null ||
+    !Number.isFinite(intent.price) ||
+    intent.price <= 0
+  ) {
+    return {
+      check: "price_band",
+      status: "unavailable",
+      message: "Intent price unavailable or invalid.",
+    };
+  }
+  if (
+    !data ||
+    data.symbol !== intent.symbol ||
+    !Number.isFinite(data.timestampMs) ||
+    !Number.isFinite(data.price) ||
+    data.price <= 0
+  ) {
+    return {
+      check: "price_band",
+      status: "unavailable",
+      message: "Market data unavailable or invalid.",
+    };
+  }
+  if (!Number.isFinite(limits.maxMarketDataAgeMs) || limits.maxMarketDataAgeMs < 0) {
+    return {
+      check: "price_band",
+      status: "unavailable",
+      message: "Market data freshness limit unavailable or invalid.",
+    };
+  }
+  const ageMs = nowMs - data.timestampMs;
+  if (ageMs < 0 || ageMs > limits.maxMarketDataAgeMs) {
+    return {
+      check: "price_band",
+      status: "unavailable",
+      message: "Market data unavailable or invalid.",
+    };
+  }
+  if (!Number.isFinite(limits.maxPriceBandBps) || limits.maxPriceBandBps < 0) {
+    return {
+      check: "price_band",
+      status: "unavailable",
+      message: "Price band limit unavailable or invalid.",
+    };
+  }
+  const deviationBps = Math.abs((intent.price - data.price) / data.price) * 10_000;
+  if (deviationBps > limits.maxPriceBandBps) {
+    return {
+      check: "price_band",
+      status: "fail",
+      value: deviationBps,
+      threshold: limits.maxPriceBandBps,
+      message: `Price band ${deviationBps.toFixed(1)}bps exceeds limit ${limits.maxPriceBandBps}bps.`,
+    };
+  }
+  return {
+    check: "price_band",
+    status: "pass",
+    value: deviationBps,
+    threshold: limits.maxPriceBandBps,
   };
 }
 
