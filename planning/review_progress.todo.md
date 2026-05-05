@@ -264,11 +264,11 @@ Fixtures exist for MCP/tool definitions, log exfiltration, and hallucinated bala
 
 No findings document exists from the red-team exercise.
 
-- [ ] Create `docs/red-team-findings.md` documenting:
-  - [ ] Which attack vectors were tested and their outcomes.
-  - [ ] Which gaps were found (weak assertions, unused fixtures, missing tests).
-  - [ ] What fixes were applied (reference commits or this remediation plan).
-  - [ ] Residual risks and recommended future hardening.
+- [x] Create `docs/red-team-findings.md` documenting:
+  - [x] Which attack vectors were tested and their outcomes.
+  - [x] Which gaps were found (weak assertions, unused fixtures, missing tests).
+  - [x] What fixes were applied (reference commits or this remediation plan).
+  - [x] Residual risks and recommended future hardening.
 
 ### P2.7 — Add DNS logging to egress proxy (Phase 13)
 
