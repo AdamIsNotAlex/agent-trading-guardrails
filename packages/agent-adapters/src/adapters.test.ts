@@ -77,6 +77,26 @@ function makeService() {
   return new GuardrailService(config, makeReviewer(), makePolicy(), makeRisk(), nullAuditWriter);
 }
 
+function makeCapturingService(capture: (intent: TradingIntent) => void) {
+  return new GuardrailService(
+    config,
+    makeReviewer(),
+    makePolicy(),
+    {
+      async evaluate(intent: TradingIntent): Promise<DynamicRiskResult> {
+        capture(intent);
+        return {
+          intentId: intent.intentId,
+          passed: true,
+          checks: [{ check: "test", status: "pass" }],
+          evaluatedAt: now,
+        };
+      },
+    },
+    nullAuditWriter,
+  );
+}
+
 describe("OpenClawAdapter", () => {
   it("can propose a valid order intent", async () => {
     const adapter = new OpenClawAdapter(makeService(), "agent.openclaw.alpha", "dev");
@@ -140,6 +160,121 @@ describe("OpenClawAdapter", () => {
     const result = await adapter.executeTool("direct_cex_access", {});
     expect(result.success).toBe(false);
     expect(result.reasons[0].rule).toBe("unknown_tool");
+  });
+
+  it("exposes guarded onchain tools", () => {
+    const adapter = new OpenClawAdapter(makeService(), "agent.openclaw.alpha", "dev");
+    const tools = adapter.getToolDefinitions().map((t) => t.name);
+    expect(tools).toContain("request_signature");
+    expect(tools).toContain("get_onchain_portfolio");
+  });
+
+  it("routes onchain portfolio queries through guardrails", async () => {
+    let capturedIntent: TradingIntent | undefined;
+    const adapter = new OpenClawAdapter(
+      makeCapturingService((intent) => {
+        capturedIntent = intent;
+      }),
+      "agent.openclaw.alpha",
+      "dev",
+    );
+
+    const result = await adapter.executeTool("get_onchain_portfolio", {
+      chain: "ethereum",
+      chainEnvironment: "sepolia",
+      address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      rationale: "Check wallet holdings",
+      evidence: ["wallet-snapshot-1"],
+    });
+
+    expect(result.success).toBe(true);
+    expect(capturedIntent).toMatchObject({
+      action: "onchain.get_portfolio",
+      chain: "ethereum",
+      chainEnvironment: "sepolia",
+      address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      resource: "onchain:ethereum:sepolia:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+    });
+  });
+
+  it("routes onchain signature requests through guardrails", async () => {
+    let capturedIntent: TradingIntent | undefined;
+    const adapter = new OpenClawAdapter(
+      makeCapturingService((intent) => {
+        capturedIntent = intent;
+      }),
+      "agent.openclaw.alpha",
+      "dev",
+    );
+
+    const result = await adapter.executeTool("request_signature", {
+      chain: "ethereum",
+      chainEnvironment: "sepolia",
+      to: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      simulationId: "550e8400-e29b-41d4-a716-446655440005",
+      maxTokenApprovalAmount: "1000000",
+      expectedDeltas: [
+        {
+          address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          asset: "USDC",
+          minDelta: "-1000000",
+          maxDelta: "0",
+        },
+      ],
+      rationale: "Request signature after simulation",
+      evidence: ["sim-1"],
+    });
+
+    expect(result.success).toBe(true);
+    expect(capturedIntent).toMatchObject({
+      action: "onchain.request_signature",
+      chain: "ethereum",
+      chainEnvironment: "sepolia",
+      to: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      resource: "onchain:ethereum:sepolia:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      simulationId: "550e8400-e29b-41d4-a716-446655440005",
+      maxTokenApprovalAmount: "1000000",
+      expectedDeltas: [
+        {
+          address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          asset: "USDC",
+          minDelta: "-1000000",
+          maxDelta: "0",
+        },
+      ],
+    });
+  });
+
+  it("fails closed when signing expected deltas are malformed", async () => {
+    const adapter = new OpenClawAdapter(makeService(), "agent.openclaw.alpha", "dev");
+    const result = await adapter.executeTool("request_signature", {
+      chain: "ethereum",
+      chainEnvironment: "sepolia",
+      to: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      simulationId: "550e8400-e29b-41d4-a716-446655440005",
+      expectedDeltas: "invalid-deltas",
+      rationale: "Request signature after simulation",
+      evidence: ["sim-1"],
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.reasons[0].rule).toBe("schema_validation");
+  });
+
+  it("fails closed when token approval amount is malformed", async () => {
+    const adapter = new OpenClawAdapter(makeService(), "agent.openclaw.alpha", "dev");
+    const result = await adapter.executeTool("request_signature", {
+      chain: "ethereum",
+      chainEnvironment: "sepolia",
+      to: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      simulationId: "550e8400-e29b-41d4-a716-446655440005",
+      maxTokenApprovalAmount: { amount: "unlimited" },
+      rationale: "Request signature after simulation",
+      evidence: ["sim-1"],
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.reasons[0].rule).toBe("schema_validation");
   });
 
   it("does not expose CEX tools", () => {
@@ -237,6 +372,119 @@ describe("HermesAgentAdapter", () => {
       evidence: ["snap"],
     });
     expect(result.success).toBe(true);
+  });
+
+  it("routes onchain signature requests through guardrails", async () => {
+    let capturedIntent: TradingIntent | undefined;
+    const adapter = new HermesAgentAdapter(
+      makeCapturingService((intent) => {
+        capturedIntent = intent;
+      }),
+      "agent.hermes.beta",
+      "dev",
+    );
+
+    const result = await adapter.executeTool("request_signature", {
+      chain: "solana",
+      chainEnvironment: "devnet",
+      to: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      programId: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      instructions: [
+        {
+          programId: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+          type: "transfer",
+        },
+      ],
+      simulationId: "550e8400-e29b-41d4-a716-446655440005",
+      expectedDeltas: [
+        {
+          account: "So11111111111111111111111111111111111111112",
+          asset: "SOL",
+          minDelta: "-1000000",
+          maxDelta: "0",
+        },
+      ],
+      rationale: "Request signature after simulation",
+      evidence: ["sim-1"],
+    });
+
+    expect(result.success).toBe(true);
+    expect(capturedIntent).toMatchObject({
+      action: "onchain.request_signature",
+      chain: "solana",
+      chainEnvironment: "devnet",
+      to: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      programId: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      resource: "onchain:solana:devnet:TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      simulationId: "550e8400-e29b-41d4-a716-446655440005",
+      expectedDeltas: [
+        {
+          account: "So11111111111111111111111111111111111111112",
+          asset: "SOL",
+          minDelta: "-1000000",
+          maxDelta: "0",
+        },
+      ],
+    });
+    expect(
+      capturedIntent && "instructions" in capturedIntent ? capturedIntent.instructions : undefined,
+    ).toEqual([
+      {
+        programId: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+        type: "transfer",
+      },
+    ]);
+  });
+
+  it("routes onchain portfolio queries through guardrails", async () => {
+    let capturedIntent: TradingIntent | undefined;
+    const adapter = new HermesAgentAdapter(
+      makeCapturingService((intent) => {
+        capturedIntent = intent;
+      }),
+      "agent.hermes.beta",
+      "dev",
+    );
+
+    const result = await adapter.executeTool("get_onchain_portfolio", {
+      chain: "solana",
+      chainEnvironment: "devnet",
+      address: "So11111111111111111111111111111111111111112",
+      rationale: "Check wallet holdings",
+      evidence: ["wallet-snapshot-1"],
+    });
+
+    expect(result.success).toBe(true);
+    expect(capturedIntent).toMatchObject({
+      action: "onchain.get_portfolio",
+      chain: "solana",
+      chainEnvironment: "devnet",
+      address: "So11111111111111111111111111111111111111112",
+      resource: "onchain:solana:devnet:So11111111111111111111111111111111111111112",
+    });
+  });
+
+  it("fails closed when signing expected deltas are malformed", async () => {
+    const adapter = new HermesAgentAdapter(makeService(), "agent.hermes.beta", "dev");
+    const result = await adapter.executeTool("request_signature", {
+      chain: "solana",
+      chainEnvironment: "devnet",
+      to: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      simulationId: "550e8400-e29b-41d4-a716-446655440005",
+      expectedDeltas: "invalid-deltas",
+      rationale: "Request signature after simulation",
+      evidence: ["sim-1"],
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.reasons[0].rule).toBe("schema_validation");
+  });
+
+  it("exposes guarded onchain tools", () => {
+    const adapter = new HermesAgentAdapter(makeService(), "agent.hermes.beta", "dev");
+    const tools = adapter.getToolDefinitions().map((t) => t.name);
+    expect(tools).toContain("request_signature");
+    expect(tools).toContain("get_onchain_portfolio");
   });
 
   it("can query order status", async () => {

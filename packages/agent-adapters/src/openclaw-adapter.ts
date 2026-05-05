@@ -18,6 +18,8 @@ export class OpenClawAdapter {
       { name: "propose_order", description: "Propose a CEX order through guardrails" },
       { name: "cancel_order", description: "Cancel a CEX order through guardrails" },
       { name: "simulate_transaction", description: "Simulate an onchain transaction" },
+      { name: "request_signature", description: "Request an onchain signature through guardrails" },
+      { name: "get_onchain_portfolio", description: "Query onchain portfolio (read-only)" },
       { name: "get_order_status", description: "Query order status (read-only)" },
       { name: "get_open_orders", description: "Query open orders (read-only)" },
       { name: "get_portfolio", description: "Query portfolio (read-only)" },
@@ -63,8 +65,32 @@ export class OpenClawAdapter {
           chain: String(params.chain ?? ""),
           chainEnvironment: String(params.chainEnvironment ?? ""),
           to: String(params.to ?? ""),
-          data: params.data != null ? String(params.data) : undefined,
-          value: params.value != null ? String(params.value) : undefined,
+          data: params.data,
+          value: params.value,
+          programId: params.programId,
+          instructions: params.instructions,
+          expectedDeltas: params.expectedDeltas,
+        });
+      case "request_signature":
+        return this.tools.requestSignature({
+          ...base,
+          chain: String(params.chain ?? ""),
+          chainEnvironment: String(params.chainEnvironment ?? ""),
+          to: String(params.to ?? ""),
+          data: params.data,
+          value: params.value,
+          programId: params.programId,
+          instructions: params.instructions,
+          expectedDeltas: params.expectedDeltas,
+          simulationId: String(params.simulationId ?? ""),
+          maxTokenApprovalAmount: params.maxTokenApprovalAmount,
+        });
+      case "get_onchain_portfolio":
+        return this.tools.queryOnchainPortfolio({
+          ...base,
+          chain: String(params.chain ?? ""),
+          chainEnvironment: String(params.chainEnvironment ?? ""),
+          address: String(params.address ?? ""),
         });
       case "get_order_status":
         return this.tools.queryOrderStatus({

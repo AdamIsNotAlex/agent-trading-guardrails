@@ -324,9 +324,9 @@ Leverage cap is enforced, but no `marginType`/`ISOLATED` field exists anywhere.
 
 These schema-defined actions are not covered by the adapter tool surface.
 
-- [ ] In `packages/agent-adapters/src/guarded-tools.ts`, add guarded tool definitions for `onchain.request_signature` and `onchain.get_portfolio`.
-- [ ] Wire them in both `packages/agent-adapters/src/openclaw-adapter.ts` and `packages/agent-adapters/src/hermes-adapter.ts`.
-- [ ] Add tests that both adapters expose and correctly route these tools.
+- [x] In `packages/agent-adapters/src/guarded-tools.ts`, add guarded tool definitions for `onchain.request_signature` and `onchain.get_portfolio`.
+- [x] Wire them in both `packages/agent-adapters/src/openclaw-adapter.ts` and `packages/agent-adapters/src/hermes-adapter.ts`.
+- [x] Add tests that both adapters expose and correctly route these tools.
 
 ### P2.14 — Improve Vault deployment documentation (Phase 10)
 

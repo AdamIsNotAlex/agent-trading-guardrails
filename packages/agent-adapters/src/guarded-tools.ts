@@ -66,9 +66,11 @@ export class GuardedToolSurface {
     chain: string;
     chainEnvironment: string;
     to: string;
-    data?: string;
-    value?: string;
-    programId?: string;
+    data?: unknown;
+    value?: unknown;
+    programId?: unknown;
+    instructions?: unknown;
+    expectedDeltas?: unknown;
     rationale: string;
     evidence: string[];
     environment: string;
@@ -78,6 +80,53 @@ export class GuardedToolSurface {
       intentId: crypto.randomUUID(),
       action: "onchain.simulate_transaction" as const,
       resource: `onchain:${params.chain}:${params.chainEnvironment}:${params.to}`,
+      requestedAt: new Date().toISOString(),
+      ...params,
+    };
+    return this.toResult(await this.guardrail.evaluate(intent));
+  }
+
+  async requestSignature(params: {
+    principal: string;
+    chain: string;
+    chainEnvironment: string;
+    to: string;
+    data?: unknown;
+    value?: unknown;
+    programId?: unknown;
+    instructions?: unknown;
+    expectedDeltas?: unknown;
+    simulationId: string;
+    maxTokenApprovalAmount?: unknown;
+    rationale: string;
+    evidence: string[];
+    environment: string;
+    idempotencyKey: string;
+  }): Promise<GuardedToolResult> {
+    const intent = {
+      intentId: crypto.randomUUID(),
+      action: "onchain.request_signature" as const,
+      resource: `onchain:${params.chain}:${params.chainEnvironment}:${params.to}`,
+      requestedAt: new Date().toISOString(),
+      ...params,
+    };
+    return this.toResult(await this.guardrail.evaluate(intent));
+  }
+
+  async queryOnchainPortfolio(params: {
+    principal: string;
+    chain: string;
+    chainEnvironment: string;
+    address: string;
+    rationale: string;
+    evidence: string[];
+    environment: string;
+    idempotencyKey: string;
+  }): Promise<GuardedToolResult> {
+    const intent = {
+      intentId: crypto.randomUUID(),
+      action: "onchain.get_portfolio" as const,
+      resource: `onchain:${params.chain}:${params.chainEnvironment}:${params.address}`,
       requestedAt: new Date().toISOString(),
       ...params,
     };
