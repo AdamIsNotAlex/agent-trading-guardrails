@@ -47,13 +47,7 @@
         },
         "environment": {
           "type": "string",
-          "enum": [
-            "dev",
-            "paper",
-            "testnet",
-            "canary_live",
-            "production"
-          ]
+          "enum": ["dev", "paper", "testnet", "canary_live", "production"]
         },
         "intentId": {
           "type": "string",

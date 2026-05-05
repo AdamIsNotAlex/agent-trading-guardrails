@@ -22,13 +22,7 @@
         },
         "environment": {
           "type": "string",
-          "enum": [
-            "dev",
-            "paper",
-            "testnet",
-            "canary_live",
-            "production"
-          ]
+          "enum": ["dev", "paper", "testnet", "canary_live", "production"]
         },
         "accountMode": {
           "type": "string"
@@ -71,12 +65,7 @@
         },
         "reviewerRiskLevel": {
           "type": "string",
-          "enum": [
-            "low",
-            "medium",
-            "high",
-            "critical"
-          ]
+          "enum": ["low", "medium", "high", "critical"]
         },
         "reviewerDetectedIssues": {
           "type": "array",
@@ -95,13 +84,7 @@
           "type": "number"
         }
       },
-      "required": [
-        "intentId",
-        "principal",
-        "action",
-        "resource",
-        "environment"
-      ],
+      "required": ["intentId", "principal", "action", "resource", "environment"],
       "additionalProperties": false
     }
   },

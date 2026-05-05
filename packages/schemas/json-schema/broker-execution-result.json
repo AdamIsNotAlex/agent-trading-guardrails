@@ -14,11 +14,7 @@
         },
         "status": {
           "type": "string",
-          "enum": [
-            "executed",
-            "rejected",
-            "failed"
-          ]
+          "enum": ["executed", "rejected", "failed"]
         },
         "orderId": {
           "type": "string"
@@ -54,14 +50,7 @@
               "minimum": 0
             }
           },
-          "required": [
-            "orderId",
-            "symbol",
-            "side",
-            "status",
-            "executedQty",
-            "avgPrice"
-          ],
+          "required": ["orderId", "symbol", "side", "status", "executedQty", "avgPrice"],
           "additionalProperties": false
         },
         "revalidationPassed": {
@@ -75,13 +64,7 @@
           "format": "date-time"
         }
       },
-      "required": [
-        "intentId",
-        "idempotencyKey",
-        "status",
-        "revalidationPassed",
-        "executedAt"
-      ],
+      "required": ["intentId", "idempotencyKey", "status", "revalidationPassed", "executedAt"],
       "additionalProperties": false
     }
   },
