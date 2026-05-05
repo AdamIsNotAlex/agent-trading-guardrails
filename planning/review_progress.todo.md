@@ -427,3 +427,13 @@ P2.12 (isolated-mode field) ← P2.3 (live trading gates)
 17. **P1.8** (Binance order status) — enables P2.3
 18. **P1.12** (durable allowlist onboarding) — depends on P0.2
 19. **P2.x** items in any order, prioritizing P2.3 (live gates) and P2.4 (red-team assertions)
+
+---
+
+The remaining unchecked items require choices or external inputs:
+- P2.3 preflight/dry-run/reconciliation design choices.
+- P2.7 DNS logging sidecar/proxy architecture choice.
+- P2.8 mocked integration-test infrastructure design.
+- P2.17 HTTP framework/server design choice.
+- P2.18 Binance testnet credentials.
+- P2.20 decision on whether agents need direct LLM egress.
