@@ -8,7 +8,7 @@ export async function checkMarketDataFreshness(
   limits: RiskLimits,
   nowMs: number,
 ): Promise<RiskCheckResult> {
-  if (!("symbol" in intent)) {
+  if (intent.action !== "cex.place_order" || !("symbol" in intent)) {
     return { check: "market_data_freshness", status: "pass" };
   }
   const data = await provider.getMarketData(intent.symbol);
@@ -43,7 +43,7 @@ export async function checkPortfolioFreshness(
   limits: RiskLimits,
   nowMs: number,
 ): Promise<RiskCheckResult> {
-  if (!("account" in intent)) {
+  if (intent.action !== "cex.place_order" || !("account" in intent)) {
     return { check: "portfolio_freshness", status: "pass" };
   }
   const portfolio = await provider.getPortfolio(intent.account);
@@ -133,7 +133,7 @@ export async function checkDailyLoss(
   intent: TradingIntent,
   limits: RiskLimits,
 ): Promise<RiskCheckResult> {
-  if (!("account" in intent)) {
+  if (intent.action !== "cex.place_order" || !("account" in intent)) {
     return { check: "daily_loss", status: "pass" };
   }
   const today = new Date().toISOString().slice(0, 10);
@@ -220,7 +220,7 @@ export async function checkOrderFrequency(
   limits: RiskLimits,
   nowMs: number,
 ): Promise<RiskCheckResult> {
-  if (!("account" in intent)) {
+  if (intent.action !== "cex.place_order" || !("account" in intent)) {
     return { check: "order_frequency", status: "pass" };
   }
   const lastTs = await provider.getLastOrderTimestampMs(intent.account);

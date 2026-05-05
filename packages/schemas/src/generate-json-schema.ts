@@ -7,6 +7,7 @@ import {
   CexGetOpenOrdersIntent,
   CexGetPortfolioIntent,
   CexOrderIntent,
+  CexOrderStatusIntent,
   DynamicRiskResult,
   OnchainQueryIntent,
   OnchainSigningIntent,
@@ -19,6 +20,7 @@ import {
 const schemas = {
   "cex-order-intent": CexOrderIntent,
   "cex-cancel-intent": CexCancelIntent,
+  "cex-order-status-intent": CexOrderStatusIntent,
   "cex-get-open-orders-intent": CexGetOpenOrdersIntent,
   "cex-get-portfolio-intent": CexGetPortfolioIntent,
   "onchain-simulation-intent": OnchainSimulationIntent,

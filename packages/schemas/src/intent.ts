@@ -49,6 +49,15 @@ export const CexCancelIntent = IntentEnvelope.extend({
 }).strict();
 export type CexCancelIntent = z.infer<typeof CexCancelIntent>;
 
+export const CexOrderStatusIntent = IntentEnvelope.extend({
+  action: z.literal("cex.get_order_status"),
+  exchange: z.literal("binance"),
+  account: z.string().min(1),
+  orderId: z.string().min(1),
+  symbol: z.string().min(1),
+}).strict();
+export type CexOrderStatusIntent = z.infer<typeof CexOrderStatusIntent>;
+
 export const CexGetOpenOrdersIntent = IntentEnvelope.extend({
   action: z.literal("cex.get_open_orders"),
   exchange: z.literal("binance"),
@@ -151,6 +160,7 @@ export type OnchainSigningIntent = z.infer<typeof OnchainSigningIntent>;
 export const TradingIntent = z.union([
   CexOrderIntent,
   CexCancelIntent,
+  CexOrderStatusIntent,
   CexGetOpenOrdersIntent,
   CexGetPortfolioIntent,
   OnchainSimulationIntent,

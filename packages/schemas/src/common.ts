@@ -18,6 +18,7 @@ export type HumanApprovalClass = z.infer<typeof HumanApprovalClass>;
 export const CexAction = z.enum([
   "cex.place_order",
   "cex.cancel_order",
+  "cex.get_order_status",
   "cex.get_open_orders",
   "cex.get_portfolio",
 ]);

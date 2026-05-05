@@ -36,6 +36,12 @@ export function validateIntent(intent: TradingIntent, config: BinanceConfig): Va
         };
       }
     }
+  } else if (
+    "symbol" in intent &&
+    !config.allowedSpotSymbols.includes(intent.symbol) &&
+    !config.allowedFuturesSymbols.includes(intent.symbol)
+  ) {
+    return { valid: false, reason: `Symbol ${intent.symbol} is not in the allowlist.` };
   }
 
   return { valid: true };

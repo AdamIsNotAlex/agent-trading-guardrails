@@ -100,6 +100,19 @@ describe("OpenClawAdapter", () => {
     expect(result.correlationId).toBeTruthy();
   });
 
+  it("can query order status", async () => {
+    const adapter = new OpenClawAdapter(makeService(), "agent.openclaw.alpha", "dev");
+    const result = await adapter.executeTool("get_order_status", {
+      exchange: "binance",
+      account: "sub-1",
+      orderId: "12345678",
+      symbol: "ETH-USDC",
+      rationale: "Check order status",
+      evidence: ["check-1"],
+    });
+    expect(result.success).toBe(true);
+  });
+
   it("can query open orders", async () => {
     const adapter = new OpenClawAdapter(makeService(), "agent.openclaw.alpha", "dev");
     const result = await adapter.executeTool("get_open_orders", {
@@ -222,6 +235,19 @@ describe("HermesAgentAdapter", () => {
       to: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
       rationale: "Test simulation",
       evidence: ["snap"],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("can query order status", async () => {
+    const adapter = new HermesAgentAdapter(makeService(), "agent.hermes.beta", "dev");
+    const result = await adapter.executeTool("get_order_status", {
+      exchange: "binance",
+      account: "sub-2",
+      orderId: "12345678",
+      symbol: "BTC-USDT",
+      rationale: "Check order status",
+      evidence: ["check-1"],
     });
     expect(result.success).toBe(true);
   });

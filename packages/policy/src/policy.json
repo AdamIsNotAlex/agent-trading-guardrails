@@ -96,6 +96,16 @@
           }
         },
         {
+          "name": "binance-read-order-status",
+          "effect": "allow",
+          "principal": "*",
+          "action": "cex.get_order_status",
+          "resource": "cex:binance:",
+          "condition": {
+            "requiresHumanApproval": false
+          }
+        },
+        {
           "name": "binance-read-portfolio",
           "effect": "allow",
           "principal": "*",

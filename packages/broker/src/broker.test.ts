@@ -1,6 +1,6 @@
 import { ApprovalStore } from "@guardrails/approval";
 import type { AuditEventType, TradingIntent } from "@guardrails/schemas";
-import { binanceSpotOrder } from "@guardrails/schemas/fixtures";
+import { binanceOrderStatus, binanceSpotOrder } from "@guardrails/schemas/fixtures";
 import { describe, expect, it, vi } from "vitest";
 import { type BrokerConfig, ExecutionBroker, type GuardrailApproval } from "./broker.js";
 import { InMemoryBrokerIdempotencyStore } from "./idempotency-store.js";
@@ -88,6 +88,39 @@ describe("ExecutionBroker", () => {
     expect(result.orderId).toBeTruthy();
     expect(result.revalidationPassed).toBe(true);
     expect(audit.events.some((e) => e.eventType === "broker.executed")).toBe(true);
+  });
+
+  it("returns and audits connector order status", async () => {
+    const orderStatus = {
+      orderId: binanceOrderStatus.orderId,
+      symbol: binanceOrderStatus.symbol,
+      side: "BUY",
+      status: "FILLED",
+      executedQty: 0.002,
+      avgPrice: 3500,
+    };
+    const connector: ExecutionConnector = {
+      async execute() {
+        return { orderId: orderStatus.orderId, orderStatus };
+      },
+      async revalidate() {
+        return { passed: true };
+      },
+    };
+    const audit = makeAudit();
+    const broker = new ExecutionBroker(
+      config,
+      connector,
+      new InMemoryKillSwitch(),
+      audit,
+      makeIdempotency(),
+    );
+
+    const result = await broker.execute(makeApproval(binanceOrderStatus));
+    const execution = audit.events.find((event) => event.eventType === "broker.executed");
+
+    expect(result.orderStatus).toEqual(orderStatus);
+    expect(execution?.data).toMatchObject({ orderStatus });
   });
 
   it("rejects escalated execution when approval is missing", async () => {

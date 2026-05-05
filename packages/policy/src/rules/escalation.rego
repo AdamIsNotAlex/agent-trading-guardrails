@@ -20,6 +20,7 @@ escalation_reasons contains {"rule": "notional_above_auto_threshold", "message":
 }
 
 escalation_reasons contains {"rule": "daily_notional_above_threshold", "message": "Daily notional exceeds automatic execution threshold."} if {
+	input.action == "cex.place_order"
 	input.dailyNotionalUsd
 	limits := data.policy.limits[input.environment]
 	limits.auto_max_daily_notional_usd
@@ -27,6 +28,7 @@ escalation_reasons contains {"rule": "daily_notional_above_threshold", "message"
 }
 
 escalation_reasons contains {"rule": "daily_loss_above_threshold", "message": "Daily loss exceeds automatic execution threshold."} if {
+	input.action == "cex.place_order"
 	input.dailyRealizedLossUsd
 	limits := data.policy.limits[input.environment]
 	limits.auto_max_daily_loss_usd

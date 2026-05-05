@@ -1,6 +1,6 @@
 import type { ExecutionConnector } from "@guardrails/broker";
 import type { TradingIntent } from "@guardrails/schemas";
-import type { BinanceApiClient, BinanceConfig } from "./interfaces.js";
+import type { BinanceApiClient, BinanceConfig, OrderStatusParams } from "./interfaces.js";
 import { BinancePaperSimulator } from "./paper-simulator.js";
 import { rejectMarginModes, validateIntent } from "./validation.js";
 
@@ -20,23 +20,26 @@ export class BinanceConnector implements ExecutionConnector {
     const validation = validateIntent(intent, this.config);
     if (!validation.valid) return { passed: false, reason: validation.reason };
 
-    if (this.mode === "live" && "symbol" in intent) {
+    if (this.mode === "live") {
       if (!this.client) return { passed: false, reason: "Binance API client not configured." };
-      try {
-        const marketData = await this.client.getPrice(intent.symbol);
-        const ageMs = Date.now() - marketData.timestampMs;
-        if (ageMs > 10_000) {
-          return { passed: false, reason: `Market data is ${ageMs}ms old.` };
+
+      if (intent.action === "cex.place_order" && "symbol" in intent) {
+        try {
+          const marketData = await this.client.getPrice(intent.symbol);
+          const ageMs = Date.now() - marketData.timestampMs;
+          if (ageMs > 10_000) {
+            return { passed: false, reason: `Market data is ${ageMs}ms old.` };
+          }
+        } catch {
+          return { passed: false, reason: "Failed to fetch market data for revalidation." };
         }
-      } catch {
-        return { passed: false, reason: "Failed to fetch market data for revalidation." };
       }
     }
 
     return { passed: true };
   }
 
-  async execute(intent: TradingIntent): Promise<{ orderId?: string; transactionHash?: string }> {
+  async execute(intent: TradingIntent): ReturnType<ExecutionConnector["execute"]> {
     if (intent.action === "cex.place_order" && "accountMode" in intent) {
       if (intent.accountMode === "spot") {
         return this.executeSpotOrder(intent);
@@ -48,6 +51,15 @@ export class BinanceConnector implements ExecutionConnector {
 
     if (intent.action === "cex.cancel_order" && "orderId" in intent) {
       return this.executeCancelOrder(intent);
+    }
+
+    if (intent.action === "cex.get_order_status" && "orderId" in intent) {
+      const orderStatus = await this.getOrderStatus({
+        account: "account" in intent ? intent.account : "",
+        symbol: "symbol" in intent ? intent.symbol : "",
+        orderId: intent.orderId,
+      });
+      return { orderId: orderStatus.orderId, orderStatus };
     }
 
     return {};
@@ -143,5 +155,13 @@ export class BinanceConnector implements ExecutionConnector {
     }
     if (!this.client) throw new Error("Binance API client not configured.");
     return this.client.getAccountSnapshot(account);
+  }
+
+  async getOrderStatus(params: OrderStatusParams) {
+    if (this.mode === "paper") {
+      return this.paper.getOrderStatus(params);
+    }
+    if (!this.client) throw new Error("Binance API client not configured.");
+    return this.client.getOrderStatus(params);
   }
 }

@@ -18,6 +18,7 @@ export class OpenClawAdapter {
       { name: "propose_order", description: "Propose a CEX order through guardrails" },
       { name: "cancel_order", description: "Cancel a CEX order through guardrails" },
       { name: "simulate_transaction", description: "Simulate an onchain transaction" },
+      { name: "get_order_status", description: "Query order status (read-only)" },
       { name: "get_open_orders", description: "Query open orders (read-only)" },
       { name: "get_portfolio", description: "Query portfolio (read-only)" },
     ];
@@ -64,6 +65,14 @@ export class OpenClawAdapter {
           to: String(params.to ?? ""),
           data: params.data != null ? String(params.data) : undefined,
           value: params.value != null ? String(params.value) : undefined,
+        });
+      case "get_order_status":
+        return this.tools.queryOrderStatus({
+          ...base,
+          exchange: String(params.exchange ?? "binance"),
+          account: String(params.account ?? ""),
+          orderId: String(params.orderId ?? ""),
+          symbol: String(params.symbol ?? ""),
         });
       case "get_open_orders":
         return this.tools.queryOpenOrders({

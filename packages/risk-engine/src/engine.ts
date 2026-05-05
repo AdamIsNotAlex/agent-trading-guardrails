@@ -44,7 +44,7 @@ export class RiskEngine {
     checks.push(checkReviewerConsistency(intent, reviewerVerdict));
 
     const dailyStats =
-      "account" in intent
+      intent.action === "cex.place_order" && "account" in intent
         ? ((await this.provider.getDailyStats(
             intent.account,
             new Date().toISOString().slice(0, 10),

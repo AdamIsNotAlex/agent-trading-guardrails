@@ -1,6 +1,7 @@
 import {
   binanceCancelOrder,
   binanceFuturesOrder,
+  binanceOrderStatus,
   binanceSpotOrder,
 } from "@guardrails/schemas/fixtures";
 import { describe, expect, it } from "vitest";
@@ -89,6 +90,70 @@ describe("BinanceConnector (paper mode)", () => {
     expect(result.orderId).toBeTruthy();
   });
 
+  it("rejects paper cancel account mismatch", async () => {
+    const connector = new BinanceConnector(config, null, "paper");
+    const placed = await connector.execute(binanceSpotOrder);
+
+    await expect(
+      connector.execute({
+        ...binanceCancelOrder,
+        account: "subaccount-2",
+        orderId: placed.orderId ?? "",
+      }),
+    ).rejects.toThrow("account and symbol");
+  });
+
+  it("gets paper order status", async () => {
+    const connector = new BinanceConnector(config, null, "paper");
+    const placed = await connector.execute(binanceSpotOrder);
+    const result = await connector.getOrderStatus({
+      account: binanceOrderStatus.account,
+      symbol: binanceOrderStatus.symbol,
+      orderId: placed.orderId ?? "",
+    });
+
+    expect(result.orderId).toBe(placed.orderId);
+    expect(result.status).toBe("FILLED");
+  });
+
+  it("rejects paper order status symbol mismatch", async () => {
+    const connector = new BinanceConnector(config, null, "paper");
+    const placed = await connector.execute(binanceSpotOrder);
+
+    await expect(
+      connector.getOrderStatus({
+        account: binanceOrderStatus.account,
+        symbol: "BTC-USDC",
+        orderId: placed.orderId ?? "",
+      }),
+    ).rejects.toThrow("symbol BTC-USDC");
+  });
+
+  it("rejects paper order status account mismatch", async () => {
+    const connector = new BinanceConnector(config, null, "paper");
+    const placed = await connector.execute(binanceSpotOrder);
+
+    await expect(
+      connector.getOrderStatus({
+        account: "subaccount-2",
+        symbol: binanceOrderStatus.symbol,
+        orderId: placed.orderId ?? "",
+      }),
+    ).rejects.toThrow("account subaccount-2");
+  });
+
+  it("executes order status query", async () => {
+    const connector = new BinanceConnector(config, null, "paper");
+    const placed = await connector.execute(binanceSpotOrder);
+    const result = await connector.execute({
+      ...binanceOrderStatus,
+      orderId: placed.orderId ?? "",
+    });
+
+    expect(result.orderId).toBe(placed.orderId);
+    expect(result.orderStatus).toMatchObject({ orderId: placed.orderId, status: "FILLED" });
+  });
+
   it("revalidates successfully in paper mode", async () => {
     const connector = new BinanceConnector(config, null, "paper");
     const result = await connector.revalidate(binanceSpotOrder);
@@ -103,10 +168,57 @@ describe("BinanceConnector (live mode with mock)", () => {
     expect(result.orderId).toBe("live-spot-001");
   });
 
+  it("gets live order status via mock client", async () => {
+    const connector = new BinanceConnector(config, makeMockClient(), "live");
+    const result = await connector.getOrderStatus({
+      account: binanceOrderStatus.account,
+      symbol: binanceOrderStatus.symbol,
+      orderId: binanceOrderStatus.orderId,
+    });
+
+    expect(result).toMatchObject({
+      orderId: binanceOrderStatus.orderId,
+      symbol: binanceOrderStatus.symbol,
+      status: "FILLED",
+    });
+  });
+
+  it("executes order status query via mock client", async () => {
+    const connector = new BinanceConnector(config, makeMockClient(), "live");
+    const result = await connector.execute(binanceOrderStatus);
+
+    expect(result.orderId).toBe(binanceOrderStatus.orderId);
+    expect(result.orderStatus).toMatchObject({
+      orderId: binanceOrderStatus.orderId,
+      status: "FILLED",
+      executedQty: 0.002,
+      avgPrice: 3500,
+    });
+  });
+
   it("revalidates with live market data", async () => {
     const connector = new BinanceConnector(config, makeMockClient(), "live");
     const result = await connector.revalidate(binanceSpotOrder);
     expect(result.passed).toBe(true);
+  });
+
+  it("does not fetch live market data when revalidating order status", async () => {
+    const client: BinanceApiClient = {
+      ...makeMockClient(),
+      async getPrice() {
+        throw new Error("getPrice should not be called");
+      },
+    };
+    const connector = new BinanceConnector(config, client, "live");
+    const result = await connector.revalidate(binanceOrderStatus);
+    expect(result.passed).toBe(true);
+  });
+
+  it("fails order status revalidation when client is missing in live mode", async () => {
+    const connector = new BinanceConnector(config, null, "live");
+    const result = await connector.revalidate(binanceOrderStatus);
+    expect(result.passed).toBe(false);
+    expect(result.reason).toContain("not configured");
   });
 
   it("fails revalidation when client is missing in live mode", async () => {
@@ -130,6 +242,20 @@ describe("BinanceConnector validation", () => {
     const connector = new BinanceConnector(config, null, "paper");
     const intent = { ...binanceSpotOrder, symbol: "DOGE-USDT" };
     const result = await connector.revalidate(intent);
+    expect(result.passed).toBe(false);
+    expect(result.reason).toContain("allowlist");
+  });
+
+  it("rejects disallowed order status symbol", async () => {
+    const connector = new BinanceConnector(config, null, "paper");
+    const result = await connector.revalidate({ ...binanceOrderStatus, symbol: "DOGE-USDT" });
+    expect(result.passed).toBe(false);
+    expect(result.reason).toContain("allowlist");
+  });
+
+  it("rejects disallowed cancel symbol", async () => {
+    const connector = new BinanceConnector(config, null, "paper");
+    const result = await connector.revalidate({ ...binanceCancelOrder, symbol: "DOGE-USDT" });
     expect(result.passed).toBe(false);
     expect(result.reason).toContain("allowlist");
   });

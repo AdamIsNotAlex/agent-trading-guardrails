@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   binanceCancelOrder,
   binanceFuturesOrder,
+  binanceOrderStatus,
   binanceSpotOrder,
   ethereumSepoliaSigning,
   ethereumSepoliaSimulation,
@@ -14,6 +15,7 @@ import {
   CexGetOpenOrdersIntent,
   CexGetPortfolioIntent,
   CexOrderIntent,
+  CexOrderStatusIntent,
   DynamicRiskResult,
   OnchainQueryIntent,
   OnchainSigningIntent,
@@ -75,6 +77,16 @@ describe("CexCancelIntent", () => {
 
   it("rejects unknown fields", () => {
     expect(() => CexCancelIntent.parse({ ...binanceCancelOrder, extra: true })).toThrow();
+  });
+});
+
+describe("CexOrderStatusIntent", () => {
+  it("accepts valid order status query", () => {
+    expect(CexOrderStatusIntent.parse(binanceOrderStatus)).toEqual(binanceOrderStatus);
+  });
+
+  it("rejects unknown fields", () => {
+    expect(() => CexOrderStatusIntent.parse({ ...binanceOrderStatus, extra: true })).toThrow();
   });
 });
 
@@ -179,6 +191,11 @@ describe("TradingIntent (union)", () => {
   it("parses cancel order via union", () => {
     const result = TradingIntent.parse(binanceCancelOrder);
     expect(result.action).toBe("cex.cancel_order");
+  });
+
+  it("parses order status via union", () => {
+    const result = TradingIntent.parse(binanceOrderStatus);
+    expect(result.action).toBe("cex.get_order_status");
   });
 
   it("parses get_open_orders via union", () => {
@@ -531,6 +548,26 @@ describe("BrokerExecutionResult", () => {
       idempotencyKey: "spot-order-001",
       status: "executed" as const,
       orderId: "87654321",
+      revalidationPassed: true,
+      executedAt: "2026-05-04T12:00:04.000Z",
+    };
+    expect(BrokerExecutionResult.parse(result)).toEqual(result);
+  });
+
+  it("accepts execution result with order status details", () => {
+    const result = {
+      intentId: "550e8400-e29b-41d4-a716-446655440001",
+      idempotencyKey: "order-status-001",
+      status: "executed" as const,
+      orderId: "87654321",
+      orderStatus: {
+        orderId: "87654321",
+        symbol: "ETH-USDC",
+        side: "BUY",
+        status: "FILLED",
+        executedQty: 0.002,
+        avgPrice: 3500,
+      },
       revalidationPassed: true,
       executedAt: "2026-05-04T12:00:04.000Z",
     };

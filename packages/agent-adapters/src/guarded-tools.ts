@@ -84,6 +84,27 @@ export class GuardedToolSurface {
     return this.toResult(await this.guardrail.evaluate(intent));
   }
 
+  async queryOrderStatus(params: {
+    principal: string;
+    exchange: string;
+    account: string;
+    orderId: string;
+    symbol: string;
+    rationale: string;
+    evidence: string[];
+    environment: string;
+    idempotencyKey: string;
+  }): Promise<GuardedToolResult> {
+    const intent = {
+      intentId: crypto.randomUUID(),
+      action: "cex.get_order_status" as const,
+      resource: `cex:${params.exchange}:${params.account}:${params.symbol}`,
+      requestedAt: new Date().toISOString(),
+      ...params,
+    };
+    return this.toResult(await this.guardrail.evaluate(intent));
+  }
+
   async queryOpenOrders(params: {
     principal: string;
     exchange: string;

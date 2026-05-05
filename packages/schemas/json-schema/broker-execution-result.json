@@ -22,6 +22,37 @@
         "transactionHash": {
           "type": "string"
         },
+        "orderStatus": {
+          "type": "object",
+          "properties": {
+            "orderId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "symbol": {
+              "type": "string",
+              "minLength": 1
+            },
+            "side": {
+              "type": "string",
+              "minLength": 1
+            },
+            "status": {
+              "type": "string",
+              "minLength": 1
+            },
+            "executedQty": {
+              "type": "number",
+              "minimum": 0
+            },
+            "avgPrice": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          "required": ["orderId", "symbol", "side", "status", "executedQty", "avgPrice"],
+          "additionalProperties": false
+        },
         "revalidationPassed": {
           "type": "boolean"
         },

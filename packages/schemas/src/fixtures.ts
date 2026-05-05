@@ -1,6 +1,7 @@
 import type {
   CexCancelIntent,
   CexOrderIntent,
+  CexOrderStatusIntent,
   OnchainSigningIntent,
   OnchainSimulationIntent,
 } from "./intent.js";
@@ -62,6 +63,22 @@ export const binanceCancelOrder: CexCancelIntent = {
   idempotencyKey: "cancel-order-001",
   rationale: "Cancelling stale order after timeout.",
   evidence: ["order_status_ghi012"],
+  exchange: "binance",
+  account: "subaccount-1",
+  orderId: "12345678",
+  symbol: "ETH-USDC",
+};
+
+export const binanceOrderStatus: CexOrderStatusIntent = {
+  intentId: "550e8400-e29b-41d4-a716-446655440008",
+  principal: "agent.openclaw.strategy-alpha",
+  action: "cex.get_order_status",
+  resource: "cex:binance:subaccount-1:ETH-USDC",
+  environment: "canary_live",
+  requestedAt: now,
+  idempotencyKey: "order-status-001",
+  rationale: "Checking whether the submitted order filled.",
+  evidence: ["order_submission_abc123"],
   exchange: "binance",
   account: "subaccount-1",
   orderId: "12345678",

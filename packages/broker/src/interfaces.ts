@@ -5,8 +5,21 @@ import type {
   TradingIntent,
 } from "@guardrails/schemas";
 
+export interface ConnectorOrderStatus {
+  orderId: string;
+  symbol: string;
+  side: string;
+  status: string;
+  executedQty: number;
+  avgPrice: number;
+}
+
 export interface ExecutionConnector {
-  execute(intent: TradingIntent): Promise<{ orderId?: string; transactionHash?: string }>;
+  execute(intent: TradingIntent): Promise<{
+    orderId?: string;
+    transactionHash?: string;
+    orderStatus?: ConnectorOrderStatus;
+  }>;
   revalidate(intent: TradingIntent): Promise<{ passed: boolean; reason?: string }>;
 }
 

@@ -228,7 +228,7 @@ export class ExecutionBroker {
         );
       }
 
-      let executionResult: { orderId?: string; transactionHash?: string };
+      let executionResult: Awaited<ReturnType<ExecutionConnector["execute"]>>;
       try {
         executionResult = await this.connector.execute(intent);
       } catch (err) {
@@ -258,6 +258,7 @@ export class ExecutionBroker {
         status: "executed",
         orderId: executionResult.orderId,
         transactionHash: executionResult.transactionHash,
+        orderStatus: executionResult.orderStatus,
         revalidationPassed: true,
         executedAt: now,
       };
@@ -273,6 +274,7 @@ export class ExecutionBroker {
         data: {
           orderId: executionResult.orderId,
           transactionHash: executionResult.transactionHash,
+          orderStatus: executionResult.orderStatus,
         },
       });
 

@@ -3,11 +3,13 @@ import type {
   BinanceOrderResult,
   CancelOrderParams,
   FuturesOrderParams,
+  OrderStatusParams,
   SpotOrderParams,
 } from "./interfaces.js";
 
 export class BinancePaperSimulator {
   private orders = new Map<string, BinanceOrderResult>();
+  private orderAccounts = new Map<string, string>();
 
   placeSpotOrder(params: SpotOrderParams): BinanceOrderResult {
     const orderId = `paper-spot-${randomUUID().slice(0, 8)}`;
@@ -20,6 +22,7 @@ export class BinancePaperSimulator {
       avgPrice: params.price ?? 0,
     };
     this.orders.set(orderId, result);
+    this.orderAccounts.set(orderId, params.account);
     return result;
   }
 
@@ -34,12 +37,19 @@ export class BinancePaperSimulator {
       avgPrice: params.price ?? 0,
     };
     this.orders.set(orderId, result);
+    this.orderAccounts.set(orderId, params.account);
     return result;
   }
 
   cancelOrder(params: CancelOrderParams): BinanceOrderResult {
     const existing = this.orders.get(params.orderId);
     if (existing) {
+      if (
+        this.orderAccounts.get(params.orderId) !== params.account ||
+        existing.symbol !== params.symbol
+      ) {
+        throw new Error(`Order ${params.orderId} was not found for account and symbol.`);
+      }
       existing.status = "CANCELED";
       return existing;
     }
@@ -53,7 +63,17 @@ export class BinancePaperSimulator {
     };
   }
 
-  getOrderStatus(orderId: string): BinanceOrderResult | undefined {
-    return this.orders.get(orderId);
+  getOrderStatus(params: OrderStatusParams): BinanceOrderResult {
+    const existing = this.orders.get(params.orderId);
+    if (!existing) {
+      throw new Error(`Order ${params.orderId} was not found.`);
+    }
+    if (this.orderAccounts.get(params.orderId) !== params.account) {
+      throw new Error(`Order ${params.orderId} was not found for account ${params.account}.`);
+    }
+    if (existing.symbol !== params.symbol) {
+      throw new Error(`Order ${params.orderId} was not found for symbol ${params.symbol}.`);
+    }
+    return existing;
   }
 }

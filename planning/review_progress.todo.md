@@ -165,10 +165,10 @@ No concrete `OpenAiLlmProvider` HTTP client exists. `ReviewerAdapter` accepts a 
 
 `BinanceApiClient.getOrderStatus()` and `BinancePaperSimulator.getOrderStatus()` exist but the connector never exposes or calls them.
 
-- [ ] Add `getOrderStatus(params: OrderStatusParams): Promise<BinanceOrderResult>` as a public method on `BinanceConnector` in `packages/binance-connector/src/connector.ts`.
-- [ ] Dispatch to `this.client.getOrderStatus(params)`.
-- [ ] Add a `cex.get_order_status` action case in the connector's `execute()` method.
-- [ ] Add test for order status retrieval in `packages/binance-connector/src/connector.test.ts`.
+- [x] Add `getOrderStatus(params: OrderStatusParams): Promise<BinanceOrderResult>` as a public method on `BinanceConnector` in `packages/binance-connector/src/connector.ts`.
+- [x] Dispatch to `this.client.getOrderStatus(params)`.
+- [x] Add a `cex.get_order_status` action case in the connector's `execute()` method.
+- [x] Add test for order status retrieval in `packages/binance-connector/src/connector.test.ts`.
 
 ### P1.9 — Add `reviewerRiskLevel` check to auto-execution policy (Phase 4)
 

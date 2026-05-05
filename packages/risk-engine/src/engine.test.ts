@@ -1,5 +1,5 @@
 import type { ReviewerVerdictSchema } from "@guardrails/schemas";
-import { binanceSpotOrder } from "@guardrails/schemas/fixtures";
+import { binanceOrderStatus, binanceSpotOrder } from "@guardrails/schemas/fixtures";
 import { describe, expect, it } from "vitest";
 import type { RiskLimits } from "./config.js";
 import { RiskEngine } from "./engine.js";
@@ -115,6 +115,31 @@ describe("RiskEngine", () => {
     expect(result.passed).toBe(false);
     const check = result.checks.find((c) => c.check === "market_data_freshness");
     expect(check?.status).toBe("unavailable");
+  });
+
+  it("does not require trading risk state for order status queries", async () => {
+    const engine = new RiskEngine(
+      makeProvider({
+        marketData: null,
+        portfolio: null,
+        dailyStats: null,
+        lastOrderTs: nowMs - 1000,
+      }),
+      limits,
+    );
+    const result = await engine.evaluate(
+      binanceOrderStatus,
+      makeVerdict({
+        intentId: binanceOrderStatus.intentId,
+      }),
+    );
+
+    expect(result.passed).toBe(true);
+    expect(result.dailyStats).toBeUndefined();
+    expect(result.checks.find((c) => c.check === "market_data_freshness")?.status).toBe("pass");
+    expect(result.checks.find((c) => c.check === "portfolio_freshness")?.status).toBe("pass");
+    expect(result.checks.find((c) => c.check === "daily_loss")?.status).toBe("pass");
+    expect(result.checks.find((c) => c.check === "order_frequency")?.status).toBe("pass");
   });
 
   it("fails on stale portfolio data", async () => {

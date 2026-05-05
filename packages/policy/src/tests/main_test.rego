@@ -275,6 +275,26 @@ test_cancel_order_allowed if {
 	guardrail.decision == "allow" with input as inp
 }
 
+# Order status query is allowed
+test_order_status_allowed if {
+	inp := object.union(base_input, {
+		"action": "cex.get_order_status",
+		"resource": "cex:binance:subaccount-1:ETH-USDC",
+	})
+	guardrail.decision == "allow" with input as inp
+}
+
+# Order status query ignores daily trading thresholds
+test_order_status_ignores_daily_thresholds if {
+	inp := object.union(base_input, {
+		"action": "cex.get_order_status",
+		"resource": "cex:binance:subaccount-1:ETH-USDC",
+		"dailyNotionalUsd": 100,
+		"dailyRealizedLossUsd": 50,
+	})
+	guardrail.decision == "allow" with input as inp
+}
+
 test_human_approval_rule_for_other_agent_does_not_escalate if {
 	rules := array.concat(data.policy.allowlists.rules, [{
 		"name": "agent-specific-human-approval",
