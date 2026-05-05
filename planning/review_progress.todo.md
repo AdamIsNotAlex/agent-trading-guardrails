@@ -290,10 +290,10 @@ DNS-level logging is completely absent. HTTP access logs write to ephemeral tmpf
 
 Per-account and per-chain kill switches have code but zero test coverage.
 
-- [ ] Add test in `packages/broker/src/broker.test.ts`: activate per-account kill switch → broker rejects execution for that account.
-- [ ] Add test: activate per-chain kill switch → broker rejects execution for that chain.
-- [ ] Add test: per-account kill switch does NOT block a different account.
-- [ ] Add test: per-chain kill switch does NOT block a different chain.
+- [x] Add test in `packages/broker/src/broker.test.ts`: activate per-account kill switch → broker rejects execution for that account.
+- [x] Add test: activate per-chain kill switch → broker rejects execution for that chain.
+- [x] Add test: per-account kill switch does NOT block a different account.
+- [x] Add test: per-chain kill switch does NOT block a different chain.
 
 ### P2.10 — Emit `killswitch.activated` audit event (Phase 6)
 

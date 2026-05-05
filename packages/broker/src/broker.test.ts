@@ -1,6 +1,11 @@
 import { ApprovalStore } from "@guardrails/approval";
 import type { AuditEventType, TradingIntent } from "@guardrails/schemas";
-import { binanceOrderStatus, binanceSpotOrder } from "@guardrails/schemas/fixtures";
+import {
+  binanceOrderStatus,
+  binanceSpotOrder,
+  ethereumSepoliaSimulation,
+  solanaDevnetSimulation,
+} from "@guardrails/schemas/fixtures";
 import { describe, expect, it, vi } from "vitest";
 import { type BrokerConfig, ExecutionBroker, type GuardrailApproval } from "./broker.js";
 import { InMemoryBrokerIdempotencyStore } from "./idempotency-store.js";
@@ -486,6 +491,84 @@ describe("ExecutionBroker", () => {
     );
     const result = await broker.execute(makeApproval());
     expect(result.status).toBe("rejected");
+  });
+
+  it("rejects when kill switch is active (per-account)", async () => {
+    const ks = new InMemoryKillSwitch();
+    ks.activate({ type: "account", account: binanceSpotOrder.account });
+    const broker = new ExecutionBroker(
+      config,
+      new PaperExecutionConnector(),
+      ks,
+      makeAudit(),
+      makeIdempotency(),
+    );
+
+    const result = await broker.execute(makeApproval());
+
+    expect(result.status).toBe("rejected");
+    expect(result.rejectionReason).toContain("Kill switch");
+  });
+
+  it("does not reject a different account when per-account kill switch is active", async () => {
+    const ks = new InMemoryKillSwitch();
+    ks.activate({ type: "account", account: binanceSpotOrder.account });
+    const broker = new ExecutionBroker(
+      config,
+      new PaperExecutionConnector(),
+      ks,
+      makeAudit(),
+      makeIdempotency(),
+    );
+    const otherAccountIntent: TradingIntent = {
+      ...binanceSpotOrder,
+      intentId: "550e8400-e29b-41d4-a716-446655440009",
+      account: "subaccount-2",
+      resource: "cex:binance:subaccount-2:ETH-USDC",
+      idempotencyKey: "spot-order-other-account",
+    };
+
+    const result = await broker.execute(makeApproval(otherAccountIntent));
+
+    expect(result.status).toBe("executed");
+  });
+
+  it("rejects when kill switch is active (per-chain)", async () => {
+    const ks = new InMemoryKillSwitch();
+    ks.activate({ type: "chain", chain: solanaDevnetSimulation.chain });
+    const broker = new ExecutionBroker(
+      config,
+      new PaperExecutionConnector(),
+      ks,
+      makeAudit(),
+      makeIdempotency(),
+    );
+
+    const result = await broker.execute(makeApproval(solanaDevnetSimulation));
+
+    expect(result.status).toBe("rejected");
+    expect(result.rejectionReason).toContain("Kill switch");
+  });
+
+  it("does not reject a different chain when per-chain kill switch is active", async () => {
+    const ks = new InMemoryKillSwitch();
+    ks.activate({ type: "chain", chain: solanaDevnetSimulation.chain });
+    const broker = new ExecutionBroker(
+      config,
+      new PaperExecutionConnector(),
+      ks,
+      makeAudit(),
+      makeIdempotency(),
+    );
+    const ethereumIntent: TradingIntent = {
+      ...ethereumSepoliaSimulation,
+      intentId: "550e8400-e29b-41d4-a716-446655440010",
+      idempotencyKey: "sim-eth-other-chain",
+    };
+
+    const result = await broker.execute(makeApproval(ethereumIntent));
+
+    expect(result.status).toBe("executed");
   });
 
   it("rejects when canary_live is not enabled", async () => {
