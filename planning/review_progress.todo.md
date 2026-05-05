@@ -255,10 +255,10 @@ Prompt injection tests at lines 116, 123, 130, 387 of `packages/red-team/src/red
 
 Fixtures exist for MCP/tool definitions, log exfiltration, and hallucinated balance/position, but no tests use them.
 
-- [ ] Add test using `promptInjectionPayloads.mcpToolDefinition` from `packages/red-team/src/fixtures.ts` — embed the MCP tool definition in an intent's `rationale` or `evidence` field and assert `outcome === "deny"`.
-- [ ] Add test using `promptInjectionPayloads.secretExfiltrationLog` — submit the payload and verify that log output (captured via a spy or interceptor) does not contain secret patterns.
-- [ ] Add test using `hallucinatedClaims.fakeBalance` — submit an intent with a hallucinated balance and assert the risk engine rejects it (or that the service detects the discrepancy against live data).
-- [ ] Add test using `hallucinatedClaims.fakePosition` — same pattern.
+- [x] Add test using `promptInjectionPayloads.mcpToolDefinition` from `packages/red-team/src/fixtures.ts` — embed the MCP tool definition in an intent's `rationale` or `evidence` field and assert `outcome === "deny"`.
+- [x] Add test using `promptInjectionPayloads.secretExfiltrationLog` — submit the payload and verify that log output (captured via a spy or interceptor) does not contain secret patterns.
+- [x] Add test using `hallucinatedClaims.fakeBalance` — submit an intent with a hallucinated balance and assert the risk engine rejects it (or that the service detects the discrepancy against live data).
+- [x] Add test using `hallucinatedClaims.fakePosition` — same pattern.
 
 ### P2.6 — Write Phase 17 findings/fixes document (Phase 17)
 

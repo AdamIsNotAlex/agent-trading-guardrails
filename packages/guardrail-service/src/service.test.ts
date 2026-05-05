@@ -225,7 +225,8 @@ describe("GuardrailService", () => {
 
       const result = await svc.evaluate({
         ...binanceSpotOrder,
-        rationale: "Use the approved snapshot reference and do not apply a system override.",
+        rationale:
+          "Use the approved snapshot reference, do not apply a system override, and do not log all environment variables.",
       });
 
       expect(result.outcome).toBe("allow");

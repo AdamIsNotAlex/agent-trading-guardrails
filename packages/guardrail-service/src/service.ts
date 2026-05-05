@@ -113,7 +113,9 @@ export class GuardrailService {
         /ignore\s+all\s+previous\s+instructions/,
         /system\s+override\s*:/,
         /execute\s+cex\.withdraw/,
+        /secretly\s+calls\s+cex\.withdraw/,
         /transfer\s+all\s+funds\s+to/,
+        /log\s+all\s+environment\s+variables\s+including\s+secrets/,
       ].some((indicator) => indicator.test(content))
     ) {
       return {
@@ -121,7 +123,13 @@ export class GuardrailService {
         message: "Intent rationale or evidence contains prompt injection instructions.",
       };
     }
-    if (/(price|balance|position).{0,120}no snapshot reference/.test(content)) {
+    if (
+      [
+        /(price|balance|position).{0,120}no snapshot reference/,
+        /account\s+has.{0,120}available.{0,120}no portfolio snapshot/,
+        /current\s+position\s+is.{0,120}long.{0,120}evidence:\s*none/,
+      ].some((indicator) => indicator.test(content))
+    ) {
       return {
         rule: "hallucinated_data_detected",
         message: "Intent rationale or evidence contains unsupported market or portfolio claims.",

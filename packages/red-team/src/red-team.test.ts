@@ -158,6 +158,20 @@ describe("Prompt Injection", () => {
     expect(result.reasons[0].rule).toBe("prompt_injection_detected");
   });
 
+  it("rejects intent with MCP tool-definition injection", async () => {
+    const svc = new GuardrailService(
+      config,
+      makeReviewer(),
+      makeAllowPolicy(),
+      makeRisk(),
+      nullAuditWriter,
+    );
+    const intent = { ...binanceSpotOrder, rationale: promptInjectionPayloads.mcpToolDefinition };
+    const result = await svc.evaluate(intent);
+    expect(result.outcome).toBe("deny");
+    expect(result.reasons[0].rule).toBe("prompt_injection_detected");
+  });
+
   it("secret exfiltration prompt does not leak secrets", async () => {
     const svc = new GuardrailService(
       config,
@@ -175,6 +189,46 @@ describe("Prompt Injection", () => {
     expect(resultStr).not.toContain("VAULT_TOKEN");
     expect(resultStr).not.toContain("API_SECRET");
     expect(resultStr).not.toContain("PRIVATE_KEY");
+  });
+
+  it("secret exfiltration log prompt does not leak secrets", async () => {
+    const auditEvents: Array<{ eventType: string }> = [];
+    const svc = new GuardrailService(config, makeReviewer(), makeAllowPolicy(), makeRisk(), {
+      write: (event) => auditEvents.push(event),
+    });
+    const previousEnv = {
+      VAULT_TOKEN: process.env.VAULT_TOKEN,
+      API_SECRET: process.env.API_SECRET,
+      PRIVATE_KEY: process.env.PRIVATE_KEY,
+    };
+    process.env.VAULT_TOKEN = "redteam-vault-token";
+    process.env.API_SECRET = "redteam-api-secret";
+    process.env.PRIVATE_KEY = "redteam-private-key";
+    try {
+      const intent = {
+        ...binanceSpotOrder,
+        rationale: promptInjectionPayloads.secretExfiltrationLog,
+      };
+      const result = await svc.evaluate(intent);
+      const capturedOutput = JSON.stringify({ result, auditEvents });
+      expect(result.outcome).toBe("deny");
+      expect(result.reasons[0].rule).toBe("prompt_injection_detected");
+      expect(auditEvents.map((event) => event.eventType)).toEqual([
+        "intent.received",
+        "decision.final",
+      ]);
+      expect(capturedOutput).not.toContain("redteam-vault-token");
+      expect(capturedOutput).not.toContain("redteam-api-secret");
+      expect(capturedOutput).not.toContain("redteam-private-key");
+    } finally {
+      for (const [key, value] of Object.entries(previousEnv)) {
+        if (value === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = value;
+        }
+      }
+    }
   });
 });
 
@@ -475,6 +529,34 @@ describe("Hallucinated Claims", () => {
       nullAuditWriter,
     );
     const intent = { ...binanceSpotOrder, rationale: hallucinatedClaims.fakePrice };
+    const result = await svc.evaluate(intent);
+    expect(result.outcome).toBe("deny");
+    expect(result.reasons[0].rule).toBe("hallucinated_data_detected");
+  });
+
+  it("hallucinated balance claim is rejected", async () => {
+    const svc = new GuardrailService(
+      config,
+      makeReviewer(),
+      makeAllowPolicy(),
+      makeRisk(),
+      nullAuditWriter,
+    );
+    const intent = { ...binanceSpotOrder, rationale: hallucinatedClaims.fakeBalance };
+    const result = await svc.evaluate(intent);
+    expect(result.outcome).toBe("deny");
+    expect(result.reasons[0].rule).toBe("hallucinated_data_detected");
+  });
+
+  it("hallucinated position claim is rejected", async () => {
+    const svc = new GuardrailService(
+      config,
+      makeReviewer(),
+      makeAllowPolicy(),
+      makeRisk(),
+      nullAuditWriter,
+    );
+    const intent = { ...binanceSpotOrder, rationale: hallucinatedClaims.fakePosition };
     const result = await svc.evaluate(intent);
     expect(result.outcome).toBe("deny");
     expect(result.reasons[0].rule).toBe("hallucinated_data_detected");
