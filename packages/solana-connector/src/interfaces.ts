@@ -16,6 +16,7 @@ export interface SolanaSimulationResult {
   success: boolean;
   logs: string[];
   balanceChanges: Array<{ account: string; asset: string; delta: string }>;
+  balanceChangesReliable: boolean;
   error: string | null;
 }
 

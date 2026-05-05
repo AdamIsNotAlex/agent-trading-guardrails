@@ -1,3 +1,9 @@
+export {
+  type BalanceDeltaComparison,
+  type BalanceDeltaMismatch,
+  compareSolanaBalanceDeltas,
+  type ExpectedSolanaBalanceDelta,
+} from "./balance-delta.js";
 export { SolanaConnector } from "./connector.js";
 export { LocalDevSolanaSigner } from "./dev-signer.js";
 export type { DevnetSolanaRpcProviderConfig } from "./devnet-provider.js";

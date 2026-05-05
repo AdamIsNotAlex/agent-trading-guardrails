@@ -3,7 +3,7 @@ import { solanaDevnetSimulation } from "@guardrails/schemas/fixtures";
 import { describe, expect, it, vi } from "vitest";
 import { SolanaConnector } from "./connector.js";
 import { LocalDevSolanaSigner } from "./dev-signer.js";
-import type { SolanaConfig, SolanaRpcProvider } from "./interfaces.js";
+import type { SolanaConfig, SolanaRpcProvider, SolanaSimulationResult } from "./interfaces.js";
 import { hasAuthorityChange, parseInstructions } from "./parser.js";
 
 const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
@@ -25,11 +25,21 @@ const signingIntent: OnchainSigningIntent = {
   idempotencyKey: "sign-sol-001",
 };
 
-function makeMockProvider(opts?: { simulationSuccess?: boolean }): SolanaRpcProvider {
+function makeMockProvider(opts?: {
+  simulationSuccess?: boolean;
+  balanceChanges?: SolanaSimulationResult["balanceChanges"];
+  balanceChangesReliable?: boolean;
+}): SolanaRpcProvider {
   return {
     async simulateTransaction() {
       const success = opts?.simulationSuccess ?? true;
-      return { success, logs: [], balanceChanges: [], error: success ? null : "simulation error" };
+      return {
+        success,
+        logs: [],
+        balanceChanges: opts?.balanceChanges ?? [],
+        balanceChangesReliable: opts?.balanceChangesReliable ?? true,
+        error: success ? null : "simulation error",
+      };
     },
     async getBalance() {
       return 1_000_000_000;
@@ -98,6 +108,41 @@ describe("SolanaConnector execution", () => {
     expect(result.transactionHash).toBeUndefined();
   });
 
+  it("throws when simulate-transaction expected deltas use the wrong shape", async () => {
+    const connector = new SolanaConnector(config, makeMockProvider(), null);
+    const intent = {
+      ...solanaDevnetSimulation,
+      expectedDeltas: [
+        {
+          address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          asset: "SOL",
+          minDelta: "0",
+          maxDelta: "0",
+        },
+      ],
+    };
+
+    await expect(connector.execute(intent as never)).rejects.toThrow("account-based");
+  });
+
+  it("throws when simulated balance deltas are outside the expected range", async () => {
+    const connector = new SolanaConnector(
+      config,
+      makeMockProvider({
+        balanceChanges: [{ account: config.allowedAccounts[0], asset: "SOL", delta: "-100" }],
+      }),
+      null,
+    );
+    const intent = {
+      ...solanaDevnetSimulation,
+      expectedDeltas: [
+        { account: config.allowedAccounts[0], asset: "SOL", minDelta: "-50", maxDelta: "0" },
+      ],
+    };
+
+    await expect(connector.execute(intent as never)).rejects.toThrow("Balance delta check failed");
+  });
+
   it("throws on failed simulation", async () => {
     const connector = new SolanaConnector(
       config,
@@ -111,7 +156,13 @@ describe("SolanaConnector execution", () => {
     const calls: string[] = [];
     const simulateTransaction = vi.fn(async () => {
       calls.push("simulate");
-      return { success: true, logs: [], balanceChanges: [], error: null };
+      return {
+        success: true,
+        logs: [],
+        balanceChanges: [],
+        balanceChangesReliable: true,
+        error: null,
+      };
     });
     const provider: SolanaRpcProvider = {
       simulateTransaction,
@@ -150,6 +201,135 @@ describe("SolanaConnector execution", () => {
     );
 
     await expect(connector.execute(signingIntent)).rejects.toThrow("Simulation failed");
+    expect(signAndBroadcast).not.toHaveBeenCalled();
+  });
+
+  it("signs when request-signature balance deltas are within range", async () => {
+    const signer = new LocalDevSolanaSigner("devnet-pubkey-test", config);
+    const signAndBroadcast = vi
+      .spyOn(signer, "signAndBroadcast")
+      .mockResolvedValue("solana-tx-test");
+    const connector = new SolanaConnector(
+      config,
+      makeMockProvider({
+        balanceChanges: [{ account: config.allowedAccounts[0], asset: "SOL", delta: "-100" }],
+      }),
+      signer,
+    );
+    const intent = {
+      ...signingIntent,
+      expectedDeltas: [
+        { account: config.allowedAccounts[0], asset: "SOL", minDelta: "-101", maxDelta: "-99" },
+      ],
+    };
+
+    const result = await connector.execute(intent as never);
+
+    expect(result.transactionHash).toBe("solana-tx-test");
+    expect(signAndBroadcast).toHaveBeenCalledOnce();
+  });
+
+  it("does not sign when request-signature expected deltas are not an array", async () => {
+    const signer = new LocalDevSolanaSigner("devnet-pubkey-test", config);
+    const signAndBroadcast = vi.spyOn(signer, "signAndBroadcast");
+    const connector = new SolanaConnector(config, makeMockProvider(), signer);
+    const intent = { ...signingIntent, expectedDeltas: "invalid" };
+
+    await expect(connector.execute(intent as never)).rejects.toThrow("must be an array");
+    expect(signAndBroadcast).not.toHaveBeenCalled();
+  });
+
+  it("does not sign when request-signature expected deltas use hybrid shapes", async () => {
+    const signer = new LocalDevSolanaSigner("devnet-pubkey-test", config);
+    const signAndBroadcast = vi.spyOn(signer, "signAndBroadcast");
+    const connector = new SolanaConnector(config, makeMockProvider(), signer);
+    const intent = {
+      ...signingIntent,
+      expectedDeltas: [
+        {
+          address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          account: config.allowedAccounts[0],
+          asset: "SOL",
+          minDelta: "0",
+          maxDelta: "0",
+        },
+      ],
+    };
+
+    await expect(connector.execute(intent as never)).rejects.toThrow(
+      "account-based integer entries",
+    );
+    expect(signAndBroadcast).not.toHaveBeenCalled();
+  });
+
+  it("does not sign when request-signature expected deltas use the wrong shape", async () => {
+    const signer = new LocalDevSolanaSigner("devnet-pubkey-test", config);
+    const signAndBroadcast = vi.spyOn(signer, "signAndBroadcast");
+    const connector = new SolanaConnector(config, makeMockProvider(), signer);
+    const intent = {
+      ...signingIntent,
+      expectedDeltas: [
+        {
+          address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          asset: "SOL",
+          minDelta: "0",
+          maxDelta: "0",
+        },
+      ],
+    };
+
+    await expect(connector.execute(intent as never)).rejects.toThrow("account-based");
+    expect(signAndBroadcast).not.toHaveBeenCalled();
+  });
+
+  it("does not sign when request-signature balance deltas are outside the expected range", async () => {
+    const signer = new LocalDevSolanaSigner("devnet-pubkey-test", config);
+    const signAndBroadcast = vi.spyOn(signer, "signAndBroadcast");
+    const connector = new SolanaConnector(
+      config,
+      makeMockProvider({
+        balanceChanges: [{ account: config.allowedAccounts[0], asset: "SOL", delta: "-100" }],
+      }),
+      signer,
+    );
+    const intent = {
+      ...signingIntent,
+      expectedDeltas: [
+        { account: config.allowedAccounts[0], asset: "SOL", minDelta: "-50", maxDelta: "0" },
+      ],
+    };
+
+    await expect(connector.execute(intent as never)).rejects.toThrow("Balance delta check failed");
+    expect(signAndBroadcast).not.toHaveBeenCalled();
+  });
+
+  it("does not sign when request-signature expects no balance changes", async () => {
+    const signer = new LocalDevSolanaSigner("devnet-pubkey-test", config);
+    const signAndBroadcast = vi.spyOn(signer, "signAndBroadcast");
+    const connector = new SolanaConnector(
+      config,
+      makeMockProvider({
+        balanceChanges: [{ account: config.allowedAccounts[0], asset: "SOL", delta: "-100" }],
+      }),
+      signer,
+    );
+    const intent = { ...signingIntent, expectedDeltas: [] };
+
+    await expect(connector.execute(intent as never)).rejects.toThrow("Balance delta check failed");
+    expect(signAndBroadcast).not.toHaveBeenCalled();
+  });
+
+  it("does not sign when request-signature provider cannot verify balance deltas", async () => {
+    const signer = new LocalDevSolanaSigner("devnet-pubkey-test", config);
+    const signAndBroadcast = vi.spyOn(signer, "signAndBroadcast");
+    const connector = new SolanaConnector(
+      config,
+      makeMockProvider({ balanceChangesReliable: false }),
+      signer,
+    );
+    const intent = { ...signingIntent, expectedDeltas: [] };
+
+    await expect(connector.execute(intent as never)).rejects.toThrow("reliable balance changes");
     expect(signAndBroadcast).not.toHaveBeenCalled();
   });
 

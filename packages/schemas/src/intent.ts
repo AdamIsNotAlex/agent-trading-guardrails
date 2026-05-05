@@ -71,21 +71,58 @@ export const OnchainQueryIntent = IntentEnvelope.extend({
 }).strict();
 export type OnchainQueryIntent = z.infer<typeof OnchainQueryIntent>;
 
-export const OnchainSimulationIntent = IntentEnvelope.extend({
+const IntegerDelta = z.string().regex(/^-?\d+$/);
+
+export const EvmExpectedBalanceDelta = z
+  .object({
+    address: z.string().min(1),
+    asset: z.string().min(1),
+    minDelta: IntegerDelta,
+    maxDelta: IntegerDelta,
+  })
+  .strict();
+export type EvmExpectedBalanceDelta = z.infer<typeof EvmExpectedBalanceDelta>;
+
+export const SolanaExpectedBalanceDelta = z
+  .object({
+    account: z.string().min(1),
+    asset: z.string().min(1),
+    minDelta: IntegerDelta,
+    maxDelta: IntegerDelta,
+  })
+  .strict();
+export type SolanaExpectedBalanceDelta = z.infer<typeof SolanaExpectedBalanceDelta>;
+
+const OnchainSimulationBase = {
   action: z.literal("onchain.simulate_transaction"),
-  chain: Chain,
   chainEnvironment: ChainEnvironment,
   to: z.string().min(1),
   data: z.string().optional(),
   value: z.string().optional(),
   programId: z.string().optional(),
   instructions: z.array(z.record(z.unknown())).optional(),
+};
+
+const EvmOnchainSimulationIntent = IntentEnvelope.extend({
+  ...OnchainSimulationBase,
+  chain: z.literal("ethereum"),
+  expectedDeltas: z.array(EvmExpectedBalanceDelta).optional(),
 }).strict();
+
+const SolanaOnchainSimulationIntent = IntentEnvelope.extend({
+  ...OnchainSimulationBase,
+  chain: z.literal("solana"),
+  expectedDeltas: z.array(SolanaExpectedBalanceDelta).optional(),
+}).strict();
+
+export const OnchainSimulationIntent = z.union([
+  EvmOnchainSimulationIntent,
+  SolanaOnchainSimulationIntent,
+]);
 export type OnchainSimulationIntent = z.infer<typeof OnchainSimulationIntent>;
 
-export const OnchainSigningIntent = IntentEnvelope.extend({
+const OnchainSigningBase = {
   action: z.literal("onchain.request_signature"),
-  chain: Chain,
   chainEnvironment: ChainEnvironment,
   to: z.string().min(1),
   data: z.string().optional(),
@@ -94,10 +131,24 @@ export const OnchainSigningIntent = IntentEnvelope.extend({
   instructions: z.array(z.record(z.unknown())).optional(),
   simulationId: z.string().uuid(),
   maxTokenApprovalAmount: z.string().optional(),
+};
+
+const EvmOnchainSigningIntent = IntentEnvelope.extend({
+  ...OnchainSigningBase,
+  chain: z.literal("ethereum"),
+  expectedDeltas: z.array(EvmExpectedBalanceDelta).optional(),
 }).strict();
+
+const SolanaOnchainSigningIntent = IntentEnvelope.extend({
+  ...OnchainSigningBase,
+  chain: z.literal("solana"),
+  expectedDeltas: z.array(SolanaExpectedBalanceDelta).optional(),
+}).strict();
+
+export const OnchainSigningIntent = z.union([EvmOnchainSigningIntent, SolanaOnchainSigningIntent]);
 export type OnchainSigningIntent = z.infer<typeof OnchainSigningIntent>;
 
-export const TradingIntent = z.discriminatedUnion("action", [
+export const TradingIntent = z.union([
   CexOrderIntent,
   CexCancelIntent,
   CexGetOpenOrdersIntent,

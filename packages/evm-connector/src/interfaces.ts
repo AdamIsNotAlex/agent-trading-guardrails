@@ -23,6 +23,7 @@ export interface SimulationResult {
   success: boolean;
   gasUsed: number;
   balanceChanges: Array<{ address: string; asset: string; delta: string }>;
+  balanceChangesReliable: boolean;
   error: string | null;
 }
 

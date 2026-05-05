@@ -1,3 +1,9 @@
+export {
+  type BalanceDeltaComparison,
+  type BalanceDeltaMismatch,
+  compareEvmBalanceDeltas,
+  type ExpectedEvmBalanceDelta,
+} from "./balance-delta.js";
 export { EvmConnector } from "./connector.js";
 export { decodeTransaction, isUnlimitedApproval } from "./decoder.js";
 export { LocalDevSigner } from "./dev-signer.js";

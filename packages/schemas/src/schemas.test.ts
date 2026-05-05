@@ -170,18 +170,18 @@ describe("OnchainSigningIntent", () => {
   });
 });
 
-describe("TradingIntent (discriminated union)", () => {
-  it("parses spot order via discriminated union", () => {
+describe("TradingIntent (union)", () => {
+  it("parses spot order via union", () => {
     const result = TradingIntent.parse(binanceSpotOrder);
     expect(result.action).toBe("cex.place_order");
   });
 
-  it("parses cancel order via discriminated union", () => {
+  it("parses cancel order via union", () => {
     const result = TradingIntent.parse(binanceCancelOrder);
     expect(result.action).toBe("cex.cancel_order");
   });
 
-  it("parses get_open_orders via discriminated union", () => {
+  it("parses get_open_orders via union", () => {
     const intent = {
       ...baseEnvelope,
       action: "cex.get_open_orders" as const,
@@ -192,7 +192,7 @@ describe("TradingIntent (discriminated union)", () => {
     expect(result.action).toBe("cex.get_open_orders");
   });
 
-  it("parses get_portfolio via discriminated union", () => {
+  it("parses get_portfolio via union", () => {
     const intent = {
       ...baseEnvelope,
       action: "cex.get_portfolio" as const,
@@ -203,7 +203,7 @@ describe("TradingIntent (discriminated union)", () => {
     expect(result.action).toBe("cex.get_portfolio");
   });
 
-  it("parses onchain.get_portfolio via discriminated union", () => {
+  it("parses onchain.get_portfolio via union", () => {
     const intent = {
       ...baseEnvelope,
       action: "onchain.get_portfolio" as const,
@@ -216,14 +216,99 @@ describe("TradingIntent (discriminated union)", () => {
     expect(result.action).toBe("onchain.get_portfolio");
   });
 
-  it("parses simulation via discriminated union", () => {
+  it("parses simulation via union", () => {
     const result = TradingIntent.parse(ethereumSepoliaSimulation);
     expect(result.action).toBe("onchain.simulate_transaction");
   });
 
-  it("parses signing via discriminated union", () => {
+  it("parses signing via union", () => {
     const result = TradingIntent.parse(ethereumSepoliaSigning);
     expect(result.action).toBe("onchain.request_signature");
+  });
+
+  it("parses Ethereum expected balance deltas", () => {
+    const result = TradingIntent.parse({
+      ...ethereumSepoliaSimulation,
+      expectedDeltas: [
+        {
+          address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          asset: "USDC",
+          minDelta: "-100",
+          maxDelta: "-99",
+        },
+      ],
+    });
+
+    if (result.action !== "onchain.simulate_transaction") throw new Error("Unexpected action.");
+    expect(result.expectedDeltas).toHaveLength(1);
+  });
+
+  it("parses Solana expected balance deltas", () => {
+    const result = TradingIntent.parse({
+      ...ethereumSepoliaSimulation,
+      chain: "solana",
+      chainEnvironment: "devnet",
+      expectedDeltas: [
+        {
+          account: "recipient111111111111111111111111111111111",
+          asset: "SOL",
+          minDelta: "-100",
+          maxDelta: "-99",
+        },
+      ],
+    });
+
+    if (result.action !== "onchain.simulate_transaction") throw new Error("Unexpected action.");
+    expect(result.expectedDeltas).toHaveLength(1);
+  });
+
+  it("rejects malformed onchain expected balance deltas", () => {
+    expect(() =>
+      TradingIntent.parse({
+        ...ethereumSepoliaSigning,
+        expectedDeltas: [{ asset: "USDC", minDelta: "-100", maxDelta: "-99" }],
+      }),
+    ).toThrow();
+    expect(() =>
+      TradingIntent.parse({
+        ...ethereumSepoliaSigning,
+        expectedDeltas: [
+          {
+            address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            asset: "USDC",
+            minDelta: "-1.5",
+            maxDelta: "0",
+          },
+        ],
+      }),
+    ).toThrow();
+    expect(() =>
+      TradingIntent.parse({
+        ...ethereumSepoliaSigning,
+        expectedDeltas: [
+          {
+            account: "recipient111111111111111111111111111111111",
+            asset: "USDC",
+            minDelta: "0",
+            maxDelta: "0",
+          },
+        ],
+      }),
+    ).toThrow();
+    expect(() =>
+      TradingIntent.parse({
+        ...ethereumSepoliaSigning,
+        expectedDeltas: [
+          {
+            address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            account: "recipient111111111111111111111111111111111",
+            asset: "USDC",
+            minDelta: "0",
+            maxDelta: "0",
+          },
+        ],
+      }),
+    ).toThrow();
   });
 
   it("rejects free-form execution request", () => {

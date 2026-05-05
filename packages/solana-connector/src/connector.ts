@@ -1,6 +1,12 @@
 import type { ExecutionConnector } from "@guardrails/broker";
 import type { TradingIntent } from "@guardrails/schemas";
-import type { SolanaConfig, SolanaRpcProvider, SolanaSigner } from "./interfaces.js";
+import { compareSolanaBalanceDeltas, type ExpectedSolanaBalanceDelta } from "./balance-delta.js";
+import type {
+  SolanaConfig,
+  SolanaRpcProvider,
+  SolanaSigner,
+  SolanaSimulationResult,
+} from "./interfaces.js";
 import { parseInstructions } from "./parser.js";
 import {
   validateAccounts,
@@ -59,10 +65,12 @@ export class SolanaConnector implements ExecutionConnector {
     const instructions = parseInstructions(rawInstructions as Array<Record<string, unknown>>);
 
     if (intent.action === "onchain.simulate_transaction") {
+      this.expectedDeltas(intent);
       const result = await this.provider.simulateTransaction(instructions);
       if (!result.success) {
         throw new Error(`Simulation failed: ${result.error}`);
       }
+      this.assertExpectedDeltas(result, intent);
       return {};
     }
 
@@ -70,14 +78,73 @@ export class SolanaConnector implements ExecutionConnector {
       if (!this.signer) {
         throw new Error("Signer not configured.");
       }
+      this.expectedDeltas(intent);
       const result = await this.provider.simulateTransaction(instructions);
       if (!result.success) {
         throw new Error(`Simulation failed: ${result.error}`);
       }
+      this.assertExpectedDeltas(result, intent);
       const txHash = await this.signer.signAndBroadcast(instructions);
       return { transactionHash: txHash };
     }
 
     return {};
   }
+
+  private assertExpectedDeltas(result: SolanaSimulationResult, intent: TradingIntent): void {
+    if (!this.hasExpectedDeltas(intent)) return;
+
+    if (!result.balanceChangesReliable) {
+      throw new Error(
+        "Balance delta check failed: simulation provider did not return reliable balance changes.",
+      );
+    }
+
+    const expectedDeltas = this.expectedDeltas(intent);
+    const comparison = compareSolanaBalanceDeltas(result.balanceChanges, expectedDeltas);
+    if (!comparison.passed) {
+      throw new Error(
+        `Balance delta check failed: ${comparison.reasons
+          .map((reason) => `${reason.account} ${reason.asset}: ${reason.reason}`)
+          .join("; ")}`,
+      );
+    }
+  }
+
+  private hasExpectedDeltas(intent: TradingIntent): boolean {
+    return "expectedDeltas" in intent && intent.expectedDeltas !== undefined;
+  }
+
+  private expectedDeltas(intent: TradingIntent): ExpectedSolanaBalanceDelta[] {
+    if (!("expectedDeltas" in intent) || intent.expectedDeltas === undefined) return [];
+    const { expectedDeltas } = intent;
+    if (!Array.isArray(expectedDeltas)) {
+      throw new Error("Solana expected balance deltas must be an array.");
+    }
+    if (expectedDeltas.some((delta) => !isExpectedSolanaDelta(delta))) {
+      throw new Error("Solana expected balance deltas must use account-based integer entries.");
+    }
+    return expectedDeltas as ExpectedSolanaBalanceDelta[];
+  }
+}
+
+function isExpectedSolanaDelta(delta: unknown): delta is ExpectedSolanaBalanceDelta {
+  if (!delta || typeof delta !== "object") return false;
+  const fields = delta as Record<string, unknown>;
+  return (
+    hasExactKeys(fields, ["account", "asset", "minDelta", "maxDelta"]) &&
+    typeof fields.account === "string" &&
+    fields.account.length > 0 &&
+    typeof fields.asset === "string" &&
+    fields.asset.length > 0 &&
+    typeof fields.minDelta === "string" &&
+    typeof fields.maxDelta === "string" &&
+    /^-?\d+$/.test(fields.minDelta) &&
+    /^-?\d+$/.test(fields.maxDelta)
+  );
+}
+
+function hasExactKeys(value: Record<string, unknown>, keys: string[]): boolean {
+  const actualKeys = Object.keys(value);
+  return actualKeys.length === keys.length && keys.every((key) => Object.hasOwn(value, key));
 }

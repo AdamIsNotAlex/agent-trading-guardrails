@@ -30,6 +30,7 @@ export class SepoliaRpcProvider implements EvmRpcProvider {
         success: true,
         gasUsed: 0,
         balanceChanges: [],
+        balanceChangesReliable: false,
         error: null,
       };
     } catch (err) {
@@ -37,6 +38,7 @@ export class SepoliaRpcProvider implements EvmRpcProvider {
         success: false,
         gasUsed: 0,
         balanceChanges: [],
+        balanceChangesReliable: false,
         error: err instanceof Error ? err.message : String(err),
       };
     }

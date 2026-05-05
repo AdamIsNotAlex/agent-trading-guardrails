@@ -135,13 +135,13 @@ No concrete `OpenAiLlmProvider` HTTP client exists. `ReviewerAdapter` accepts a 
 
 `SimulationResult.balanceChanges` and `SolanaSimulationResult.balanceChanges` exist as types but no comparison logic exists.
 
-- [ ] Create `packages/evm-connector/src/balance-delta.ts`:
-  - [ ] Accept `SimulationResult.balanceChanges` and `expectedDeltas: {address, asset, minDelta, maxDelta}[]`.
-  - [ ] Return pass/fail with structured reasons for each mismatch.
-- [ ] Call balance delta comparison in `packages/evm-connector/src/connector.ts` after simulation, before signing.
-- [ ] Create equivalent `packages/solana-connector/src/balance-delta.ts` for Solana.
-- [ ] Call balance delta comparison in Solana connector after simulation (once P0.3 is done).
-- [ ] Add tests for exact match, within tolerance, and out-of-range scenarios in both packages.
+- [x] Create `packages/evm-connector/src/balance-delta.ts`:
+  - [x] Accept `SimulationResult.balanceChanges` and `expectedDeltas: {address, asset, minDelta, maxDelta}[]`.
+  - [x] Return pass/fail with structured reasons for each mismatch.
+- [x] Call balance delta comparison in `packages/evm-connector/src/connector.ts` after simulation, before signing.
+- [x] Create equivalent `packages/solana-connector/src/balance-delta.ts` for Solana.
+- [x] Call balance delta comparison in Solana connector after simulation (once P0.3 is done).
+- [x] Add tests for exact match, within tolerance, and out-of-range scenarios in both packages.
 
 ### P1.6 — Wire `assertNotVaultDevInProduction` into runtime startup (Phase 10)
 

@@ -88,7 +88,13 @@ describe("SepoliaRpcProvider", () => {
       value: "10",
     });
 
-    expect(result).toEqual({ success: true, gasUsed: 0, balanceChanges: [], error: null });
+    expect(result).toEqual({
+      success: true,
+      gasUsed: 0,
+      balanceChanges: [],
+      balanceChangesReliable: false,
+      error: null,
+    });
     expect(calls).toContainEqual({
       method: "eth_call",
       params: [

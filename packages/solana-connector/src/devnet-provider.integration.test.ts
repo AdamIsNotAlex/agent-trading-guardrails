@@ -111,6 +111,7 @@ describe("DevnetSolanaRpcProvider", () => {
       success: true,
       logs: ["simulation log"],
       balanceChanges: [],
+      balanceChangesReliable: false,
       error: null,
     });
     expect(calls.map((call) => call.method)).toEqual([

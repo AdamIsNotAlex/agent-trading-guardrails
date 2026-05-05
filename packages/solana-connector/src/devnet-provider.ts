@@ -52,6 +52,7 @@ export class DevnetSolanaRpcProvider implements SolanaRpcProvider {
         success: simulation.value.err == null,
         logs: simulation.value.logs ?? [],
         balanceChanges: [],
+        balanceChangesReliable: false,
         error: simulation.value.err ? JSON.stringify(simulation.value.err) : null,
       };
     } catch (err) {
@@ -59,6 +60,7 @@ export class DevnetSolanaRpcProvider implements SolanaRpcProvider {
         success: false,
         logs: [],
         balanceChanges: [],
+        balanceChangesReliable: false,
         error: err instanceof Error ? err.message : String(err),
       };
     }
