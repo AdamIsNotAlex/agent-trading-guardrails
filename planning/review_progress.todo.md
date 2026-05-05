@@ -123,13 +123,13 @@ These items are needed for the system to work end-to-end against real infrastruc
 
 No concrete `OpenAiLlmProvider` HTTP client exists. `ReviewerAdapter` accepts a generic `LlmProvider` interface.
 
-- [ ] Add `openai` SDK as a dependency to `packages/reviewer/package.json`.
-- [ ] Create `packages/reviewer/src/openai-provider.ts` implementing `LlmProvider`:
-  - [ ] Accept API key via constructor (from secret provider, not hardcoded).
-  - [ ] Call OpenAI chat completions with model `gpt-5.5` and the reviewer prompt.
-  - [ ] Parse response into the expected reviewer output format.
-- [ ] Add test with mocked HTTP for response parsing.
-- [ ] Ensure API key is never logged or returned to agent-facing APIs.
+- [x] Add `openai` SDK as a dependency to `packages/reviewer/package.json`.
+- [x] Create `packages/reviewer/src/openai-provider.ts` implementing `LlmProvider`:
+  - [x] Accept API key via constructor (from secret provider, not hardcoded).
+  - [x] Call OpenAI chat completions with model `gpt-5.5` and the reviewer prompt.
+  - [x] Integrate with `ReviewerAdapter` parsing into the expected reviewer output format.
+- [x] Add test with mocked HTTP for response parsing.
+- [x] Ensure API key is never logged or returned to agent-facing APIs.
 
 ### P1.5 — Implement balance delta comparison for EVM and Solana (Phases 8, 9)
 
