@@ -332,9 +332,9 @@ These schema-defined actions are not covered by the adapter tool surface.
 
 Docs are summary-level only for all three Vault profiles.
 
-- [ ] Expand `docs/deployment-profiles.md` "Single VPS" section with concrete Vault config (storage stanza, listener stanza, unseal steps, backup cron).
-- [ ] Expand "Kubernetes" section with example Helm values for `vault-helm`, Raft HA config, anti-affinity, and PVC sizing.
-- [ ] Expand "Cloud-Managed Runtime" section with HCP Vault setup steps, Terraform example, and IAM role binding.
+- [x] Expand `docs/deployment-profiles.md` "Single VPS" section with concrete Vault config (storage stanza, listener stanza, unseal steps, backup cron).
+- [x] Expand "Kubernetes" section with example Helm values for `vault-helm`, Raft HA config, anti-affinity, and PVC sizing.
+- [x] Expand "Cloud-Managed Runtime" section with HCP Vault setup steps, Terraform example, and IAM role binding.
 
 ### P2.15 — Add price band check to risk engine (Phase 5)
 
