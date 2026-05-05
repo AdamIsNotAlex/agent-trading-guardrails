@@ -5,6 +5,7 @@ export interface GuardedToolResult {
   intentId: string;
   correlationId: string;
   outcome: string;
+  approvalId?: string;
   reasons: Array<{ rule: string; message: string }>;
 }
 
@@ -127,6 +128,7 @@ export class GuardedToolSurface {
       intentId: decision.intentId,
       correlationId: decision.correlationId,
       outcome: decision.outcome,
+      approvalId: decision.approvalId,
       reasons: decision.reasons,
     };
   }

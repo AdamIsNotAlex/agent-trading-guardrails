@@ -1,3 +1,4 @@
+import { ApprovalStore } from "@guardrails/approval";
 import type { AuditEventType, TradingIntent } from "@guardrails/schemas";
 import { binanceSpotOrder } from "@guardrails/schemas/fixtures";
 import { describe, expect, it, vi } from "vitest";
@@ -19,6 +20,33 @@ function makeApproval(intent: TradingIntent = binanceSpotOrder): GuardrailApprov
     outcome: "allow",
     intent,
   };
+}
+
+function makeNeedsHumanApproval(approvalId: string): GuardrailApproval {
+  return {
+    intentId: binanceSpotOrder.intentId,
+    correlationId: "corr-001",
+    outcome: "needs_human",
+    intent: binanceSpotOrder,
+    approvalId,
+  };
+}
+
+function createApprovalRequest(
+  store: ApprovalStore,
+  approvalType: "one_time" | "allowlist_onboarding" = "one_time",
+) {
+  return store.create({
+    intentId: binanceSpotOrder.intentId,
+    correlationId: "corr-001",
+    principal: binanceSpotOrder.principal,
+    action: binanceSpotOrder.action,
+    resource: binanceSpotOrder.resource,
+    environment: binanceSpotOrder.environment,
+    escalationReason: "Needs human review.",
+    approvalType,
+    intentData: binanceSpotOrder as Record<string, unknown>,
+  });
 }
 
 function makeAudit(): AuditWriter & {
@@ -60,6 +88,326 @@ describe("ExecutionBroker", () => {
     expect(result.orderId).toBeTruthy();
     expect(result.revalidationPassed).toBe(true);
     expect(audit.events.some((e) => e.eventType === "broker.executed")).toBe(true);
+  });
+
+  it("rejects escalated execution when approval is missing", async () => {
+    const approvalStore = new ApprovalStore({ defaultTimeoutSeconds: 300 });
+    const request = createApprovalRequest(approvalStore);
+    const broker = new ExecutionBroker(
+      config,
+      new PaperExecutionConnector(),
+      new InMemoryKillSwitch(),
+      makeAudit(),
+      makeIdempotency(),
+      approvalStore,
+    );
+
+    const result = await broker.execute(makeNeedsHumanApproval(request.approvalId));
+
+    expect(result.status).toBe("rejected");
+    expect(result.rejectionReason).toBe("Human approval is required before execution.");
+  });
+
+  it("rejects allow-labeled execution when matching approved approval id is omitted", async () => {
+    const approvalStore = new ApprovalStore({ defaultTimeoutSeconds: 300 });
+    const request = createApprovalRequest(approvalStore);
+    approvalStore.approve(request.approvalId, "operator");
+    const broker = new ExecutionBroker(
+      config,
+      new PaperExecutionConnector(),
+      new InMemoryKillSwitch(),
+      makeAudit(),
+      makeIdempotency(),
+      approvalStore,
+    );
+
+    const result = await broker.execute(makeApproval());
+
+    expect(result.status).toBe("rejected");
+    expect(result.rejectionReason).toBe("Human approval is required before execution.");
+  });
+
+  it("rejects allow-labeled execution when matching allowlist approval id is omitted", async () => {
+    const audit = makeAudit();
+    const approvalStore = new ApprovalStore({
+      defaultTimeoutSeconds: 300,
+      allowlistOnboarding: {
+        store: { add: () => () => {} },
+        audit,
+      },
+    });
+    const request = createApprovalRequest(approvalStore, "allowlist_onboarding");
+    approvalStore.approve(request.approvalId, "operator");
+    const broker = new ExecutionBroker(
+      config,
+      new PaperExecutionConnector(),
+      new InMemoryKillSwitch(),
+      makeAudit(),
+      makeIdempotency(),
+      approvalStore,
+    );
+
+    const result = await broker.execute(makeApproval());
+
+    expect(result.status).toBe("rejected");
+    expect(result.rejectionReason).toBe("Human approval is required before execution.");
+  });
+
+  it("rejects allow-labeled execution when supplied approval id is empty", async () => {
+    const broker = new ExecutionBroker(
+      config,
+      new PaperExecutionConnector(),
+      new InMemoryKillSwitch(),
+      makeAudit(),
+      makeIdempotency(),
+    );
+
+    const result = await broker.execute({ ...makeApproval(), approvalId: "" });
+
+    expect(result.status).toBe("rejected");
+    expect(result.rejectionReason).toBe("Human approval is required before execution.");
+  });
+
+  it("rejects allow-labeled execution when supplied approval is still pending", async () => {
+    const approvalStore = new ApprovalStore({ defaultTimeoutSeconds: 300 });
+    const request = createApprovalRequest(approvalStore);
+    const broker = new ExecutionBroker(
+      config,
+      new PaperExecutionConnector(),
+      new InMemoryKillSwitch(),
+      makeAudit(),
+      makeIdempotency(),
+      approvalStore,
+    );
+
+    const result = await broker.execute({ ...makeApproval(), approvalId: request.approvalId });
+
+    expect(result.status).toBe("rejected");
+    expect(result.rejectionReason).toBe("Human approval is required before execution.");
+  });
+
+  it("rejects execution when approval id has no matching request", async () => {
+    const broker = new ExecutionBroker(
+      config,
+      new PaperExecutionConnector(),
+      new InMemoryKillSwitch(),
+      makeAudit(),
+      makeIdempotency(),
+    );
+
+    const result = await broker.execute({ ...makeApproval(), approvalId: "approval-1" });
+
+    expect(result.status).toBe("rejected");
+    expect(result.rejectionReason).toBe("Human approval is required before execution.");
+  });
+
+  it("rejects allow-labeled execution when supplied approval intent differs", async () => {
+    const approvalStore = new ApprovalStore({ defaultTimeoutSeconds: 300 });
+    const request = createApprovalRequest(approvalStore);
+    approvalStore.approve(request.approvalId, "operator");
+    const broker = new ExecutionBroker(
+      config,
+      new PaperExecutionConnector(),
+      new InMemoryKillSwitch(),
+      makeAudit(),
+      makeIdempotency(),
+      approvalStore,
+    );
+    const changedIntent = {
+      ...binanceSpotOrder,
+      maxNotionalUsd: binanceSpotOrder.maxNotionalUsd + 1,
+    };
+
+    const result = await broker.execute({
+      ...makeApproval(changedIntent),
+      approvalId: request.approvalId,
+    });
+
+    expect(result.status).toBe("rejected");
+    expect(result.rejectionReason).toBe("Human approval does not match the execution intent.");
+  });
+
+  it("rejects allowlist onboarding approval for direct execution", async () => {
+    const audit = makeAudit();
+    const approvalStore = new ApprovalStore({
+      defaultTimeoutSeconds: 300,
+      allowlistOnboarding: {
+        store: { add: () => () => {} },
+        audit,
+      },
+    });
+    const request = createApprovalRequest(approvalStore, "allowlist_onboarding");
+    approvalStore.approve(request.approvalId, "operator");
+    const broker = new ExecutionBroker(
+      config,
+      new PaperExecutionConnector(),
+      new InMemoryKillSwitch(),
+      makeAudit(),
+      makeIdempotency(),
+      approvalStore,
+    );
+
+    const result = await broker.execute(makeNeedsHumanApproval(request.approvalId));
+
+    expect(result.status).toBe("rejected");
+    expect(result.rejectionReason).toBe("Human approval does not match the execution intent.");
+  });
+
+  it("rejects allow-labeled execution when a matching approval is still pending", async () => {
+    const approvalStore = new ApprovalStore({ defaultTimeoutSeconds: 300 });
+    createApprovalRequest(approvalStore);
+    const broker = new ExecutionBroker(
+      config,
+      new PaperExecutionConnector(),
+      new InMemoryKillSwitch(),
+      makeAudit(),
+      makeIdempotency(),
+      approvalStore,
+    );
+
+    const result = await broker.execute(makeApproval());
+
+    expect(result.status).toBe("rejected");
+    expect(result.rejectionReason).toBe("Human approval is required before execution.");
+  });
+
+  it("rejects escalated execution when approval belongs to a different intent", async () => {
+    const approvalStore = new ApprovalStore({ defaultTimeoutSeconds: 300 });
+    const request = createApprovalRequest(approvalStore);
+    approvalStore.approve(request.approvalId, "operator");
+    const broker = new ExecutionBroker(
+      config,
+      new PaperExecutionConnector(),
+      new InMemoryKillSwitch(),
+      makeAudit(),
+      makeIdempotency(),
+      approvalStore,
+    );
+    const mismatchedIntent = { ...binanceSpotOrder, resource: "cex:binance:sub:BTC-USDC" };
+
+    const result = await broker.execute({
+      ...makeNeedsHumanApproval(request.approvalId),
+      intent: mismatchedIntent,
+    });
+
+    expect(result.status).toBe("rejected");
+    expect(result.rejectionReason).toBe("Human approval does not match the execution intent.");
+  });
+
+  it("rejects escalated execution when approved intent data differs", async () => {
+    const approvalStore = new ApprovalStore({ defaultTimeoutSeconds: 300 });
+    const request = createApprovalRequest(approvalStore);
+    approvalStore.approve(request.approvalId, "operator");
+    const broker = new ExecutionBroker(
+      config,
+      new PaperExecutionConnector(),
+      new InMemoryKillSwitch(),
+      makeAudit(),
+      makeIdempotency(),
+      approvalStore,
+    );
+    const changedIntent = {
+      ...binanceSpotOrder,
+      maxNotionalUsd: binanceSpotOrder.maxNotionalUsd + 1,
+    };
+
+    const result = await broker.execute({
+      ...makeNeedsHumanApproval(request.approvalId),
+      intent: changedIntent,
+    });
+
+    expect(result.status).toBe("rejected");
+    expect(result.rejectionReason).toBe("Human approval does not match the execution intent.");
+  });
+
+  it("executes escalated intent after human approval", async () => {
+    const approvalStore = new ApprovalStore({ defaultTimeoutSeconds: 300 });
+    const request = createApprovalRequest(approvalStore);
+    approvalStore.approve(request.approvalId, "operator");
+    const broker = new ExecutionBroker(
+      config,
+      new PaperExecutionConnector(),
+      new InMemoryKillSwitch(),
+      makeAudit(),
+      makeIdempotency(),
+      approvalStore,
+    );
+
+    const result = await broker.execute(makeNeedsHumanApproval(request.approvalId));
+
+    expect(result.status).toBe("executed");
+  });
+
+  it("rejects needs-human execution without an approval id at runtime", async () => {
+    const broker = new ExecutionBroker(
+      config,
+      new PaperExecutionConnector(),
+      new InMemoryKillSwitch(),
+      makeAudit(),
+      makeIdempotency(),
+    );
+
+    const result = await broker.execute({ ...makeApproval(), outcome: "needs_human" } as never);
+
+    expect(result.status).toBe("rejected");
+    expect(result.rejectionReason).toBe("Human approval is required before execution.");
+  });
+
+  it("rejects invalid decision outcomes at runtime", async () => {
+    const broker = new ExecutionBroker(
+      config,
+      new PaperExecutionConnector(),
+      new InMemoryKillSwitch(),
+      makeAudit(),
+      makeIdempotency(),
+    );
+
+    const result = await broker.execute({ ...makeApproval(), outcome: "deny" } as never);
+
+    expect(result.status).toBe("rejected");
+    expect(result.rejectionReason).toBe("Only approved decisions can be executed.");
+  });
+
+  it("rejects reuse of a consumed one-time approval", async () => {
+    const approvalStore = new ApprovalStore({ defaultTimeoutSeconds: 300 });
+    const request = createApprovalRequest(approvalStore);
+    approvalStore.approve(request.approvalId, "operator");
+    const broker = new ExecutionBroker(
+      config,
+      new PaperExecutionConnector(),
+      new InMemoryKillSwitch(),
+      makeAudit(),
+      makeIdempotency(),
+      approvalStore,
+    );
+
+    const first = await broker.execute(makeNeedsHumanApproval(request.approvalId));
+    const second = await broker.execute(makeNeedsHumanApproval(request.approvalId));
+
+    expect(first.status).toBe("executed");
+    expect(second.status).toBe("rejected");
+    expect(second.rejectionReason).toBe("Human approval has already been used.");
+  });
+
+  it("does not consume one-time approval when broker precheck rejects", async () => {
+    const approvalStore = new ApprovalStore({ defaultTimeoutSeconds: 300 });
+    const request = createApprovalRequest(approvalStore);
+    approvalStore.approve(request.approvalId, "operator");
+    const ks = new InMemoryKillSwitch();
+    ks.activate({ type: "global" });
+    const broker = new ExecutionBroker(
+      config,
+      new PaperExecutionConnector(),
+      ks,
+      makeAudit(),
+      makeIdempotency(),
+      approvalStore,
+    );
+
+    const result = await broker.execute(makeNeedsHumanApproval(request.approvalId));
+
+    expect(result.status).toBe("rejected");
+    expect(approvalStore.get(request.approvalId)?.state).toBe("approved");
   });
 
   it("rejects when kill switch is active (global)", async () => {

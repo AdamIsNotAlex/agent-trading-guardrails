@@ -1,3 +1,4 @@
+import { ApprovalStore } from "@guardrails/approval";
 import type { AuditEventInput } from "@guardrails/audit";
 import type {
   DynamicRiskResult,
@@ -419,8 +420,17 @@ describe("GuardrailService", () => {
         "reviewer.completed",
         "risk.evaluated",
         "policy.evaluated",
+        "approval.requested",
         "decision.final",
       ]);
+      expect(result.approvalId).toBeTruthy();
+      expect(audit.events.at(-2)?.data).toMatchObject({
+        approvalRequest: {
+          approvalId: result.approvalId,
+          escalationReason: "Needs human review.",
+          state: "pending",
+        },
+      });
       expect(audit.events.at(-1)?.data).toMatchObject({
         outcome: "needs_human",
         requiresHumanApproval: true,
@@ -480,17 +490,104 @@ describe("GuardrailService", () => {
   });
 
   describe("needs_human flow", () => {
-    it("returns needs_human when policy escalates", async () => {
+    it("rolls back approval creation when final decision audit fails", async () => {
+      const approvalStore = new ApprovalStore({ defaultTimeoutSeconds: 300 });
+      const svc = new GuardrailService(
+        config,
+        makeReviewer(),
+        makePolicy("needs_human"),
+        makeRisk(),
+        {
+          write(event: AuditEventInput) {
+            if (event.eventType === "decision.final") throw new Error("audit unavailable");
+          },
+        },
+        approvalStore,
+      );
+
+      await expect(svc.evaluate(binanceSpotOrder)).rejects.toThrow("audit unavailable");
+
+      expect(approvalStore.list()).toHaveLength(0);
+    });
+
+    it("rolls back approval creation when request audit fails", async () => {
+      const approvalStore = new ApprovalStore({ defaultTimeoutSeconds: 300 });
+      const svc = new GuardrailService(
+        config,
+        makeReviewer(),
+        makePolicy("needs_human"),
+        makeRisk(),
+        {
+          write(event: AuditEventInput) {
+            if (event.eventType === "approval.requested") throw new Error("audit unavailable");
+          },
+        },
+        approvalStore,
+      );
+
+      await expect(svc.evaluate(binanceSpotOrder)).rejects.toThrow("audit unavailable");
+
+      expect(approvalStore.list()).toHaveLength(0);
+    });
+
+    it("creates a non-interactive approval request when policy escalates", async () => {
+      const approvalStore = new ApprovalStore({ defaultTimeoutSeconds: 300 });
       const svc = new GuardrailService(
         config,
         makeReviewer(),
         makePolicy("needs_human"),
         makeRisk(),
         nullAuditWriter,
+        approvalStore,
       );
+
       const result = await svc.evaluate(binanceSpotOrder);
+
       expect(result.outcome).toBe("needs_human");
       expect(result.requiresHumanApproval).toBe(true);
+      expect(result.approvalId).toBeTruthy();
+      expect(approvalStore.get(result.approvalId ?? "")).toMatchObject({
+        intentId: binanceSpotOrder.intentId,
+        principal: binanceSpotOrder.principal,
+        action: binanceSpotOrder.action,
+        resource: binanceSpotOrder.resource,
+        state: "pending",
+      });
+    });
+
+    it("wires the default approval store to the service audit writer", async () => {
+      const audit = makeAuditSpy();
+      const svc = new GuardrailService(
+        { ...config, approvalTimeoutSeconds: -1 },
+        makeReviewer(),
+        makePolicy("needs_human"),
+        makeRisk(),
+        audit.writer,
+      );
+      const result = await svc.evaluate(binanceSpotOrder);
+
+      await expect(svc.waitForApproval(result.approvalId ?? "", 10)).rejects.toThrow("timed out");
+
+      expect(audit.events.map((event) => event.eventType)).toContain("approval.timeout");
+    });
+
+    it("waits for approval state changes", async () => {
+      const approvalStore = new ApprovalStore({ defaultTimeoutSeconds: 300 });
+      const svc = new GuardrailService(
+        config,
+        makeReviewer(),
+        makePolicy("needs_human"),
+        makeRisk(),
+        nullAuditWriter,
+        approvalStore,
+      );
+      const result = await svc.evaluate(binanceSpotOrder);
+      const approvalId = result.approvalId ?? "";
+
+      const waiting = svc.waitForApproval(approvalId, 1000);
+      approvalStore.approve(approvalId, "operator");
+
+      await expect(waiting).resolves.toMatchObject({ state: "approved", decidedBy: "operator" });
     });
   });
 

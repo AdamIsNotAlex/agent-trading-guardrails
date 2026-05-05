@@ -1,3 +1,4 @@
+import { type ApprovalRequest, ApprovalStore } from "@guardrails/approval";
 import type { BrokerExecutionResult, Environment, TradingIntent } from "@guardrails/schemas";
 import { assertNotVaultDevInProduction, redactSecrets } from "@guardrails/secrets";
 import {
@@ -16,12 +17,21 @@ export interface BrokerConfig {
   vaultAddr?: string;
 }
 
-export interface GuardrailApproval {
-  intentId: string;
-  correlationId: string;
-  outcome: "allow";
-  intent: TradingIntent;
-}
+export type GuardrailApproval =
+  | {
+      intentId: string;
+      correlationId: string;
+      outcome: "allow";
+      intent: TradingIntent;
+      approvalId?: string;
+    }
+  | {
+      intentId: string;
+      correlationId: string;
+      outcome: "needs_human";
+      intent: TradingIntent;
+      approvalId: string;
+    };
 
 export class ExecutionBroker {
   constructor(
@@ -30,6 +40,7 @@ export class ExecutionBroker {
     private killSwitch: KillSwitch,
     private audit: AuditWriter,
     private idempotency: BrokerIdempotencyStore,
+    private approvalStore = new ApprovalStore({ defaultTimeoutSeconds: 300 }),
   ) {
     if (config.vaultAddr) {
       assertNotVaultDevInProduction(config.environment, config.vaultAddr);
@@ -40,7 +51,8 @@ export class ExecutionBroker {
     const now = new Date().toISOString();
     const { intent } = approval;
 
-    if (approval.outcome !== "allow") {
+    const outcome = approval.outcome as string;
+    if (outcome !== "allow" && outcome !== "needs_human") {
       return this.reject(
         intent,
         now,
@@ -48,6 +60,62 @@ export class ExecutionBroker {
         "broker_rejected",
         "Only approved decisions can be executed.",
       );
+    }
+
+    const hasApprovalId = "approvalId" in approval;
+    const approvalId = hasApprovalId ? approval.approvalId : undefined;
+    const matchingApproval = this.findApprovalForIntent(intent);
+    if (hasApprovalId && (typeof approvalId !== "string" || approvalId.length === 0)) {
+      return this.reject(
+        intent,
+        now,
+        approval.correlationId,
+        "approval_missing",
+        "Human approval is required before execution.",
+      );
+    }
+    if ((outcome === "needs_human" || matchingApproval) && !approvalId) {
+      return this.reject(
+        intent,
+        now,
+        approval.correlationId,
+        "approval_missing",
+        "Human approval is required before execution.",
+      );
+    }
+
+    if (approvalId) {
+      const approvedRequest = this.approvalStore.get(approvalId);
+      if (approvedRequest?.state === "consumed") {
+        return this.reject(
+          intent,
+          now,
+          approval.correlationId,
+          "approval_consumed",
+          "Human approval has already been used.",
+        );
+      }
+      if (!approvedRequest || approvedRequest.state !== "approved") {
+        return this.reject(
+          intent,
+          now,
+          approval.correlationId,
+          "approval_missing",
+          "Human approval is required before execution.",
+        );
+      }
+      if (
+        approvedRequest.approvalType !== "one_time" ||
+        !this.approvalMatchesIntent(approvedRequest, intent)
+      ) {
+        return this.reject(
+          intent,
+          now,
+          approval.correlationId,
+          "approval_mismatch",
+          "Human approval does not match the execution intent.",
+        );
+      }
     }
 
     let reservation: BrokerIdempotencyReservation;
@@ -148,6 +216,18 @@ export class ExecutionBroker {
         );
       }
 
+      if (approvalId && !this.approvalStore.consumeOneTime(approvalId)) {
+        return finish(
+          this.reject(
+            intent,
+            now,
+            approval.correlationId,
+            "approval_consumed",
+            "Human approval has already been used.",
+          ),
+        );
+      }
+
       let executionResult: { orderId?: string; transactionHash?: string };
       try {
         executionResult = await this.connector.execute(intent);
@@ -203,6 +283,34 @@ export class ExecutionBroker {
       }
       throw err;
     }
+  }
+
+  private findApprovalForIntent(intent: TradingIntent): ApprovalRequest | undefined {
+    return this.approvalStore.list().find((request) => this.approvalMatchesIntent(request, intent));
+  }
+
+  private approvalMatchesIntent(request: ApprovalRequest, intent: TradingIntent): boolean {
+    return (
+      request.intentId === intent.intentId &&
+      request.principal === intent.principal &&
+      request.action === intent.action &&
+      request.resource === intent.resource &&
+      request.environment === intent.environment &&
+      this.stableJson(request.intentData) === this.stableJson(intent)
+    );
+  }
+
+  private stableJson(value: unknown): string {
+    if (Array.isArray(value)) {
+      return `[${value.map((item) => this.stableJson(item)).join(",")}]`;
+    }
+    if (value && typeof value === "object") {
+      return `{${Object.entries(value)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, item]) => `${JSON.stringify(key)}:${this.stableJson(item)}`)
+        .join(",")}}`;
+    }
+    return JSON.stringify(value);
   }
 
   private reject(

@@ -1,3 +1,4 @@
+import { ApprovalStore } from "@guardrails/approval";
 import {
   ExecutionBroker,
   InMemoryBrokerIdempotencyStore,
@@ -247,6 +248,40 @@ describe("Auto-Execution Rules", () => {
     const result = await svc.evaluate(binanceSpotOrder);
     expect(result.outcome).toBe("needs_human");
     expect(result.requiresHumanApproval).toBe(true);
+  });
+
+  it("escalates non-interactively, accepts human approval, then executes", async () => {
+    const approvalStore = new ApprovalStore({ defaultTimeoutSeconds: 300 });
+    const svc = new GuardrailService(
+      config,
+      makeReviewer("approve"),
+      makeNeedsHumanPolicy(),
+      makeRisk(),
+      nullAuditWriter,
+      approvalStore,
+    );
+    const decision = await svc.evaluate(binanceSpotOrder);
+    const approvalId = decision.approvalId ?? "";
+    approvalStore.approve(approvalId, "operator");
+    const broker = new ExecutionBroker(
+      { environment: "paper", canaryLiveEnabled: false },
+      new PaperExecutionConnector(),
+      new InMemoryKillSwitch(),
+      { write() {} },
+      new InMemoryBrokerIdempotencyStore(),
+      approvalStore,
+    );
+
+    const result = await broker.execute({
+      intentId: decision.intentId,
+      correlationId: decision.correlationId,
+      outcome: "needs_human",
+      intent: binanceSpotOrder,
+      approvalId,
+    });
+
+    expect(decision.outcome).toBe("needs_human");
+    expect(result.status).toBe("executed");
   });
 });
 

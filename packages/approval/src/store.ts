@@ -38,8 +38,57 @@ export class ApprovalStore {
     return request;
   }
 
+  waitForApproval(approvalId: string, timeoutMs: number, pollMs = 50): Promise<ApprovalRequest> {
+    return new Promise((resolve, reject) => {
+      const deadline = Date.now() + timeoutMs;
+      const poll = () => {
+        const request = this.requests.get(approvalId);
+        if (!request) {
+          reject(new Error(`Approval request ${approvalId} was not found.`));
+          return;
+        }
+        if (request.state === "approved") {
+          resolve(request);
+          return;
+        }
+        if (request.state === "denied") {
+          reject(new Error(`Approval request ${approvalId} was denied.`));
+          return;
+        }
+        if (request.state === "timeout") {
+          reject(new Error(`Approval request ${approvalId} timed out.`));
+          return;
+        }
+        if (request.state === "consumed") {
+          reject(new Error(`Approval request ${approvalId} was already used.`));
+          return;
+        }
+        if (new Date() > new Date(request.timeoutAt)) {
+          try {
+            this.timeout(request, new Date().toISOString());
+          } catch (err) {
+            reject(err);
+            return;
+          }
+          reject(new Error(`Approval request ${approvalId} timed out.`));
+          return;
+        }
+        if (Date.now() >= deadline) {
+          reject(new Error(`Timed out waiting for approval request ${approvalId}.`));
+          return;
+        }
+        setTimeout(poll, pollMs);
+      };
+      poll();
+    });
+  }
+
   get(approvalId: string): ApprovalRequest | undefined {
     return this.requests.get(approvalId);
+  }
+
+  delete(approvalId: string): boolean {
+    return this.requests.delete(approvalId);
   }
 
   list(filter?: { state?: ApprovalState }): ApprovalRequest[] {
@@ -51,13 +100,23 @@ export class ApprovalStore {
   approve(approvalId: string, decidedBy: string): ApprovalRequest | null {
     const request = this.requests.get(approvalId);
     if (!request || request.state !== "pending") return null;
+    const decidedAt = new Date().toISOString();
     if (new Date() > new Date(request.timeoutAt)) {
-      request.state = "timeout";
+      this.timeout(request, decidedAt);
       return null;
     }
-    const decidedAt = new Date().toISOString();
+    let onboarding: { rollback(): void; entry: AllowlistOnboardingEntry } | null = null;
     if (request.approvalType === "allowlist_onboarding") {
-      this.applyAllowlistOnboarding(request, decidedBy, decidedAt);
+      onboarding = this.applyAllowlistOnboarding(request, decidedBy, decidedAt);
+    }
+    try {
+      this.writeDecisionAudit(request, "approval.approved", decidedBy, decidedAt, "approved");
+    } catch (err) {
+      if (onboarding) {
+        onboarding.rollback();
+        this.writeAllowlistRollbackAudit(request, decidedBy, decidedAt, onboarding.entry);
+      }
+      throw err;
     }
     request.state = "approved";
     request.decidedAt = decidedAt;
@@ -68,9 +127,24 @@ export class ApprovalStore {
   deny(approvalId: string, decidedBy: string): ApprovalRequest | null {
     const request = this.requests.get(approvalId);
     if (!request || request.state !== "pending") return null;
+    const decidedAt = new Date().toISOString();
+    if (new Date() > new Date(request.timeoutAt)) {
+      this.timeout(request, decidedAt);
+      return null;
+    }
+    this.writeDecisionAudit(request, "approval.denied", decidedBy, decidedAt, "denied");
     request.state = "denied";
-    request.decidedAt = new Date().toISOString();
+    request.decidedAt = decidedAt;
     request.decidedBy = decidedBy;
+    return request;
+  }
+
+  consumeOneTime(approvalId: string): ApprovalRequest | null {
+    const request = this.requests.get(approvalId);
+    if (!request || request.state !== "approved" || request.approvalType !== "one_time") {
+      return null;
+    }
+    request.state = "consumed";
     return request;
   }
 
@@ -78,7 +152,7 @@ export class ApprovalStore {
     request: ApprovalRequest,
     decidedBy: string,
     decidedAt: string,
-  ): void {
+  ): { rollback(): void; entry: AllowlistOnboardingEntry } {
     if (!this.config.allowlistOnboarding) {
       throw new Error("Allowlist onboarding persistence is not configured.");
     }
@@ -102,6 +176,58 @@ export class ApprovalStore {
       rollback();
       throw err;
     }
+    return { rollback, entry };
+  }
+
+  private writeAllowlistRollbackAudit(
+    request: ApprovalRequest,
+    decidedBy: string,
+    decidedAt: string,
+    entry: AllowlistOnboardingEntry,
+  ): void {
+    this.config.allowlistOnboarding?.audit.write({
+      eventType: "allowlist.updated",
+      environment: request.environment,
+      intentId: request.intentId,
+      principal: request.principal,
+      correlationId: request.correlationId,
+      data: {
+        approvalId: request.approvalId,
+        updatedBy: decidedBy,
+        updatedAt: decidedAt,
+        policyEntry: entry,
+        rolledBack: true,
+      },
+    });
+  }
+
+  private timeout(request: ApprovalRequest, decidedAt: string): void {
+    this.writeDecisionAudit(request, "approval.timeout", null, decidedAt, "timeout");
+    request.state = "timeout";
+  }
+
+  private writeDecisionAudit(
+    request: ApprovalRequest,
+    eventType: "approval.approved" | "approval.denied" | "approval.timeout",
+    decidedBy: string | null,
+    decidedAt: string,
+    state: ApprovalState,
+  ): void {
+    const audit = this.config.audit ?? this.config.allowlistOnboarding?.audit;
+    audit?.write({
+      eventType,
+      environment: request.environment,
+      intentId: request.intentId,
+      principal: request.principal,
+      correlationId: request.correlationId,
+      data: {
+        approvalId: request.approvalId,
+        approvalType: request.approvalType,
+        decidedBy,
+        decidedAt,
+        state,
+      },
+    });
   }
 
   private buildAllowlistEntry(request: ApprovalRequest): AllowlistOnboardingEntry {
@@ -137,7 +263,7 @@ export class ApprovalStore {
     const timedOut: ApprovalRequest[] = [];
     for (const request of this.requests.values()) {
       if (request.state === "pending" && now > new Date(request.timeoutAt)) {
-        request.state = "timeout";
+        this.timeout(request, now.toISOString());
         timedOut.push(request);
       }
     }

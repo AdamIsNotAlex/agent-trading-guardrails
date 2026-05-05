@@ -30,13 +30,13 @@ The entire audit pipeline is disconnected from production flows. `GuardrailServi
 
 The `ApprovalStore` exists in `packages/approval/src/store.ts` but is never checked by `GuardrailService` or `ExecutionBroker` during execution.
 
-- [ ] Add `ApprovalStore` as a constructor dependency in `packages/guardrail-service/src/service.ts`.
-- [ ] When `evaluate()` returns `outcome: "needs_human"`, automatically call `approvalStore.create(...)` with the intent details, escalation reason, and approval type.
-- [ ] Add a `waitForApproval(approvalId, timeoutMs)` or polling mechanism so the service can gate execution on approval state.
-- [ ] In `packages/broker/src/broker.ts`, add a check that when the `GuardrailDecision.outcome` was originally `"needs_human"`, verify that an approval with state `"approved"` exists before proceeding to execution (the broker already rejects non-`"allow"` outcomes at line 35-43, but needs to handle the approval-granted-after-escalation flow).
-- [ ] Emit `approval.requested`, `approval.approved`, `approval.denied`, and `approval.timeout` audit events from the approval flow.
-- [ ] Add test in `packages/approval/src/approval.test.ts` that verifies broker rejects execution when approval is missing (not just that a request has `state === "pending"`).
-- [ ] Add test that proves the end-to-end path: agent proposes intent → service escalates to `needs_human` → approval created non-interactively → human approves → execution proceeds.
+- [x] Add `ApprovalStore` as a constructor dependency in `packages/guardrail-service/src/service.ts`.
+- [x] When `evaluate()` returns `outcome: "needs_human"`, automatically call `approvalStore.create(...)` with the intent details, escalation reason, and approval type.
+- [x] Add a `waitForApproval(approvalId, timeoutMs)` or polling mechanism so the service can gate execution on approval state.
+- [x] In `packages/broker/src/broker.ts`, add a check that when the `GuardrailDecision.outcome` was originally `"needs_human"`, verify that an approval with state `"approved"` exists before proceeding to execution (the broker already rejects non-`"allow"` outcomes at line 35-43, but needs to handle the approval-granted-after-escalation flow).
+- [x] Emit `approval.requested`, `approval.approved`, `approval.denied`, and `approval.timeout` audit events from the approval flow.
+- [x] Add test in `packages/broker/src/broker.test.ts` that verifies broker rejects execution when approval is missing (not just that a request has `state === "pending"`).
+- [x] Add test that proves the end-to-end path: agent proposes intent → service escalates to `needs_human` → approval created non-interactively → human approves → execution proceeds.
 
 ### P0.3 — Implement simulation before signing in Solana connector (Phase 9)
 

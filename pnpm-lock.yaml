@@ -90,6 +90,9 @@ importers:
 
   packages/broker:
     dependencies:
+      '@guardrails/approval':
+        specifier: workspace:*
+        version: link:../approval
       '@guardrails/schemas':
         specifier: workspace:*
         version: link:../schemas
@@ -116,6 +119,9 @@ importers:
 
   packages/guardrail-service:
     dependencies:
+      '@guardrails/approval':
+        specifier: workspace:*
+        version: link:../approval
       '@guardrails/audit':
         specifier: workspace:*
         version: link:../audit
@@ -132,6 +138,9 @@ importers:
 
   packages/red-team:
     dependencies:
+      '@guardrails/approval':
+        specifier: workspace:*
+        version: link:../approval
       '@guardrails/broker':
         specifier: workspace:*
         version: link:../broker

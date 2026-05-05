@@ -298,7 +298,7 @@ describe("AuditWriter", () => {
       data: { decision: "needs_human" },
     });
     writer.write({
-      eventType: "approval.created",
+      eventType: "approval.requested",
       environment: "dev",
       correlationId: corr,
       data: {},

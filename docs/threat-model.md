@@ -185,9 +185,10 @@ Every action flowing through the system generates audit events at each decision 
 | `policy.failed` | OPA policy evaluation failed | intentId, error |
 | `risk.evaluated` | Dynamic risk checks completed | intentId, riskResults |
 | `risk.failed` | Dynamic risk checks failed | intentId, error |
-| `approval.created` | Human approval request created | intentId, approvalId, escalationReason |
-| `approval.decided` | Human responded to approval request | intentId, approvalId, decision, decidedBy, decidedAt |
-| `approval.timeout` | Approval request timed out | intentId, approvalId, timeoutAt |
+| `approval.requested` | Human approval request created | approvalRequest |
+| `approval.approved` | Human approved an approval request | approvalId, approvalType, decidedBy, decidedAt, state |
+| `approval.denied` | Human denied an approval request | approvalId, approvalType, decidedBy, decidedAt, state |
+| `approval.timeout` | Approval request timed out | approvalId, approvalType, decidedAt, state |
 | `allowlist.updated` | Durable allowlist entry added via approval | approvalId, policyEntry, updatedBy |
 | `signer.requested` | Signing request sent to signer service | intentId, signerBackend, transactionHash |
 | `signer.completed` | Signer returned a valid signature | intentId, signatureId |

@@ -30,6 +30,7 @@ export interface GuardrailDecision {
   outcome: DecisionOutcome;
   reasons: Array<{ rule: string; message: string }>;
   requiresHumanApproval: boolean;
+  approvalId?: string;
   reviewerVerdict: ReviewerVerdictSchema | null;
   policyOutput: PolicyOutput | null;
   riskResult: DynamicRiskResult | null;

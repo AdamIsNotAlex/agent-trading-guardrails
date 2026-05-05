@@ -15,6 +15,7 @@
     "build": "tsc"
   },
   "dependencies": {
+    "@guardrails/approval": "workspace:*",
     "@guardrails/schemas": "workspace:*",
     "@guardrails/secrets": "workspace:*"
   },

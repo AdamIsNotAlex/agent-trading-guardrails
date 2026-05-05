@@ -1,6 +1,6 @@
 import type { Environment } from "@guardrails/schemas";
 
-export type ApprovalState = "pending" | "approved" | "denied" | "timeout";
+export type ApprovalState = "pending" | "approved" | "denied" | "timeout" | "consumed";
 export type ApprovalType = "one_time" | "allowlist_onboarding";
 
 export interface ApprovalRequest {
@@ -36,7 +36,7 @@ export interface AllowlistOnboardingStore {
 
 export interface ApprovalAuditWriter {
   write(event: {
-    eventType: "allowlist.updated";
+    eventType: "approval.approved" | "approval.denied" | "approval.timeout" | "allowlist.updated";
     environment: Environment;
     intentId: string;
     principal: string;
@@ -47,6 +47,7 @@ export interface ApprovalAuditWriter {
 
 export interface ApprovalConfig {
   defaultTimeoutSeconds: number;
+  audit?: ApprovalAuditWriter;
   allowlistOnboarding?: {
     store: AllowlistOnboardingStore;
     audit: ApprovalAuditWriter;

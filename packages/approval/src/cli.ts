@@ -1,9 +1,10 @@
+import type { ApprovalState } from "./interfaces.js";
 import type { ApprovalStore } from "./store.js";
 
 export class ApprovalCli {
   constructor(private store: ApprovalStore) {}
 
-  list(state?: "pending" | "approved" | "denied" | "timeout"): string {
+  list(state?: ApprovalState): string {
     const requests = this.store.list(state ? { state } : undefined);
     if (requests.length === 0) return "No approval requests found.";
     return requests

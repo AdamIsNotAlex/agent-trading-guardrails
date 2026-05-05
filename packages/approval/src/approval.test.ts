@@ -66,11 +66,56 @@ describe("ApprovalStore", () => {
     expect(result?.state).toBe("denied");
   });
 
+  it("emits approval decision and timeout audit events", () => {
+    const auditEvents: Parameters<ApprovalAuditWriter["write"]>[0][] = [];
+    const approvedStore = new ApprovalStore({
+      defaultTimeoutSeconds: 300,
+      audit: { write: (event) => auditEvents.push(event) },
+    });
+    const deniedStore = new ApprovalStore({
+      defaultTimeoutSeconds: 300,
+      audit: { write: (event) => auditEvents.push(event) },
+    });
+    const timeoutStore = new ApprovalStore({
+      defaultTimeoutSeconds: -1,
+      audit: { write: (event) => auditEvents.push(event) },
+    });
+
+    approvedStore.approve(approvedStore.create(baseParams).approvalId, "operator-1");
+    deniedStore.deny(deniedStore.create(baseParams).approvalId, "operator-2");
+    timeoutStore.create(baseParams);
+    timeoutStore.checkTimeouts();
+
+    expect(auditEvents.map((event) => event.eventType)).toEqual([
+      "approval.approved",
+      "approval.denied",
+      "approval.timeout",
+    ]);
+    expect(auditEvents[0].data).toMatchObject({ decidedBy: "operator-1", state: "approved" });
+    expect(auditEvents[1].data).toMatchObject({ decidedBy: "operator-2", state: "denied" });
+    expect(auditEvents[2].data).toMatchObject({ state: "timeout" });
+  });
+
   it("cannot approve already-decided request", () => {
     const store = makeStore();
     const req = store.create(baseParams);
     store.deny(req.approvalId, "op");
     expect(store.approve(req.approvalId, "op")).toBeNull();
+  });
+
+  it("keeps approval pending when approval audit emission fails", () => {
+    const store = new ApprovalStore({
+      defaultTimeoutSeconds: 300,
+      audit: {
+        write() {
+          throw new Error("audit unavailable");
+        },
+      },
+    });
+    const req = store.create(baseParams);
+
+    expect(() => store.approve(req.approvalId, "operator")).toThrow("audit unavailable");
+    expect(store.get(req.approvalId)?.state).toBe("pending");
   });
 
   it("times out expired requests", () => {
@@ -86,6 +131,64 @@ describe("ApprovalStore", () => {
     const req = store.create(baseParams);
     store.checkTimeouts();
     expect(store.approve(req.approvalId, "op")).toBeNull();
+  });
+
+  it("rejects wait when approval has already been consumed", async () => {
+    const store = new ApprovalStore({ defaultTimeoutSeconds: 300 });
+    const req = store.create(baseParams);
+    store.approve(req.approvalId, "operator");
+    store.consumeOneTime(req.approvalId);
+
+    await expect(store.waitForApproval(req.approvalId, 10)).rejects.toThrow("already used");
+  });
+
+  it("rejects wait when timeout audit fails", async () => {
+    const store = new ApprovalStore({
+      defaultTimeoutSeconds: -1,
+      audit: {
+        write() {
+          throw new Error("audit unavailable");
+        },
+      },
+    });
+    const req = store.create(baseParams);
+
+    await expect(store.waitForApproval(req.approvalId, 10)).rejects.toThrow("audit unavailable");
+    expect(store.get(req.approvalId)?.state).toBe("pending");
+  });
+
+  it("emits timeout audit when deny discovers expiration", () => {
+    const auditEvents: Parameters<ApprovalAuditWriter["write"]>[0][] = [];
+    const store = new ApprovalStore({
+      defaultTimeoutSeconds: -1,
+      audit: { write: (event) => auditEvents.push(event) },
+    });
+    const req = store.create(baseParams);
+
+    expect(store.deny(req.approvalId, "op")).toBeNull();
+
+    expect(auditEvents).toHaveLength(1);
+    expect(auditEvents[0]).toMatchObject({
+      eventType: "approval.timeout",
+      data: { state: "timeout" },
+    });
+  });
+
+  it("emits timeout audit when approve discovers expiration", () => {
+    const auditEvents: Parameters<ApprovalAuditWriter["write"]>[0][] = [];
+    const store = new ApprovalStore({
+      defaultTimeoutSeconds: -1,
+      audit: { write: (event) => auditEvents.push(event) },
+    });
+    const req = store.create(baseParams);
+
+    expect(store.approve(req.approvalId, "op")).toBeNull();
+
+    expect(auditEvents).toHaveLength(1);
+    expect(auditEvents[0]).toMatchObject({
+      eventType: "approval.timeout",
+      data: { state: "timeout" },
+    });
   });
 
   it("persists allowlist onboarding approvals and emits audit events", () => {
@@ -117,7 +220,7 @@ describe("ApprovalStore", () => {
         },
       },
     ]);
-    expect(auditEvents).toHaveLength(1);
+    expect(auditEvents).toHaveLength(2);
     expect(auditEvents[0]).toMatchObject({
       eventType: "allowlist.updated",
       environment: baseParams.environment,
@@ -126,6 +229,44 @@ describe("ApprovalStore", () => {
       correlationId: baseParams.correlationId,
       data: { updatedBy: "admin", policyEntry: entries[0] },
     });
+    expect(auditEvents[1]).toMatchObject({
+      eventType: "approval.approved",
+      environment: baseParams.environment,
+      intentId: baseParams.intentId,
+      principal: baseParams.principal,
+      correlationId: baseParams.correlationId,
+      data: { decidedBy: "admin", state: "approved" },
+    });
+  });
+
+  it("rolls back allowlist persistence and audits rollback when approval audit fails", () => {
+    const allowlistPath = join(mkdtempSync(join(tmpdir(), "allowlist-")), "allowlist.json");
+    const auditEvents: Parameters<ApprovalAuditWriter["write"]>[0][] = [];
+    const audit: ApprovalAuditWriter = {
+      write(event) {
+        if (event.eventType === "approval.approved") throw new Error("approval audit unavailable");
+        auditEvents.push(event);
+      },
+    };
+    const store = new ApprovalStore({
+      defaultTimeoutSeconds: 300,
+      audit,
+      allowlistOnboarding: {
+        store: new JsonFileAllowlistOnboardingStore(allowlistPath),
+        audit,
+      },
+    });
+    const req = store.create({ ...baseParams, approvalType: "allowlist_onboarding" });
+
+    expect(() => store.approve(req.approvalId, "admin")).toThrow("approval audit unavailable");
+
+    expect(JSON.parse(readFileSync(allowlistPath, "utf8"))).toEqual([]);
+    expect(store.get(req.approvalId)?.state).toBe("pending");
+    expect(auditEvents.map((event) => event.eventType)).toEqual([
+      "allowlist.updated",
+      "allowlist.updated",
+    ]);
+    expect(auditEvents[1].data).toMatchObject({ rolledBack: true });
   });
 
   it("rolls back allowlist persistence when audit emission fails", () => {

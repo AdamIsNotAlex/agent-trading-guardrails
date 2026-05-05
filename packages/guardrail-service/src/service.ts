@@ -1,3 +1,4 @@
+import { ApprovalStore } from "@guardrails/approval";
 import type { AuditWriter } from "@guardrails/audit";
 import {
   type DynamicRiskResult,
@@ -33,6 +34,10 @@ export class GuardrailService {
     private policy: PolicyEvaluator,
     private risk: RiskEngine,
     private auditWriter: Pick<AuditWriter, "write">,
+    private approvalStore = new ApprovalStore({
+      defaultTimeoutSeconds: config.approvalTimeoutSeconds,
+      audit: auditWriter,
+    }),
   ) {
     this.config = config;
   }
@@ -60,6 +65,45 @@ export class GuardrailService {
       },
     });
     return decision;
+  }
+
+  private requestHumanApproval(
+    intent: TradingIntent,
+    decision: GuardrailDecision,
+    auditContext: AuditContext = {},
+  ): GuardrailDecision {
+    const request = this.approvalStore.create({
+      intentId: intent.intentId,
+      correlationId: decision.correlationId,
+      principal: intent.principal,
+      action: intent.action,
+      resource: intent.resource,
+      environment: intent.environment,
+      escalationReason: decision.reasons[0]?.message ?? "Policy requires human approval.",
+      approvalType: "one_time",
+      intentData: intent as Record<string, unknown>,
+    });
+    try {
+      this.writeAudit({
+        eventType: "approval.requested",
+        environment: intent.environment,
+        correlationId: decision.correlationId,
+        intentId: intent.intentId,
+        principal: intent.principal,
+        promptId: auditContext.promptId,
+        sessionId: auditContext.sessionId,
+        inputRef: auditContext.inputRef,
+        data: { approvalRequest: request },
+      });
+    } catch (err) {
+      this.approvalStore.delete(request.approvalId);
+      throw err;
+    }
+    return { ...decision, approvalId: request.approvalId };
+  }
+
+  waitForApproval(approvalId: string, timeoutMs = this.config.approvalTimeoutSeconds * 1000) {
+    return this.approvalStore.waitForApproval(approvalId, timeoutMs);
   }
 
   private finalizeDecision(
@@ -370,7 +414,24 @@ export class GuardrailService {
       decidedAt: now,
     };
 
-    const finalized = this.finalizeDecision(intent, decision, decision.correlationId, auditContext);
+    const approvalDecision =
+      decision.outcome === "needs_human"
+        ? this.requestHumanApproval(intent, decision, auditContext)
+        : decision;
+    let finalized: GuardrailDecision;
+    try {
+      finalized = this.finalizeDecision(
+        intent,
+        approvalDecision,
+        approvalDecision.correlationId,
+        auditContext,
+      );
+    } catch (err) {
+      if (approvalDecision.approvalId) {
+        this.approvalStore.delete(approvalDecision.approvalId);
+      }
+      throw err;
+    }
     this.idempotency.set(intent.idempotencyKey, payloadHash, finalized);
     return finalized;
   }
