@@ -613,6 +613,7 @@ describe("AuditEvent", () => {
       principal: "agent.openclaw.strategy-alpha",
       data: { action: "cex.place_order", resource: "cex:binance:subaccount-1:ETH-USDC" },
       previousHash: "0000000000000000000000000000000000000000000000000000000000000000",
+      eventHash: "1111111111111111111111111111111111111111111111111111111111111111",
     };
     expect(AuditEvent.parse(event)).toEqual(event);
   });

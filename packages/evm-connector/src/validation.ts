@@ -11,9 +11,20 @@ export function validateContract(decoded: DecodedTransaction, config: EvmConfig)
   return { valid: true };
 }
 
-export function validateFunction(decoded: DecodedTransaction, config: EvmConfig): ValidationResult {
-  if (!decoded.functionSelector) return { valid: true };
-  if (decoded.functionName && config.allowedFunctions.includes(decoded.functionName)) {
+export function validateFunction(
+  decoded: DecodedTransaction,
+  config: EvmConfig,
+  requireFunction = false,
+): ValidationResult {
+  if (!decoded.functionSelector) {
+    return requireFunction
+      ? { valid: false, reason: "Ethereum signing requires calldata for an allowed function." }
+      : { valid: true };
+  }
+  if (!decoded.functionName) {
+    return { valid: false, reason: `Function ${decoded.functionSelector} calldata is malformed.` };
+  }
+  if (config.allowedFunctions.includes(decoded.functionName)) {
     return { valid: true };
   }
   if (config.allowedFunctions.includes(decoded.functionSelector)) {

@@ -20,6 +20,7 @@ const config: GuardrailConfig = {
   environment: "dev",
   opaUrl: "http://localhost:8181",
   approvalTimeoutSeconds: 300,
+  decisionSigningSecret: "test-decision-secret-with-32-bytes",
 };
 const now = "2026-05-04T12:00:00.000Z";
 const nullAuditWriter = { write() {} };
@@ -113,6 +114,7 @@ describe("OpenClawAdapter", () => {
       maxSlippageBps: 30,
       rationale: "Test order",
       evidence: ["snapshot-1"],
+      idempotencyKey: "adapter-test-1",
     });
     expect(result.success).toBe(true);
     expect(result.outcome).toBe("allow");
@@ -145,6 +147,7 @@ describe("OpenClawAdapter", () => {
       leverage: 1,
       rationale: "Test futures order",
       evidence: ["snapshot-1"],
+      idempotencyKey: "adapter-test-2",
     });
 
     expect(result.success).toBe(true);
@@ -164,6 +167,7 @@ describe("OpenClawAdapter", () => {
       symbol: "ETH-USDC",
       rationale: "Check order status",
       evidence: ["check-1"],
+      idempotencyKey: "adapter-test-3",
     });
     expect(result.success).toBe(true);
   });
@@ -175,6 +179,7 @@ describe("OpenClawAdapter", () => {
       account: "sub-1",
       rationale: "Check orders",
       evidence: ["check-1"],
+      idempotencyKey: "adapter-test-4",
     });
     expect(result.success).toBe(true);
   });
@@ -186,6 +191,7 @@ describe("OpenClawAdapter", () => {
       account: "sub-1",
       rationale: "Check portfolio",
       evidence: ["check-1"],
+      idempotencyKey: "adapter-test-5",
     });
     expect(result.success).toBe(true);
   });
@@ -220,6 +226,7 @@ describe("OpenClawAdapter", () => {
       address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
       rationale: "Check wallet holdings",
       evidence: ["wallet-snapshot-1"],
+      idempotencyKey: "adapter-test-6",
     });
 
     expect(result.success).toBe(true);
@@ -258,6 +265,7 @@ describe("OpenClawAdapter", () => {
       ],
       rationale: "Request signature after simulation",
       evidence: ["sim-1"],
+      idempotencyKey: "adapter-test-7",
       intentId: "550e8400-e29b-41d4-a716-446655440006",
       requestedAt: now,
     });
@@ -294,6 +302,7 @@ describe("OpenClawAdapter", () => {
       expectedDeltas: "invalid-deltas",
       rationale: "Request signature after simulation",
       evidence: ["sim-1"],
+      idempotencyKey: "adapter-test-8",
     });
 
     expect(result.success).toBe(false);
@@ -310,6 +319,7 @@ describe("OpenClawAdapter", () => {
       maxTokenApprovalAmount: { amount: "unlimited" },
       rationale: "Request signature after simulation",
       evidence: ["sim-1"],
+      idempotencyKey: "adapter-test-9",
     });
 
     expect(result.success).toBe(false);
@@ -368,10 +378,13 @@ describe("OpenClawAdapter", () => {
       symbol: "ETH-USDC",
       side: "buy",
       orderType: "limit",
+      quantity: 0.002,
+      price: 3500,
       maxNotionalUsd: 7,
       maxSlippageBps: 30,
       rationale: "Test",
       evidence: ["snap"],
+      idempotencyKey: "adapter-test-10",
     });
     expect(result.success).toBe(false);
     expect(result.reasons).toHaveLength(1);
@@ -397,6 +410,7 @@ describe("HermesAgentAdapter", () => {
       marginType: "isolated",
       rationale: "Test futures",
       evidence: ["snapshot-2"],
+      idempotencyKey: "adapter-test-11",
     });
     expect(result.success).toBe(true);
     expect(result.outcome).toBe("allow");
@@ -410,6 +424,7 @@ describe("HermesAgentAdapter", () => {
       to: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
       rationale: "Test simulation",
       evidence: ["snap"],
+      idempotencyKey: "adapter-test-12",
     });
     expect(result.success).toBe(true);
   });
@@ -446,6 +461,7 @@ describe("HermesAgentAdapter", () => {
       ],
       rationale: "Request signature after simulation",
       evidence: ["sim-1"],
+      idempotencyKey: "adapter-test-13",
     });
 
     expect(result.success).toBe(true);
@@ -492,6 +508,7 @@ describe("HermesAgentAdapter", () => {
       address: "So11111111111111111111111111111111111111112",
       rationale: "Check wallet holdings",
       evidence: ["wallet-snapshot-1"],
+      idempotencyKey: "adapter-test-14",
     });
 
     expect(result.success).toBe(true);
@@ -514,6 +531,7 @@ describe("HermesAgentAdapter", () => {
       expectedDeltas: "invalid-deltas",
       rationale: "Request signature after simulation",
       evidence: ["sim-1"],
+      idempotencyKey: "adapter-test-15",
     });
 
     expect(result.success).toBe(false);
@@ -536,6 +554,7 @@ describe("HermesAgentAdapter", () => {
       symbol: "BTC-USDT",
       rationale: "Check order status",
       evidence: ["check-1"],
+      idempotencyKey: "adapter-test-16",
     });
     expect(result.success).toBe(true);
   });

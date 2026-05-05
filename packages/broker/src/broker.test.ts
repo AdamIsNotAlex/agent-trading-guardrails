@@ -7,33 +7,87 @@ import {
   solanaDevnetSimulation,
 } from "@guardrails/schemas/fixtures";
 import { describe, expect, it, vi } from "vitest";
-import { type BrokerConfig, ExecutionBroker, type GuardrailApproval } from "./broker.js";
+import {
+  type BrokerConfig,
+  createGuardrailDecisionToken,
+  ExecutionBroker,
+  type GuardrailApproval,
+} from "./broker.js";
 import { InMemoryBrokerIdempotencyStore } from "./idempotency-store.js";
 import type { AuditWriter, BrokerIdempotencyStore, ExecutionConnector } from "./interfaces.js";
 import { InMemoryKillSwitch } from "./kill-switch.js";
 import { PaperExecutionConnector } from "./paper-connector.js";
 
 const config: BrokerConfig = {
-  environment: "paper",
-  canaryLiveEnabled: false,
+  environment: "canary_live",
+  canaryLiveEnabled: true,
+  decisionVerificationSecret: "test-decision-secret-with-32-bytes",
 };
 
 function makeApproval(intent: TradingIntent = binanceSpotOrder): GuardrailApproval {
+  const correlationId = "corr-001";
+  const decidedAt = new Date().toISOString();
   return {
     intentId: intent.intentId,
-    correlationId: "corr-001",
+    correlationId,
     outcome: "allow",
     intent,
+    decidedAt,
+    decisionToken: createGuardrailDecisionToken({
+      secret: config.decisionVerificationSecret,
+      intent,
+      outcome: "allow",
+      correlationId,
+      decidedAt,
+    }),
   };
 }
 
-function makeNeedsHumanApproval(approvalId: string): GuardrailApproval {
+function makeAllowApprovalWithApprovalId(
+  approvalId: string,
+  intent: TradingIntent = binanceSpotOrder,
+): GuardrailApproval {
+  const correlationId = "corr-001";
+  const decidedAt = new Date().toISOString();
   return {
-    intentId: binanceSpotOrder.intentId,
-    correlationId: "corr-001",
-    outcome: "needs_human",
-    intent: binanceSpotOrder,
+    intentId: intent.intentId,
+    correlationId,
+    outcome: "allow",
+    intent,
+    decidedAt,
     approvalId,
+    decisionToken: createGuardrailDecisionToken({
+      secret: config.decisionVerificationSecret,
+      intent,
+      outcome: "allow",
+      correlationId,
+      decidedAt,
+      approvalId,
+    }),
+  };
+}
+
+function makeNeedsHumanApproval(
+  approvalId: string,
+  intent: TradingIntent = binanceSpotOrder,
+): GuardrailApproval {
+  const correlationId = "corr-001";
+  const decidedAt = new Date().toISOString();
+  return {
+    intentId: intent.intentId,
+    correlationId,
+    outcome: "needs_human",
+    intent,
+    decidedAt,
+    approvalId,
+    decisionToken: createGuardrailDecisionToken({
+      secret: config.decisionVerificationSecret,
+      intent,
+      outcome: "needs_human",
+      correlationId,
+      decidedAt,
+      approvalId,
+    }),
   };
 }
 
@@ -200,7 +254,7 @@ describe("ExecutionBroker", () => {
       makeIdempotency(),
     );
 
-    const result = await broker.execute({ ...makeApproval(), approvalId: "" });
+    const result = await broker.execute(makeAllowApprovalWithApprovalId(""));
 
     expect(result.status).toBe("rejected");
     expect(result.rejectionReason).toBe("Human approval is required before execution.");
@@ -218,7 +272,7 @@ describe("ExecutionBroker", () => {
       approvalStore,
     );
 
-    const result = await broker.execute({ ...makeApproval(), approvalId: request.approvalId });
+    const result = await broker.execute(makeAllowApprovalWithApprovalId(request.approvalId));
 
     expect(result.status).toBe("rejected");
     expect(result.rejectionReason).toBe("Human approval is required before execution.");
@@ -233,7 +287,7 @@ describe("ExecutionBroker", () => {
       makeIdempotency(),
     );
 
-    const result = await broker.execute({ ...makeApproval(), approvalId: "approval-1" });
+    const result = await broker.execute(makeAllowApprovalWithApprovalId("approval-1"));
 
     expect(result.status).toBe("rejected");
     expect(result.rejectionReason).toBe("Human approval is required before execution.");
@@ -256,10 +310,9 @@ describe("ExecutionBroker", () => {
       maxNotionalUsd: binanceSpotOrder.maxNotionalUsd + 1,
     };
 
-    const result = await broker.execute({
-      ...makeApproval(changedIntent),
-      approvalId: request.approvalId,
-    });
+    const result = await broker.execute(
+      makeAllowApprovalWithApprovalId(request.approvalId, changedIntent),
+    );
 
     expect(result.status).toBe("rejected");
     expect(result.rejectionReason).toBe("Human approval does not match the execution intent.");
@@ -323,10 +376,9 @@ describe("ExecutionBroker", () => {
     );
     const mismatchedIntent = { ...binanceSpotOrder, resource: "cex:binance:sub:BTC-USDC" };
 
-    const result = await broker.execute({
-      ...makeNeedsHumanApproval(request.approvalId),
-      intent: mismatchedIntent,
-    });
+    const result = await broker.execute(
+      makeNeedsHumanApproval(request.approvalId, mismatchedIntent),
+    );
 
     expect(result.status).toBe("rejected");
     expect(result.rejectionReason).toBe("Human approval does not match the execution intent.");
@@ -349,10 +401,7 @@ describe("ExecutionBroker", () => {
       maxNotionalUsd: binanceSpotOrder.maxNotionalUsd + 1,
     };
 
-    const result = await broker.execute({
-      ...makeNeedsHumanApproval(request.approvalId),
-      intent: changedIntent,
-    });
+    const result = await broker.execute(makeNeedsHumanApproval(request.approvalId, changedIntent));
 
     expect(result.status).toBe("rejected");
     expect(result.rejectionReason).toBe("Human approval does not match the execution intent.");
@@ -385,7 +434,21 @@ describe("ExecutionBroker", () => {
       makeIdempotency(),
     );
 
-    const result = await broker.execute({ ...makeApproval(), outcome: "needs_human" } as never);
+    const decidedAt = new Date().toISOString();
+    const result = await broker.execute({
+      intentId: binanceSpotOrder.intentId,
+      correlationId: "corr-001",
+      outcome: "needs_human",
+      intent: binanceSpotOrder,
+      decidedAt,
+      decisionToken: createGuardrailDecisionToken({
+        secret: config.decisionVerificationSecret,
+        intent: binanceSpotOrder,
+        outcome: "needs_human",
+        correlationId: "corr-001",
+        decidedAt,
+      }),
+    } as never);
 
     expect(result.status).toBe("rejected");
     expect(result.rejectionReason).toBe("Human approval is required before execution.");
@@ -420,7 +483,12 @@ describe("ExecutionBroker", () => {
     );
 
     const first = await broker.execute(makeNeedsHumanApproval(request.approvalId));
-    const second = await broker.execute(makeNeedsHumanApproval(request.approvalId));
+    const secondIntent = {
+      ...binanceSpotOrder,
+      intentId: "11111111-1111-4111-8111-111111111111",
+      idempotencyKey: "broker-consumed-approval-reuse",
+    };
+    const second = await broker.execute(makeNeedsHumanApproval(request.approvalId, secondIntent));
 
     expect(first.status).toBe("executed");
     expect(second.status).toBe("rejected");
@@ -485,7 +553,7 @@ describe("ExecutionBroker", () => {
     });
   });
 
-  it("does not activate kill switch when activation audit fails", () => {
+  it("activates kill switch when activation audit fails", () => {
     const ks = new InMemoryKillSwitch(
       {
         write() {
@@ -496,8 +564,8 @@ describe("ExecutionBroker", () => {
     );
     const scope = { type: "global" } as const;
 
-    expect(() => ks.activate(scope)).toThrow("audit down");
-    expect(ks.isActive(scope)).toBe(false);
+    expect(() => ks.activate(scope)).not.toThrow();
+    expect(ks.isActive(scope)).toBe(true);
   });
 
   it("rejects when kill switch is active (global)", async () => {
@@ -589,7 +657,7 @@ describe("ExecutionBroker", () => {
     const ks = new InMemoryKillSwitch();
     ks.activate({ type: "chain", chain: solanaDevnetSimulation.chain });
     const broker = new ExecutionBroker(
-      config,
+      { ...config, environment: "testnet" },
       new PaperExecutionConnector(),
       ks,
       makeAudit(),
@@ -606,7 +674,7 @@ describe("ExecutionBroker", () => {
     const ks = new InMemoryKillSwitch();
     ks.activate({ type: "chain", chain: solanaDevnetSimulation.chain });
     const broker = new ExecutionBroker(
-      config,
+      { ...config, environment: "testnet" },
       new PaperExecutionConnector(),
       ks,
       makeAudit(),
@@ -624,7 +692,11 @@ describe("ExecutionBroker", () => {
   });
 
   it("rejects when canary_live is not enabled", async () => {
-    const canaryConfig: BrokerConfig = { environment: "canary_live", canaryLiveEnabled: false };
+    const canaryConfig: BrokerConfig = {
+      environment: "canary_live",
+      canaryLiveEnabled: false,
+      decisionVerificationSecret: config.decisionVerificationSecret,
+    };
     const broker = new ExecutionBroker(
       canaryConfig,
       new PaperExecutionConnector(),
@@ -638,7 +710,11 @@ describe("ExecutionBroker", () => {
   });
 
   it("allows canary_live when explicitly enabled", async () => {
-    const canaryConfig: BrokerConfig = { environment: "canary_live", canaryLiveEnabled: true };
+    const canaryConfig: BrokerConfig = {
+      environment: "canary_live",
+      canaryLiveEnabled: true,
+      decisionVerificationSecret: config.decisionVerificationSecret,
+    };
     const broker = new ExecutionBroker(
       canaryConfig,
       new PaperExecutionConnector(),
@@ -651,7 +727,11 @@ describe("ExecutionBroker", () => {
   });
 
   it("rejects production execution", async () => {
-    const prodConfig: BrokerConfig = { environment: "production", canaryLiveEnabled: false };
+    const prodConfig: BrokerConfig = {
+      environment: "production",
+      canaryLiveEnabled: false,
+      decisionVerificationSecret: config.decisionVerificationSecret,
+    };
     const broker = new ExecutionBroker(
       prodConfig,
       new PaperExecutionConnector(),
@@ -1043,6 +1123,7 @@ describe("ExecutionBroker", () => {
     const prodConfig: BrokerConfig = {
       environment: "production",
       canaryLiveEnabled: false,
+      decisionVerificationSecret: config.decisionVerificationSecret,
       vaultAddr: "http://localhost:8200",
     };
 

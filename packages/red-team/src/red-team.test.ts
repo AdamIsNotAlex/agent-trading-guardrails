@@ -1,5 +1,6 @@
 import { ApprovalStore } from "@guardrails/approval";
 import {
+  createGuardrailDecisionToken,
   ExecutionBroker,
   InMemoryBrokerIdempotencyStore,
   InMemoryKillSwitch,
@@ -24,11 +25,30 @@ import { hallucinatedClaims, promptInjectionPayloads } from "./fixtures.js";
 
 const now = "2026-05-04T12:00:00.000Z";
 const nullAuditWriter = { write() {} };
+const brokerConfig = {
+  environment: "canary_live" as const,
+  canaryLiveEnabled: true,
+  decisionVerificationSecret: "test-decision-secret-with-32-bytes",
+};
 const config: GuardrailConfig = {
   environment: "canary_live",
   opaUrl: "http://localhost:8181",
   approvalTimeoutSeconds: 300,
+  decisionSigningSecret: "test-decision-secret-with-32-bytes",
 };
+
+function decisionToken(params: {
+  intent: TradingIntent;
+  outcome: "allow" | "needs_human";
+  correlationId: string;
+  approvalId?: string;
+}): string {
+  return createGuardrailDecisionToken({
+    secret: brokerConfig.decisionVerificationSecret,
+    decidedAt: now,
+    ...params,
+  });
+}
 
 function makeReviewer(verdict: ReviewerVerdictSchema["verdict"] = "approve"): ReviewerAdapter {
   return {
@@ -321,7 +341,7 @@ describe("Auto-Execution Rules", () => {
     const approvalId = decision.approvalId ?? "";
     approvalStore.approve(approvalId, "operator");
     const broker = new ExecutionBroker(
-      { environment: "paper", canaryLiveEnabled: false },
+      brokerConfig,
       new PaperExecutionConnector(),
       new InMemoryKillSwitch(),
       { write() {} },
@@ -334,7 +354,9 @@ describe("Auto-Execution Rules", () => {
       correlationId: decision.correlationId,
       outcome: "needs_human",
       intent: binanceSpotOrder,
+      decidedAt: decision.decidedAt,
       approvalId,
+      decisionToken: decision.decisionToken ?? "",
     });
 
     expect(decision.outcome).toBe("needs_human");
@@ -431,7 +453,7 @@ describe("Fail-Closed Behavior", () => {
 
   it("signer unavailable → broker rejects", async () => {
     const broker = new ExecutionBroker(
-      { environment: "paper", canaryLiveEnabled: false },
+      brokerConfig,
       {
         async execute() {
           throw new Error("signer down");
@@ -445,10 +467,16 @@ describe("Fail-Closed Behavior", () => {
       new InMemoryBrokerIdempotencyStore(),
     );
     const result = await broker.execute({
-      intentId: "test",
+      intentId: binanceSpotOrder.intentId,
       correlationId: "c",
       outcome: "allow",
       intent: binanceSpotOrder,
+      decidedAt: now,
+      decisionToken: decisionToken({
+        intent: binanceSpotOrder,
+        outcome: "allow",
+        correlationId: "c",
+      }),
     });
     expect(result.status).toBe("failed");
   });
@@ -483,17 +511,23 @@ describe("Kill Switch", () => {
     const ks = new InMemoryKillSwitch();
     ks.activate({ type: "global" });
     const broker = new ExecutionBroker(
-      { environment: "paper", canaryLiveEnabled: false },
+      brokerConfig,
       new PaperExecutionConnector(),
       ks,
       { write() {} },
       new InMemoryBrokerIdempotencyStore(),
     );
     const result = await broker.execute({
-      intentId: "test",
+      intentId: binanceSpotOrder.intentId,
       correlationId: "c",
       outcome: "allow",
       intent: binanceSpotOrder,
+      decidedAt: now,
+      decisionToken: decisionToken({
+        intent: binanceSpotOrder,
+        outcome: "allow",
+        correlationId: "c",
+      }),
     });
     expect(result.status).toBe("rejected");
     expect(result.rejectionReason).toContain("Kill switch");
@@ -503,17 +537,23 @@ describe("Kill Switch", () => {
     const ks = new InMemoryKillSwitch();
     ks.activate({ type: "agent", principal: binanceSpotOrder.principal });
     const broker = new ExecutionBroker(
-      { environment: "paper", canaryLiveEnabled: false },
+      brokerConfig,
       new PaperExecutionConnector(),
       ks,
       { write() {} },
       new InMemoryBrokerIdempotencyStore(),
     );
     const result = await broker.execute({
-      intentId: "test",
+      intentId: binanceSpotOrder.intentId,
       correlationId: "c",
       outcome: "allow",
       intent: binanceSpotOrder,
+      decidedAt: now,
+      decisionToken: decisionToken({
+        intent: binanceSpotOrder,
+        outcome: "allow",
+        correlationId: "c",
+      }),
     });
     expect(result.status).toBe("rejected");
   });

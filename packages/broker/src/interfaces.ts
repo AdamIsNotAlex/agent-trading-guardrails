@@ -47,6 +47,13 @@ export interface AuditWriter {
   }): void;
 }
 
+export class ConnectorRevalidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ConnectorRevalidationError";
+  }
+}
+
 export class IdempotencyConflictError extends Error {
   constructor(key: string) {
     super(`Idempotency key ${key} was already used with a different intent payload.`);

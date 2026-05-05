@@ -36,14 +36,16 @@ export class InMemoryKillSwitch implements KillSwitch {
   }
 
   activate(scope: KillSwitchScope): void {
-    this.audit?.write({
-      eventType: "killswitch.activated",
-      environment: this.environment,
-      correlationId: randomUUID(),
-      ...(scope.type === "agent" ? { principal: scope.principal } : {}),
-      data: { scope },
-    });
     this.active.add(this.key(scope));
+    try {
+      this.audit?.write({
+        eventType: "killswitch.activated",
+        environment: this.environment,
+        correlationId: randomUUID(),
+        ...(scope.type === "agent" ? { principal: scope.principal } : {}),
+        data: { scope },
+      });
+    } catch {}
   }
 
   deactivate(scope: KillSwitchScope): void {

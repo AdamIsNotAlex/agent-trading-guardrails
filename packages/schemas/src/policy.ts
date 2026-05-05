@@ -17,15 +17,16 @@ export const PolicyInput = z
     contractAddress: z.string().optional(),
     programId: z.string().optional(),
     instructionType: z.string().optional(),
-    maxNotionalUsd: z.number().optional(),
-    leverage: z.number().optional(),
+    maxNotionalUsd: z.number().finite().optional(),
+    leverage: z.number().finite().optional(),
     maxTokenApprovalAmount: z.string().optional(),
     reviewerVerdict: z.string().optional(),
     reviewerRiskLevel: RiskTier.optional(),
     reviewerDetectedIssues: z.array(z.string()).optional(),
     riskCheckResults: z.record(z.unknown()).optional(),
-    dailyNotionalUsd: z.number().optional(),
-    dailyRealizedLossUsd: z.number().optional(),
+    dailyNotionalUsd: z.number().finite().optional(),
+    projectedDailyNotionalUsd: z.number().finite().optional(),
+    dailyRealizedLossUsd: z.number().finite().optional(),
   })
   .strict();
 export type PolicyInput = z.infer<typeof PolicyInput>;
@@ -53,5 +54,8 @@ export const PolicyOutput = z
   })
   .refine((data) => !(data.decision === "deny" && data.requiresHumanApproval), {
     message: "deny decision cannot require human approval; use needs_human instead",
+  })
+  .refine((data) => data.decision !== "needs_human" || data.requiresHumanApproval, {
+    message: "needs_human decision must require human approval",
   });
 export type PolicyOutput = z.infer<typeof PolicyOutput>;

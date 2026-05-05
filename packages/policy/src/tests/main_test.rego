@@ -293,6 +293,7 @@ test_ethereum_sepolia_sign_known_contract if {
 		"resource": "onchain:ethereum:sepolia:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
 		"environment": "testnet",
 		"chain": "ethereum",
+		"contractAddress": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
 		"reviewerVerdict": "approve",
 		"reviewerRiskLevel": "low",
 	}
@@ -308,6 +309,7 @@ test_solana_devnet_sign_known_program if {
 		"resource": "onchain:solana:devnet:TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
 		"environment": "testnet",
 		"chain": "solana",
+		"programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
 		"instructionType": "transfer",
 		"reviewerVerdict": "approve",
 		"reviewerRiskLevel": "low",
@@ -317,7 +319,7 @@ test_solana_devnet_sign_known_program if {
 
 # Daily notional escalation
 test_daily_notional_escalation if {
-	inp := object.union(base_input, {"dailyNotionalUsd": 100})
+	inp := object.union(base_input, {"projectedDailyNotionalUsd": 100})
 	guardrail.decision == "needs_human" with input as inp
 	count(guardrail.escalation_reasons) == 1 with input as inp
 	some reason in guardrail.escalation_reasons with input as inp
@@ -331,7 +333,7 @@ test_futures_daily_notional_escalation if {
 		"marginType": "isolated",
 		"maxNotionalUsd": 4,
 		"leverage": 1,
-		"dailyNotionalUsd": 30,
+		"projectedDailyNotionalUsd": 30,
 	})
 	guardrail.decision == "needs_human" with input as inp
 	count(guardrail.escalation_reasons) == 1 with input as inp
@@ -346,7 +348,7 @@ test_futures_daily_notional_falls_back_to_generic_threshold if {
 		"marginType": "isolated",
 		"maxNotionalUsd": 4,
 		"leverage": 1,
-		"dailyNotionalUsd": 60,
+		"projectedDailyNotionalUsd": 60,
 	})
 	limits := object.remove(data.policy.limits.canary_live, ["futures_auto_max_daily_notional_usd"])
 	guardrail.decision == "needs_human" with input as inp with data.policy.limits.canary_live as limits
@@ -356,7 +358,7 @@ test_futures_daily_notional_falls_back_to_generic_threshold if {
 
 # Spot daily notional above futures threshold remains allowed
 test_spot_daily_notional_uses_spot_threshold if {
-	inp := object.union(base_input, {"dailyNotionalUsd": 30})
+	inp := object.union(base_input, {"projectedDailyNotionalUsd": 30})
 	guardrail.decision == "allow" with input as inp
 }
 
@@ -392,7 +394,7 @@ test_order_status_ignores_daily_thresholds if {
 	inp := object.union(base_input, {
 		"action": "cex.get_order_status",
 		"resource": "cex:binance:subaccount-1:ETH-USDC",
-		"dailyNotionalUsd": 100,
+		"projectedDailyNotionalUsd": 100,
 		"dailyRealizedLossUsd": 50,
 	})
 	guardrail.decision == "allow" with input as inp

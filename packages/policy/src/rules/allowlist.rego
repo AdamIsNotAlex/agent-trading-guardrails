@@ -33,6 +33,11 @@ resource_matches(entry, inp) if {
 }
 
 resource_matches(entry, inp) if {
+	inp.resource == entry.resource
+}
+
+resource_matches(entry, inp) if {
+	endswith(entry.resource, ":")
 	startswith(inp.resource, entry.resource)
 }
 

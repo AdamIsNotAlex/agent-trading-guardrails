@@ -37,7 +37,7 @@ export type Action = z.infer<typeof Action>;
 export const OrderSide = z.enum(["buy", "sell"]);
 export type OrderSide = z.infer<typeof OrderSide>;
 
-export const OrderType = z.enum(["limit", "market"]);
+export const OrderType = z.enum(["limit"]);
 export type OrderType = z.infer<typeof OrderType>;
 
 export const AccountMode = z.enum(["spot", "usdm_futures"]);

@@ -43,6 +43,7 @@ export const AuditEvent = z
     inputRef: z.string().optional(),
     data: z.record(z.unknown()),
     previousHash: z.string().min(1),
+    eventHash: z.string().min(1),
   })
   .strict();
 export type AuditEvent = z.infer<typeof AuditEvent>;

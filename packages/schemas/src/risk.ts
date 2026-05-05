@@ -18,9 +18,9 @@ export const DailyRiskStats = z
   .object({
     account: z.string().min(1),
     date: z.string().min(1),
-    totalNotionalUsd: z.number(),
-    realizedLossUsd: z.number(),
-    orderCount: z.number(),
+    totalNotionalUsd: z.number().finite().nonnegative(),
+    realizedLossUsd: z.number().finite().nonnegative(),
+    orderCount: z.number().finite().int().nonnegative(),
   })
   .strict();
 export type DailyRiskStats = z.infer<typeof DailyRiskStats>;

@@ -47,6 +47,16 @@ export class ApprovalStore {
           reject(new Error(`Approval request ${approvalId} was not found.`));
           return;
         }
+        if (new Date() > new Date(request.timeoutAt)) {
+          try {
+            this.timeout(request, new Date().toISOString());
+          } catch (err) {
+            reject(err);
+            return;
+          }
+          reject(new Error(`Approval request ${approvalId} timed out.`));
+          return;
+        }
         if (request.state === "approved") {
           resolve(request);
           return;
@@ -61,16 +71,6 @@ export class ApprovalStore {
         }
         if (request.state === "consumed") {
           reject(new Error(`Approval request ${approvalId} was already used.`));
-          return;
-        }
-        if (new Date() > new Date(request.timeoutAt)) {
-          try {
-            this.timeout(request, new Date().toISOString());
-          } catch (err) {
-            reject(err);
-            return;
-          }
-          reject(new Error(`Approval request ${approvalId} timed out.`));
           return;
         }
         if (Date.now() >= deadline) {
@@ -142,6 +142,11 @@ export class ApprovalStore {
   consumeOneTime(approvalId: string): ApprovalRequest | null {
     const request = this.requests.get(approvalId);
     if (!request || request.state !== "approved" || request.approvalType !== "one_time") {
+      return null;
+    }
+    const now = new Date();
+    if (now > new Date(request.timeoutAt)) {
+      this.timeout(request, now.toISOString());
       return null;
     }
     request.state = "consumed";

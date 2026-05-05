@@ -80,6 +80,9 @@
         "dailyNotionalUsd": {
           "type": "number"
         },
+        "projectedDailyNotionalUsd": {
+          "type": "number"
+        },
         "dailyRealizedLossUsd": {
           "type": "number"
         }

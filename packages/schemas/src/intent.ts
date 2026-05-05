@@ -33,11 +33,11 @@ export const CexOrderIntent = IntentEnvelope.extend({
   symbol: z.string().min(1),
   side: OrderSide,
   orderType: OrderType,
-  quantity: z.number().positive().optional(),
-  price: z.number().positive().optional(),
-  maxNotionalUsd: z.number().positive(),
-  maxSlippageBps: z.number().nonnegative().int(),
-  leverage: z.number().int().min(1).optional(),
+  quantity: z.number().finite().positive(),
+  price: z.number().finite().positive(),
+  maxNotionalUsd: z.number().finite().positive(),
+  maxSlippageBps: z.number().finite().nonnegative().int(),
+  leverage: z.number().finite().int().min(1).optional(),
   marginType: MarginType.optional(),
 }).strict();
 export type CexOrderIntent = z.infer<typeof CexOrderIntent>;
@@ -147,13 +147,14 @@ const OnchainSigningBase = {
 const EvmOnchainSigningIntent = IntentEnvelope.extend({
   ...OnchainSigningBase,
   chain: z.literal("ethereum"),
-  expectedDeltas: z.array(EvmExpectedBalanceDelta).optional(),
+  expectedDeltas: z.array(EvmExpectedBalanceDelta).nonempty(),
 }).strict();
 
 const SolanaOnchainSigningIntent = IntentEnvelope.extend({
   ...OnchainSigningBase,
   chain: z.literal("solana"),
-  expectedDeltas: z.array(SolanaExpectedBalanceDelta).optional(),
+  programId: z.string().min(1),
+  expectedDeltas: z.array(SolanaExpectedBalanceDelta).nonempty(),
 }).strict();
 
 export const OnchainSigningIntent = z.union([EvmOnchainSigningIntent, SolanaOnchainSigningIntent]);

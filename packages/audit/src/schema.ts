@@ -14,4 +14,5 @@ export const auditEvents = sqliteTable("audit_events", {
   inputRef: text("input_ref"),
   data: text("data").notNull(),
   previousHash: text("previous_hash").notNull(),
+  eventHash: text("event_hash").notNull(),
 });

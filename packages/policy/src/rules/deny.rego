@@ -64,12 +64,14 @@ supported_solana_instruction_type if {
 	input.instructionType in {"transfer", "setAuthority", "SetAuthority", "authority_change"}
 }
 
-contract_allowed(resource) if {
+contract_allowed(_) if {
+	input.contractAddress
 	some entry in data.policy.allowlists.ethereum_contracts
-	contains(resource, entry)
+	lower(input.contractAddress) == lower(entry)
 }
 
-program_allowed(resource) if {
+program_allowed(_) if {
+	input.programId
 	some entry in data.policy.allowlists.solana_programs
-	contains(resource, entry)
+	input.programId == entry
 }

@@ -6,6 +6,7 @@ export interface EvmConfig {
   allowedFunctions: string[];
   allowedTokens: string[];
   allowedSpenders: string[];
+  allowedRecipients?: string[];
 }
 
 export interface DecodedTransaction {
@@ -16,6 +17,7 @@ export interface DecodedTransaction {
   isApproval: boolean;
   approvalAmount: string | null;
   spender: string | null;
+  recipient: string | null;
   token: string | null;
 }
 

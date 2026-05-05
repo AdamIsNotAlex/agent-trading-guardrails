@@ -21,8 +21,8 @@ escalation_reasons contains {"rule": "notional_above_auto_threshold", "message":
 
 escalation_reasons contains {"rule": "daily_notional_above_threshold", "message": "Daily notional exceeds automatic execution threshold."} if {
 	input.action == "cex.place_order"
-	input.dailyNotionalUsd
-	input.dailyNotionalUsd > daily_notional_limit
+	input.projectedDailyNotionalUsd
+	input.projectedDailyNotionalUsd > daily_notional_limit
 }
 
 daily_notional_limit := limit if {

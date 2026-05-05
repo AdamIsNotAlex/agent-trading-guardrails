@@ -67,7 +67,21 @@ export async function checkPortfolioFreshness(
       message: "Portfolio data not available.",
     };
   }
+  if (portfolio.account !== intent.account) {
+    return {
+      check: "portfolio_freshness",
+      status: "unavailable",
+      message: "Portfolio account does not match intent account.",
+    };
+  }
   const ageMs = nowMs - portfolio.timestampMs;
+  if (!Number.isFinite(ageMs) || ageMs < 0) {
+    return {
+      check: "portfolio_freshness",
+      status: "unavailable",
+      message: "Portfolio timestamp is invalid.",
+    };
+  }
   if (ageMs > limits.maxPortfolioAgeMs) {
     return {
       check: "portfolio_freshness",
@@ -125,6 +139,13 @@ export function checkDailyNotional(
       message: "Daily stats not available.",
     };
   }
+  if (!Number.isFinite(stats.totalNotionalUsd) || stats.totalNotionalUsd < 0) {
+    return {
+      check: "daily_notional",
+      status: "unavailable",
+      message: "Daily notional stats are invalid.",
+    };
+  }
   const projected = stats.totalNotionalUsd + intent.maxNotionalUsd;
   if (projected > limits.maxDailyNotionalUsd) {
     return {
@@ -153,6 +174,9 @@ export function checkDailyLoss(
   }
   if (!stats) {
     return { check: "daily_loss", status: "unavailable", message: "Daily stats not available." };
+  }
+  if (!Number.isFinite(stats.realizedLossUsd) || stats.realizedLossUsd < 0) {
+    return { check: "daily_loss", status: "unavailable", message: "Daily loss stats are invalid." };
   }
   if (stats.realizedLossUsd > limits.maxDailyLossUsd) {
     return {
@@ -278,8 +302,22 @@ export async function checkPositionDelta(
   if (!portfolio) {
     return { check: "position_delta", status: "unavailable", message: "Portfolio not available." };
   }
+  if (portfolio.account !== intent.account) {
+    return {
+      check: "position_delta",
+      status: "unavailable",
+      message: "Portfolio account does not match intent account.",
+    };
+  }
   const position = portfolio.positions.find((p) => p.symbol === intent.symbol);
-  const currentNotional = position?.notionalUsd ?? 0;
+  if (position && !Number.isFinite(position.notionalUsd)) {
+    return {
+      check: "position_delta",
+      status: "unavailable",
+      message: "Position notional is invalid.",
+    };
+  }
+  const currentNotional = Math.abs(position?.notionalUsd ?? 0);
   if (currentNotional === 0) {
     return { check: "position_delta", status: "pass" };
   }
@@ -315,6 +353,13 @@ export async function checkOrderFrequency(
     return { check: "order_frequency", status: "pass" };
   }
   const elapsed = nowMs - lastTs;
+  if (!Number.isFinite(elapsed) || elapsed < 0) {
+    return {
+      check: "order_frequency",
+      status: "unavailable",
+      message: "Last order timestamp is invalid.",
+    };
+  }
   if (elapsed < limits.minOrderIntervalMs) {
     return {
       check: "order_frequency",
@@ -345,6 +390,13 @@ export function checkDailyOrderCount(
       check: "daily_order_count",
       status: "unavailable",
       message: "Daily stats not available.",
+    };
+  }
+  if (!Number.isFinite(stats.orderCount) || stats.orderCount < 0) {
+    return {
+      check: "daily_order_count",
+      status: "unavailable",
+      message: "Daily order count stats are invalid.",
     };
   }
   const projected = stats.orderCount + 1;

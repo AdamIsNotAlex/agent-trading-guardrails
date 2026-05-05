@@ -20,9 +20,10 @@ import { GuardrailService } from "./service.js";
 const now = "2026-05-04T12:00:00.000Z";
 
 const config: GuardrailConfig = {
-  environment: "dev",
+  environment: "canary_live",
   opaUrl: "http://localhost:8181",
   approvalTimeoutSeconds: 300,
+  decisionSigningSecret: "test-decision-secret-with-32-bytes",
 };
 
 const nullAuditWriter = {
@@ -160,7 +161,7 @@ describe("GuardrailService", () => {
       expect(audit.events).toHaveLength(1);
       expect(audit.events[0]).toMatchObject({
         eventType: "decision.final",
-        environment: "dev",
+        environment: config.environment,
         correlationId: result.correlationId,
       });
       expect(audit.events[0].data).toMatchObject({ outcome: "deny" });
@@ -317,6 +318,7 @@ describe("GuardrailService", () => {
 
       expect(result.outcome).toBe("allow");
       expect(policyInput?.dailyNotionalUsd).toBe(42);
+      expect(policyInput?.projectedDailyNotionalUsd).toBe(52);
       expect(policyInput?.dailyRealizedLossUsd).toBe(7);
     });
 
@@ -400,13 +402,27 @@ describe("GuardrailService", () => {
           return true;
         },
       };
-      const svc = new GuardrailService(config, makeReviewer(), policy, makeRisk(), nullAuditWriter);
+      const svc = new GuardrailService(
+        { ...config, environment: "testnet" },
+        makeReviewer(),
+        policy,
+        makeRisk(),
+        nullAuditWriter,
+      );
       const intent = {
         ...solanaDevnetSimulation,
         intentId: "550e8400-e29b-41d4-a716-446655440009",
         action: "onchain.request_signature" as const,
         idempotencyKey: "sign-sol-authority-001",
         simulationId: "550e8400-e29b-41d4-a716-446655440005",
+        expectedDeltas: [
+          {
+            account: "recipient111111111111111111111111111111111",
+            asset: "SOL",
+            minDelta: "-1",
+            maxDelta: "0",
+          },
+        ],
         instructions: [
           {
             programId: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
@@ -473,13 +489,27 @@ describe("GuardrailService", () => {
           return true;
         },
       };
-      const svc = new GuardrailService(config, makeReviewer(), policy, makeRisk(), nullAuditWriter);
+      const svc = new GuardrailService(
+        { ...config, environment: "testnet" },
+        makeReviewer(),
+        policy,
+        makeRisk(),
+        nullAuditWriter,
+      );
       const intent = {
         ...solanaDevnetSimulation,
         intentId: "550e8400-e29b-41d4-a716-446655440010",
         action: "onchain.request_signature" as const,
         idempotencyKey: `sign-sol-${expected}-${instructions?.length ?? 0}`,
         simulationId: "550e8400-e29b-41d4-a716-446655440005",
+        expectedDeltas: [
+          {
+            account: "recipient111111111111111111111111111111111",
+            asset: "SOL",
+            minDelta: "-1",
+            maxDelta: "0",
+          },
+        ],
         ...(instructions === undefined ? {} : { instructions }),
       };
 
@@ -493,7 +523,7 @@ describe("GuardrailService", () => {
       const policy: PolicyEvaluator = {
         async evaluate(input: PolicyInput): Promise<PolicyOutput> {
           const needsHuman =
-            (input.dailyNotionalUsd ?? 0) > 50 || (input.dailyRealizedLossUsd ?? 0) > 25;
+            (input.projectedDailyNotionalUsd ?? 0) > 50 || (input.dailyRealizedLossUsd ?? 0) > 25;
           return {
             decision: needsHuman ? "needs_human" : "allow",
             reasons: needsHuman

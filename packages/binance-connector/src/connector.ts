@@ -1,4 +1,4 @@
-import type { ExecutionConnector } from "@guardrails/broker";
+import { ConnectorRevalidationError, type ExecutionConnector } from "@guardrails/broker";
 import type { TradingIntent } from "@guardrails/schemas";
 import type {
   BinanceApiClient,
@@ -24,6 +24,35 @@ export class BinanceConnector implements ExecutionConnector {
 
     const validation = validateIntent(intent, this.config);
     if (!validation.valid) throw new Error(validation.reason);
+
+    if (intent.action === "cex.place_order") {
+      if (intent.orderType !== "limit") {
+        throw new Error("Only limit orders are supported.");
+      }
+      const notional = this.calculateOrderNotional(intent, intent.price);
+      if (notional > intent.maxNotionalUsd) {
+        throw new Error("Executable order notional exceeds approved maxNotionalUsd.");
+      }
+    }
+  }
+
+  private calculateOrderNotional(intent: TradingIntent, price: number | undefined): number {
+    if (intent.action !== "cex.place_order") {
+      return 0;
+    }
+    if (intent.quantity === undefined) {
+      throw new Error("Executable order quantity is required.");
+    }
+    if (price === undefined) {
+      throw new Error("Executable order price is required.");
+    }
+    if (!Number.isFinite(intent.quantity) || intent.quantity <= 0) {
+      throw new Error("Executable order quantity is invalid.");
+    }
+    if (!Number.isFinite(price) || price <= 0) {
+      throw new Error("Executable order price is invalid.");
+    }
+    return intent.quantity * price;
   }
 
   private async verifyFuturesIsolatedMargin(params: FuturesMarginTypeParams): Promise<void> {
@@ -43,20 +72,19 @@ export class BinanceConnector implements ExecutionConnector {
     const validation = validateIntent(intent, this.config);
     if (!validation.valid) return { passed: false, reason: validation.reason };
 
+    if (intent.action === "cex.place_order") {
+      try {
+        this.validateExecutableIntent(intent);
+      } catch (err) {
+        return {
+          passed: false,
+          reason: err instanceof Error ? err.message : "Executable order validation failed.",
+        };
+      }
+    }
+
     if (this.mode === "live") {
       if (!this.client) return { passed: false, reason: "Binance API client not configured." };
-
-      if (intent.action === "cex.place_order" && "symbol" in intent) {
-        try {
-          const marketData = await this.client.getPrice(intent.symbol);
-          const ageMs = Date.now() - marketData.timestampMs;
-          if (ageMs > 10_000) {
-            return { passed: false, reason: `Market data is ${ageMs}ms old.` };
-          }
-        } catch {
-          return { passed: false, reason: "Failed to fetch market data for revalidation." };
-        }
-      }
 
       if (intent.action === "cex.place_order" && intent.accountMode === "usdm_futures") {
         try {
@@ -71,17 +99,56 @@ export class BinanceConnector implements ExecutionConnector {
           };
         }
       }
+
+      if (intent.action === "cex.place_order" && "symbol" in intent) {
+        try {
+          const marketData = await this.client.getPrice(intent.symbol);
+          const ageMs = Date.now() - marketData.timestampMs;
+          if (!Number.isFinite(marketData.timestampMs) || !Number.isFinite(ageMs) || ageMs < 0) {
+            return { passed: false, reason: "Market data timestamp is invalid." };
+          }
+          if (!Number.isFinite(marketData.price) || marketData.price <= 0) {
+            return { passed: false, reason: "Market data price is invalid." };
+          }
+          if (ageMs > 10_000) {
+            return { passed: false, reason: `Market data is ${ageMs}ms old.` };
+          }
+          const deviationBps =
+            Math.abs((intent.price - marketData.price) / marketData.price) * 10_000;
+          if (deviationBps > intent.maxSlippageBps) {
+            return {
+              passed: false,
+              reason: `Market price deviation ${deviationBps.toFixed(1)}bps exceeds approved slippage.`,
+            };
+          }
+          const notional = this.calculateOrderNotional(intent, intent.price);
+          if (notional > intent.maxNotionalUsd) {
+            return {
+              passed: false,
+              reason: "Executable order notional exceeds approved maxNotionalUsd.",
+            };
+          }
+        } catch {
+          return { passed: false, reason: "Failed to fetch market data for revalidation." };
+        }
+      }
     }
 
     return { passed: true };
   }
 
   async execute(intent: TradingIntent): ReturnType<ExecutionConnector["execute"]> {
-    if (intent.action === "cex.place_order") {
-      this.validateExecutableIntent(intent);
+    const validation = await this.revalidate(intent);
+    if (!validation.passed) {
+      throw new ConnectorRevalidationError(
+        validation.reason ?? "Binance connector revalidation failed.",
+      );
     }
 
     if (intent.action === "cex.place_order" && "accountMode" in intent) {
+      if (intent.orderType !== "limit") {
+        throw new Error("Only limit orders are supported.");
+      }
       if (intent.accountMode === "spot") {
         return this.executeSpotOrder(intent);
       }
@@ -115,7 +182,7 @@ export class BinanceConnector implements ExecutionConnector {
       account: "account" in intent ? intent.account : "",
       symbol: intent.symbol,
       side: (intent.side === "buy" ? "BUY" : "SELL") as "BUY" | "SELL",
-      type: (intent.orderType === "limit" ? "LIMIT" : "MARKET") as "LIMIT" | "MARKET",
+      type: "LIMIT" as "LIMIT" | "MARKET",
       quantity: "quantity" in intent ? intent.quantity : undefined,
       price: "price" in intent ? intent.price : undefined,
     };
@@ -145,7 +212,7 @@ export class BinanceConnector implements ExecutionConnector {
       account: "account" in intent ? intent.account : "",
       symbol: intent.symbol,
       side: (intent.side === "buy" ? "BUY" : "SELL") as "BUY" | "SELL",
-      type: (intent.orderType === "limit" ? "LIMIT" : "MARKET") as "LIMIT" | "MARKET",
+      type: "LIMIT" as "LIMIT" | "MARKET",
       quantity: "quantity" in intent ? intent.quantity : undefined,
       price: "price" in intent ? intent.price : undefined,
       leverage,

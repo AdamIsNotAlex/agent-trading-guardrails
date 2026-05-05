@@ -11,16 +11,19 @@ export function decodeTransaction(to: string, data?: string, value?: string): De
   let isApproval = false;
   let approvalAmount: string | null = null;
   let spender: string | null = null;
+  let recipient: string | null = null;
   let token: string | null = null;
 
-  if (selector === ERC20_APPROVE_SELECTOR && data && data.length >= 138) {
+  if (selector === ERC20_APPROVE_SELECTOR && data && isAbiCallData(data)) {
     functionName = "approve";
     isApproval = true;
     token = to;
     spender = `0x${data.slice(34, 74)}`;
     approvalAmount = `0x${data.slice(74, 138)}`;
-  } else if (selector === ERC20_TRANSFER_SELECTOR) {
+  } else if (selector === ERC20_TRANSFER_SELECTOR && data && isAbiCallData(data)) {
     functionName = "transfer";
+    token = to;
+    recipient = `0x${data.slice(34, 74)}`;
   }
 
   return {
@@ -31,6 +34,7 @@ export function decodeTransaction(to: string, data?: string, value?: string): De
     isApproval,
     approvalAmount,
     spender,
+    recipient,
     token,
   };
 }
@@ -38,4 +42,8 @@ export function decodeTransaction(to: string, data?: string, value?: string): De
 export function isUnlimitedApproval(decoded: DecodedTransaction): boolean {
   if (!decoded.isApproval || !decoded.approvalAmount) return false;
   return decoded.approvalAmount.toLowerCase() === UINT256_MAX;
+}
+
+function isAbiCallData(data: string): boolean {
+  return data.length === 138;
 }

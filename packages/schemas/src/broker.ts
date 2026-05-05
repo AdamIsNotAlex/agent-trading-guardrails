@@ -9,8 +9,8 @@ export const BrokerOrderStatus = z
     symbol: z.string().min(1),
     side: z.string().min(1),
     status: z.string().min(1),
-    executedQty: z.number().nonnegative(),
-    avgPrice: z.number().nonnegative(),
+    executedQty: z.number().finite().nonnegative(),
+    avgPrice: z.number().finite().nonnegative(),
   })
   .strict();
 export type BrokerOrderStatus = z.infer<typeof BrokerOrderStatus>;

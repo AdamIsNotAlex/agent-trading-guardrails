@@ -1,3 +1,4 @@
+import type { TradingIntent } from "@guardrails/schemas";
 import type { GuardrailDecision, GuardrailService } from "@guardrails/service";
 
 export interface GuardedToolResult {
@@ -6,6 +7,9 @@ export interface GuardedToolResult {
   correlationId: string;
   outcome: string;
   approvalId?: string;
+  decidedAt?: string;
+  decisionToken?: string;
+  intent?: TradingIntent;
   reasons: Array<{ rule: string; message: string }>;
 }
 
@@ -45,7 +49,7 @@ export class GuardedToolSurface {
       resource: `cex:${params.exchange}:${params.account}:${params.symbol}`,
       requestedAt: params.requestedAt ?? new Date().toISOString(),
     };
-    return this.toResult(await this.guardrail.evaluate(intent));
+    return this.toResult(await this.guardrail.evaluate(intent), intent as TradingIntent);
   }
 
   async proposeCancelOrder(
@@ -68,7 +72,7 @@ export class GuardedToolSurface {
       resource: `cex:${params.exchange}:${params.account}:${params.symbol}`,
       requestedAt: params.requestedAt ?? new Date().toISOString(),
     };
-    return this.toResult(await this.guardrail.evaluate(intent));
+    return this.toResult(await this.guardrail.evaluate(intent), intent as TradingIntent);
   }
 
   async proposeSimulation(
@@ -95,7 +99,7 @@ export class GuardedToolSurface {
       resource: `onchain:${params.chain}:${params.chainEnvironment}:${params.to}`,
       requestedAt: params.requestedAt ?? new Date().toISOString(),
     };
-    return this.toResult(await this.guardrail.evaluate(intent));
+    return this.toResult(await this.guardrail.evaluate(intent), intent as TradingIntent);
   }
 
   async requestSignature(
@@ -124,7 +128,7 @@ export class GuardedToolSurface {
       resource: `onchain:${params.chain}:${params.chainEnvironment}:${params.to}`,
       requestedAt: params.requestedAt ?? new Date().toISOString(),
     };
-    return this.toResult(await this.guardrail.evaluate(intent));
+    return this.toResult(await this.guardrail.evaluate(intent), intent as TradingIntent);
   }
 
   async queryOnchainPortfolio(
@@ -146,7 +150,7 @@ export class GuardedToolSurface {
       resource: `onchain:${params.chain}:${params.chainEnvironment}:${params.address}`,
       requestedAt: params.requestedAt ?? new Date().toISOString(),
     };
-    return this.toResult(await this.guardrail.evaluate(intent));
+    return this.toResult(await this.guardrail.evaluate(intent), intent as TradingIntent);
   }
 
   async queryOrderStatus(
@@ -169,7 +173,7 @@ export class GuardedToolSurface {
       resource: `cex:${params.exchange}:${params.account}:${params.symbol}`,
       requestedAt: params.requestedAt ?? new Date().toISOString(),
     };
-    return this.toResult(await this.guardrail.evaluate(intent));
+    return this.toResult(await this.guardrail.evaluate(intent), intent as TradingIntent);
   }
 
   async queryOpenOrders(
@@ -190,7 +194,7 @@ export class GuardedToolSurface {
       resource: `cex:${params.exchange}:${params.account}`,
       requestedAt: params.requestedAt ?? new Date().toISOString(),
     };
-    return this.toResult(await this.guardrail.evaluate(intent));
+    return this.toResult(await this.guardrail.evaluate(intent), intent as TradingIntent);
   }
 
   async queryPortfolio(
@@ -211,16 +215,20 @@ export class GuardedToolSurface {
       resource: `cex:${params.exchange}:${params.account}`,
       requestedAt: params.requestedAt ?? new Date().toISOString(),
     };
-    return this.toResult(await this.guardrail.evaluate(intent));
+    return this.toResult(await this.guardrail.evaluate(intent), intent as TradingIntent);
   }
 
-  private toResult(decision: GuardrailDecision): GuardedToolResult {
+  private toResult(decision: GuardrailDecision, intent: TradingIntent): GuardedToolResult {
+    const approved = decision.outcome === "allow" || decision.outcome === "needs_human";
     return {
       success: decision.outcome === "allow",
       intentId: decision.intentId,
       correlationId: decision.correlationId,
       outcome: decision.outcome,
       approvalId: decision.approvalId,
+      decidedAt: approved ? decision.decidedAt : undefined,
+      decisionToken: approved ? decision.decisionToken : undefined,
+      intent: approved ? intent : undefined,
       reasons: decision.reasons,
     };
   }

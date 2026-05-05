@@ -468,10 +468,9 @@ describe("RiskEngine", () => {
 
   it("fails closed for price band when intent price is omitted", async () => {
     const engine = new RiskEngine(makeProvider(), limits);
-    const intent = { ...binanceSpotOrder };
-    delete intent.price;
+    const { price: _price, ...intent } = binanceSpotOrder;
 
-    const result = await engine.evaluate(intent, makeVerdict());
+    const result = await engine.evaluate(intent as never, makeVerdict());
     const priceBand = result.checks.find((c) => c.check === "price_band");
 
     expect(result.passed).toBe(false);
@@ -485,30 +484,20 @@ describe("RiskEngine", () => {
     Number.NaN,
     Number.POSITIVE_INFINITY,
     -1,
-  ])("fails closed when the market data age limit is invalid (%s)", async (maxMarketDataAgeMs) => {
-    const engine = new RiskEngine(makeProvider(), { ...limits, maxMarketDataAgeMs });
-
-    const result = await engine.evaluate(binanceSpotOrder, makeVerdict());
-    const freshness = result.checks.find((c) => c.check === "market_data_freshness");
-    const priceBand = result.checks.find((c) => c.check === "price_band");
-
-    expect(result.passed).toBe(false);
-    expect(freshness?.status).toBe("unavailable");
-    expect(priceBand?.status).toBe("unavailable");
+  ])("rejects invalid market data age limits (%s)", (maxMarketDataAgeMs) => {
+    expect(() => new RiskEngine(makeProvider(), { ...limits, maxMarketDataAgeMs })).toThrow(
+      "Risk limit maxMarketDataAgeMs must be a finite nonnegative number.",
+    );
   });
 
   it.each([
     Number.NaN,
     Number.POSITIVE_INFINITY,
     -1,
-  ])("fails closed for price band when the limit is invalid (%s)", async (maxPriceBandBps) => {
-    const engine = new RiskEngine(makeProvider(), { ...limits, maxPriceBandBps });
-
-    const result = await engine.evaluate(binanceSpotOrder, makeVerdict());
-    const priceBand = result.checks.find((c) => c.check === "price_band");
-
-    expect(result.passed).toBe(false);
-    expect(priceBand?.status).toBe("unavailable");
+  ])("rejects invalid price band limits (%s)", (maxPriceBandBps) => {
+    expect(() => new RiskEngine(makeProvider(), { ...limits, maxPriceBandBps })).toThrow(
+      "Risk limit maxPriceBandBps must be a finite nonnegative number.",
+    );
   });
 
   it("fails when position delta exceeds limit", async () => {

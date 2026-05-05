@@ -6,6 +6,7 @@ import { LocalDevSigner } from "./dev-signer.js";
 import type { EvmConfig, EvmRpcProvider, SimulationResult } from "./interfaces.js";
 
 const USDC_ADDRESS = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
+const RECIPIENT_ADDRESS = "0x7265636970696e74000000000000000000000000";
 
 const config: EvmConfig = {
   rpcUrl: "https://sepolia.example.com",
@@ -15,6 +16,7 @@ const config: EvmConfig = {
   allowedFunctions: ["transfer", "approve", "0xa9059cbb", "0x095ea7b3"],
   allowedTokens: [USDC_ADDRESS],
   allowedSpenders: ["0x0000000000000000000000007265636970696e74"],
+  allowedRecipients: [RECIPIENT_ADDRESS],
 };
 
 function makeMockProvider(opts?: {
@@ -28,7 +30,9 @@ function makeMockProvider(opts?: {
       return {
         success,
         gasUsed: 21000,
-        balanceChanges: opts?.balanceChanges ?? [],
+        balanceChanges: opts?.balanceChanges ?? [
+          { address: RECIPIENT_ADDRESS, asset: "USDC", delta: "100" },
+        ],
         balanceChangesReliable: opts?.balanceChangesReliable ?? true,
         error: success ? null : "execution reverted",
       };
@@ -45,7 +49,7 @@ function makeMockProvider(opts?: {
 describe("Transaction decoding", () => {
   it("decodes ERC-20 transfer", () => {
     const data =
-      "0xa9059cbb000000000000000000000000recipient0000000000000000000000000000000000000000000000000000000000000064";
+      "0xa9059cbb0000000000000000000000007265636970696e740000000000000000000000000000000000000000000000000000000000000000000000000000000000000064";
     const decoded = decodeTransaction(USDC_ADDRESS, data);
     expect(decoded.functionSelector).toBe("0xa9059cbb");
     expect(decoded.functionName).toBe("transfer");
@@ -73,7 +77,7 @@ describe("Transaction decoding", () => {
 
   it("non-approval is not unlimited", () => {
     const data =
-      "0xa9059cbb000000000000000000000000recipient0000000000000000000000000000000000000000000000000000000000000064";
+      "0xa9059cbb0000000000000000000000007265636970696e740000000000000000000000000000000000000000000000000000000000000000000000000000000000000064";
     const decoded = decodeTransaction(USDC_ADDRESS, data);
     expect(isUnlimitedApproval(decoded)).toBe(false);
   });
@@ -134,13 +138,15 @@ describe("EvmConnector execution", () => {
     const connector = new EvmConnector(
       config,
       makeMockProvider({
-        balanceChanges: [{ address: USDC_ADDRESS, asset: "USDC", delta: "-100" }],
+        balanceChanges: [{ address: RECIPIENT_ADDRESS, asset: "USDC", delta: "-100" }],
       }),
       null,
     );
     const intent = {
       ...ethereumSepoliaSimulation,
-      expectedDeltas: [{ address: USDC_ADDRESS, asset: "USDC", minDelta: "-50", maxDelta: "0" }],
+      expectedDeltas: [
+        { address: RECIPIENT_ADDRESS, asset: "USDC", minDelta: "-50", maxDelta: "0" },
+      ],
     };
 
     await expect(connector.execute(intent as never)).rejects.toThrow("Balance delta check failed");
@@ -155,36 +161,37 @@ describe("EvmConnector execution", () => {
     await expect(connector.execute(ethereumSepoliaSimulation)).rejects.toThrow("Simulation failed");
   });
 
-  it("signs and broadcasts with dev signer", async () => {
+  it("does not sign request-signature intents without expected deltas", async () => {
     const signer = new LocalDevSigner("0x1234567890abcdef1234567890abcdef12345678", config);
-    const provider = makeMockProvider();
-    const simulateTransaction = vi.spyOn(provider, "simulateTransaction");
-    const connector = new EvmConnector(config, provider, signer);
-    const result = await connector.execute(ethereumSepoliaSigning);
+    const signAndBroadcast = vi.spyOn(signer, "signAndBroadcast");
+    const connector = new EvmConnector(config, makeMockProvider(), signer);
+    const { expectedDeltas: _, ...intent } = ethereumSepoliaSigning;
 
-    expect(result.transactionHash).toBeTruthy();
-    expect(result.transactionHash).toMatch(/^0x[0-9a-f]+$/);
-    expect(simulateTransaction).not.toHaveBeenCalled();
+    await expect(connector.execute(intent as never)).rejects.toThrow(
+      "Ethereum expected balance deltas are required",
+    );
+    expect(signAndBroadcast).not.toHaveBeenCalled();
   });
 
   it("signs when request-signature balance deltas are within range", async () => {
     const signer = new LocalDevSigner("0x1234567890abcdef1234567890abcdef12345678", config);
     const signAndBroadcast = vi.spyOn(signer, "signAndBroadcast");
-    const connector = new EvmConnector(
-      config,
-      makeMockProvider({
-        balanceChanges: [{ address: USDC_ADDRESS, asset: "USDC", delta: "-100" }],
-      }),
-      signer,
-    );
+    const provider = makeMockProvider({
+      balanceChanges: [{ address: RECIPIENT_ADDRESS, asset: "USDC", delta: "-100" }],
+    });
+    const simulateTransaction = vi.spyOn(provider, "simulateTransaction");
+    const connector = new EvmConnector(config, provider, signer);
     const intent = {
       ...ethereumSepoliaSigning,
-      expectedDeltas: [{ address: USDC_ADDRESS, asset: "USDC", minDelta: "-101", maxDelta: "-99" }],
+      expectedDeltas: [
+        { address: RECIPIENT_ADDRESS, asset: "USDC", minDelta: "-101", maxDelta: "-99" },
+      ],
     };
 
     const result = await connector.execute(intent as never);
 
     expect(result.transactionHash).toBeTruthy();
+    expect(simulateTransaction).toHaveBeenCalledOnce();
     expect(signAndBroadcast).toHaveBeenCalledOnce();
   });
 
@@ -206,7 +213,7 @@ describe("EvmConnector execution", () => {
       ...ethereumSepoliaSigning,
       expectedDeltas: [
         {
-          address: USDC_ADDRESS,
+          address: RECIPIENT_ADDRESS,
           account: "recipient111111111111111111111111111111111",
           asset: "USDC",
           minDelta: "0",
@@ -247,13 +254,15 @@ describe("EvmConnector execution", () => {
     const connector = new EvmConnector(
       config,
       makeMockProvider({
-        balanceChanges: [{ address: USDC_ADDRESS, asset: "USDC", delta: "-100" }],
+        balanceChanges: [{ address: RECIPIENT_ADDRESS, asset: "USDC", delta: "-100" }],
       }),
       signer,
     );
     const intent = {
       ...ethereumSepoliaSigning,
-      expectedDeltas: [{ address: USDC_ADDRESS, asset: "USDC", minDelta: "-50", maxDelta: "0" }],
+      expectedDeltas: [
+        { address: RECIPIENT_ADDRESS, asset: "USDC", minDelta: "-50", maxDelta: "0" },
+      ],
     };
 
     await expect(connector.execute(intent as never)).rejects.toThrow("Balance delta check failed");
@@ -264,14 +273,16 @@ describe("EvmConnector execution", () => {
     const signer = new LocalDevSigner("0x1234567890abcdef1234567890abcdef12345678", config);
     const signAndBroadcast = vi.spyOn(signer, "signAndBroadcast");
     const provider = makeMockProvider({
-      balanceChanges: [{ address: USDC_ADDRESS, asset: "USDC", delta: "-100" }],
+      balanceChanges: [{ address: RECIPIENT_ADDRESS, asset: "USDC", delta: "-100" }],
     });
     const simulateTransaction = vi.spyOn(provider, "simulateTransaction");
     const connector = new EvmConnector(config, provider, signer);
     const intent = { ...ethereumSepoliaSigning, expectedDeltas: [] };
 
-    await expect(connector.execute(intent as never)).rejects.toThrow("Balance delta check failed");
-    expect(simulateTransaction).toHaveBeenCalledOnce();
+    await expect(connector.execute(intent as never)).rejects.toThrow(
+      "Ethereum expected balance deltas are required",
+    );
+    expect(simulateTransaction).not.toHaveBeenCalled();
     expect(signAndBroadcast).not.toHaveBeenCalled();
   });
 
@@ -283,7 +294,12 @@ describe("EvmConnector execution", () => {
       makeMockProvider({ balanceChangesReliable: false }),
       signer,
     );
-    const intent = { ...ethereumSepoliaSigning, expectedDeltas: [] };
+    const intent = {
+      ...ethereumSepoliaSigning,
+      expectedDeltas: [
+        { address: RECIPIENT_ADDRESS, asset: "USDC", minDelta: "-101", maxDelta: "-99" },
+      ],
+    };
 
     await expect(connector.execute(intent as never)).rejects.toThrow("reliable balance changes");
     expect(signAndBroadcast).not.toHaveBeenCalled();

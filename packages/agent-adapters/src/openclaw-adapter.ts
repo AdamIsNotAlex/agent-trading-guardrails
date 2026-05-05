@@ -27,12 +27,32 @@ export class OpenClawAdapter {
   }
 
   async executeTool(toolName: string, params: Record<string, unknown>): Promise<GuardedToolResult> {
+    if (!this.getToolDefinitions().some((tool) => tool.name === toolName)) {
+      return {
+        success: false,
+        intentId: "",
+        correlationId: "",
+        outcome: "deny",
+        reasons: [{ rule: "unknown_tool", message: `Tool ${toolName} is not available.` }],
+      };
+    }
+
+    if (params.idempotencyKey == null || String(params.idempotencyKey).length === 0) {
+      return {
+        success: false,
+        intentId: "",
+        correlationId: "",
+        outcome: "deny",
+        reasons: [{ rule: "idempotency_required", message: "idempotencyKey is required." }],
+      };
+    }
+
     const base = {
       principal: this.principal,
       environment: this.environment,
       rationale: String(params.rationale ?? ""),
       evidence: Array.isArray(params.evidence) ? params.evidence.map(String) : [],
-      idempotencyKey: String(params.idempotencyKey ?? crypto.randomUUID()),
+      idempotencyKey: String(params.idempotencyKey),
       intentId: params.intentId != null ? String(params.intentId) : undefined,
       requestedAt: params.requestedAt != null ? String(params.requestedAt) : undefined,
     };

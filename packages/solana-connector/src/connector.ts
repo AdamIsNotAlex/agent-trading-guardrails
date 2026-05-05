@@ -1,7 +1,8 @@
-import type { ExecutionConnector } from "@guardrails/broker";
+import { ConnectorRevalidationError, type ExecutionConnector } from "@guardrails/broker";
 import type { TradingIntent } from "@guardrails/schemas";
 import { compareSolanaBalanceDeltas, type ExpectedSolanaBalanceDelta } from "./balance-delta.js";
 import type {
+  ParsedInstruction,
   SolanaConfig,
   SolanaRpcProvider,
   SolanaSigner,
@@ -27,10 +28,23 @@ export class SolanaConnector implements ExecutionConnector {
       intent.action !== "onchain.simulate_transaction" &&
       intent.action !== "onchain.request_signature"
     ) {
-      return { passed: true };
+      return { passed: false, reason: "Unsupported Solana connector action." };
     }
     if (!("chain" in intent) || intent.chain !== "solana") {
       return { passed: false, reason: "Intent is not for Solana." };
+    }
+    if (
+      !("chainEnvironment" in intent) ||
+      intent.chainEnvironment !== this.config.chainEnvironment
+    ) {
+      return { passed: false, reason: "Intent Solana environment does not match connector." };
+    }
+    if (
+      "instructions" in intent &&
+      Array.isArray(intent.instructions) &&
+      intent.instructions.length === 0
+    ) {
+      return { passed: false, reason: "Solana instructions cannot be empty." };
     }
 
     const rawInstructions =
@@ -38,7 +52,15 @@ export class SolanaConnector implements ExecutionConnector {
         ? intent.instructions
         : [{ programId: "programId" in intent ? intent.programId : intent.to }];
 
-    const instructions = parseInstructions(rawInstructions as Array<Record<string, unknown>>);
+    let instructions: ParsedInstruction[];
+    try {
+      instructions = parseInstructions(rawInstructions as Array<Record<string, unknown>>);
+    } catch (err) {
+      return {
+        passed: false,
+        reason: err instanceof Error ? err.message : "Solana instructions are invalid.",
+      };
+    }
 
     const programCheck = validatePrograms(instructions, this.config);
     if (!programCheck.valid) return { passed: false, reason: programCheck.reason };
@@ -52,11 +74,39 @@ export class SolanaConnector implements ExecutionConnector {
     const accountCheck = validateAccounts(instructions, this.config);
     if (!accountCheck.valid) return { passed: false, reason: accountCheck.reason };
 
+    try {
+      if (
+        intent.action === "onchain.request_signature" &&
+        this.expectedDeltas(intent).length === 0
+      ) {
+        return { passed: false, reason: "Solana expected balance deltas are required." };
+      }
+    } catch (err) {
+      return {
+        passed: false,
+        reason: err instanceof Error ? err.message : "Solana expected balance deltas are invalid.",
+      };
+    }
+
     return { passed: true };
   }
 
   async execute(intent: TradingIntent): Promise<{ orderId?: string; transactionHash?: string }> {
+    const validation = await this.revalidate(intent);
+    if (!validation.passed) {
+      throw new ConnectorRevalidationError(
+        validation.reason ?? "Solana connector revalidation failed.",
+      );
+    }
+
     if (!("to" in intent)) return {};
+    if (
+      "instructions" in intent &&
+      Array.isArray(intent.instructions) &&
+      intent.instructions.length === 0
+    ) {
+      throw new ConnectorRevalidationError("Solana instructions cannot be empty.");
+    }
     const rawInstructions =
       "instructions" in intent && intent.instructions
         ? intent.instructions
@@ -78,7 +128,9 @@ export class SolanaConnector implements ExecutionConnector {
       if (!this.signer) {
         throw new Error("Signer not configured.");
       }
-      this.expectedDeltas(intent);
+      if (this.expectedDeltas(intent).length === 0) {
+        throw new Error("Solana expected balance deltas are required.");
+      }
       const result = await this.provider.simulateTransaction(instructions);
       if (!result.success) {
         throw new Error(`Simulation failed: ${result.error}`);
@@ -93,6 +145,10 @@ export class SolanaConnector implements ExecutionConnector {
 
   private assertExpectedDeltas(result: SolanaSimulationResult, intent: TradingIntent): void {
     if (!this.hasExpectedDeltas(intent)) return;
+
+    if (this.expectedDeltas(intent).length === 0) {
+      throw new Error("Solana expected balance deltas are required.");
+    }
 
     if (!result.balanceChangesReliable) {
       throw new Error(

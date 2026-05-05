@@ -8,7 +8,7 @@ function createTestDb() {
 
 describe("AuditWriter", () => {
   it("writes and retrieves audit events", () => {
-    const writer = new AuditWriter(createTestDb());
+    const writer = new AuditWriter(createTestDb(), { environment: "dev" });
     writer.write({
       eventType: "intent.received",
       environment: "dev",
@@ -19,7 +19,7 @@ describe("AuditWriter", () => {
     });
 
     const db = createTestDb();
-    const writer2 = new AuditWriter(db);
+    const writer2 = new AuditWriter(db, { environment: "dev" });
     writer2.write({
       eventType: "intent.received",
       environment: "dev",
@@ -34,7 +34,7 @@ describe("AuditWriter", () => {
 
   it("includes agent identity in events", () => {
     const db = createTestDb();
-    const writer = new AuditWriter(db);
+    const writer = new AuditWriter(db, { environment: "dev" });
     writer.write({
       eventType: "intent.received",
       environment: "dev",
@@ -48,7 +48,7 @@ describe("AuditWriter", () => {
 
   it("includes intent ID in events", () => {
     const db = createTestDb();
-    const writer = new AuditWriter(db);
+    const writer = new AuditWriter(db, { environment: "dev" });
     writer.write({
       eventType: "reviewer.completed",
       environment: "canary_live",
@@ -62,7 +62,7 @@ describe("AuditWriter", () => {
 
   it("includes prompt, session, and input references in events", () => {
     const db = createTestDb();
-    const writer = new AuditWriter(db);
+    const writer = new AuditWriter(db, { environment: "dev" });
     writer.write({
       eventType: "intent.received",
       environment: "canary_live",
@@ -83,7 +83,7 @@ describe("AuditWriter", () => {
 
   it("stores structured data as JSON", () => {
     const db = createTestDb();
-    const writer = new AuditWriter(db);
+    const writer = new AuditWriter(db, { environment: "dev" });
     const testData = {
       intent: { action: "cex.place_order", symbol: "ETH-USDC" },
       reviewerVerdict: "approve",
@@ -105,7 +105,7 @@ describe("AuditWriter", () => {
 
   it("maintains hash chain across events", () => {
     const db = createTestDb();
-    const writer = new AuditWriter(db);
+    const writer = new AuditWriter(db, { environment: "dev" });
 
     writer.write({
       eventType: "intent.received",
@@ -145,7 +145,7 @@ describe("AuditWriter", () => {
 
   it("applies Drizzle migrations from an empty database", () => {
     const db = createTestDb();
-    new AuditWriter(db);
+    new AuditWriter(db, { environment: "dev" });
     const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as Array<
       Record<string, unknown>
     >;
@@ -169,6 +169,7 @@ describe("AuditWriter", () => {
       "input_ref",
       "data",
       "previous_hash",
+      "event_hash",
     ]);
     expect(db.prepare("SELECT COUNT(*) AS count FROM __drizzle_migrations").get()).toMatchObject({
       count: 1,
@@ -197,7 +198,7 @@ describe("AuditWriter", () => {
       )
     `).run();
 
-    const writer = new AuditWriter(db);
+    const writer = new AuditWriter(db, { environment: "dev" });
     writer.write({
       eventType: "intent.received",
       environment: "dev",
@@ -251,7 +252,7 @@ describe("AuditWriter", () => {
       )
     `).run();
 
-    new AuditWriter(db);
+    new AuditWriter(db, { environment: "dev" });
 
     expect(db.prepare("SELECT COUNT(*) AS count FROM __drizzle_migrations").get()).toMatchObject({
       count: 1,
@@ -279,7 +280,7 @@ describe("AuditWriter", () => {
     `).run();
     db.prepare("CREATE TABLE __drizzle_migrations (id SERIAL PRIMARY KEY)").run();
 
-    new AuditWriter(db);
+    new AuditWriter(db, { environment: "dev" });
 
     expect(db.prepare("SELECT COUNT(*) AS count FROM __drizzle_migrations").get()).toMatchObject({
       count: 1,
@@ -288,7 +289,7 @@ describe("AuditWriter", () => {
 
   it("records complete allow flow", () => {
     const db = createTestDb();
-    const writer = new AuditWriter(db);
+    const writer = new AuditWriter(db, { environment: "dev" });
     const corr = "allow-flow-001";
     writer.write({
       eventType: "intent.received",
@@ -352,7 +353,7 @@ describe("AuditWriter", () => {
 
   it("records complete deny flow", () => {
     const db = createTestDb();
-    const writer = new AuditWriter(db);
+    const writer = new AuditWriter(db, { environment: "dev" });
     const corr = "deny-flow-001";
     writer.write({
       eventType: "intent.received",
@@ -376,7 +377,7 @@ describe("AuditWriter", () => {
 
   it("records needs-human flow", () => {
     const db = createTestDb();
-    const writer = new AuditWriter(db);
+    const writer = new AuditWriter(db, { environment: "dev" });
     const corr = "human-flow-001";
     writer.write({
       eventType: "intent.received",
@@ -410,7 +411,7 @@ describe("AuditWriter", () => {
 
   it("records error flow", () => {
     const db = createTestDb();
-    const writer = new AuditWriter(db);
+    const writer = new AuditWriter(db, { environment: "dev" });
     const corr = "error-flow-001";
     writer.write({
       eventType: "intent.received",

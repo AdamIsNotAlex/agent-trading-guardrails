@@ -104,7 +104,8 @@
                 },
                 "required": ["address", "asset", "minDelta", "maxDelta"],
                 "additionalProperties": false
-              }
+              },
+              "minItems": 1
             }
           },
           "required": [
@@ -120,7 +121,8 @@
             "chainEnvironment",
             "to",
             "simulationId",
-            "chain"
+            "chain",
+            "expectedDeltas"
           ],
           "additionalProperties": false
         },
@@ -167,7 +169,8 @@
               "$ref": "#/definitions/onchain-signing-intent/anyOf/0/properties/value"
             },
             "programId": {
-              "$ref": "#/definitions/onchain-signing-intent/anyOf/0/properties/programId"
+              "type": "string",
+              "minLength": 1
             },
             "instructions": {
               "$ref": "#/definitions/onchain-signing-intent/anyOf/0/properties/instructions"
@@ -204,7 +207,8 @@
                 },
                 "required": ["account", "asset", "minDelta", "maxDelta"],
                 "additionalProperties": false
-              }
+              },
+              "minItems": 1
             }
           },
           "required": [
@@ -219,8 +223,10 @@
             "evidence",
             "chainEnvironment",
             "to",
+            "programId",
             "simulationId",
-            "chain"
+            "chain",
+            "expectedDeltas"
           ],
           "additionalProperties": false
         }

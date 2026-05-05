@@ -3,7 +3,6 @@ const SECRET_KEY_PATTERN =
 
 const SECRET_PATTERNS = [
   /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/gi,
-  /0x[0-9a-f]{64}/gi,
 ];
 
 const DOUBLE_QUOTED_SECRET_ASSIGNMENT_PATTERN = new RegExp(
@@ -21,6 +20,8 @@ const UNQUOTED_SECRET_ASSIGNMENT_PATTERN = new RegExp(
   "gi",
 );
 
+const LABELED_HEX_SECRET_PATTERN = /\b((?:key|private key|secret key)\s+is\s+)0x[0-9a-f]{64}\b/gi;
+
 export function redactSecrets(text: string): string {
   let result = text;
   for (const pattern of SECRET_PATTERNS) {
@@ -29,6 +30,7 @@ export function redactSecrets(text: string): string {
   result = result.replace(DOUBLE_QUOTED_SECRET_ASSIGNMENT_PATTERN, "$1[REDACTED]$3");
   result = result.replace(SINGLE_QUOTED_SECRET_ASSIGNMENT_PATTERN, "$1[REDACTED]$3");
   result = result.replace(UNQUOTED_SECRET_ASSIGNMENT_PATTERN, "$1[REDACTED]");
+  result = result.replace(LABELED_HEX_SECRET_PATTERN, "$1[REDACTED]");
   return result;
 }
 
@@ -39,9 +41,12 @@ function isSecretKey(key: string): boolean {
     normalized.includes("private") ||
     normalized.includes("mnemonic") ||
     normalized.includes("seed") ||
+    normalized === "token" ||
+    ["vaulttoken", "accesstoken", "refreshtoken", "authtoken", "bearertoken"].some((suffix) =>
+      normalized.endsWith(suffix),
+    ) ||
     normalized.endsWith("apikey") ||
-    normalized.endsWith("apisecret") ||
-    normalized.endsWith("vaulttoken")
+    normalized.endsWith("apisecret")
   );
 }
 

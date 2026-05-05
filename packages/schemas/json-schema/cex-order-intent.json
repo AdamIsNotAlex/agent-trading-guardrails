@@ -66,7 +66,7 @@
         },
         "orderType": {
           "type": "string",
-          "enum": ["limit", "market"]
+          "enum": ["limit"]
         },
         "quantity": {
           "type": "number",
@@ -109,6 +109,8 @@
         "symbol",
         "side",
         "orderType",
+        "quantity",
+        "price",
         "maxNotionalUsd",
         "maxSlippageBps"
       ],

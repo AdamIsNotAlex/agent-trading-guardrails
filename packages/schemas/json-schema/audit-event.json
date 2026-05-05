@@ -72,6 +72,10 @@
         "previousHash": {
           "type": "string",
           "minLength": 1
+        },
+        "eventHash": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
@@ -81,7 +85,8 @@
         "correlationId",
         "environment",
         "data",
-        "previousHash"
+        "previousHash",
+        "eventHash"
       ],
       "additionalProperties": false
     }

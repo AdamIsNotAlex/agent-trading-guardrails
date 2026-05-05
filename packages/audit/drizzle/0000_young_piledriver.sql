@@ -11,7 +11,8 @@ CREATE TABLE `audit_events` (
 	`session_id` text,
 	`input_ref` text,
 	`data` text NOT NULL,
-	`previous_hash` text NOT NULL
+	`previous_hash` text NOT NULL,
+	`event_hash` text NOT NULL
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `audit_events_event_id_unique` ON `audit_events` (`event_id`);

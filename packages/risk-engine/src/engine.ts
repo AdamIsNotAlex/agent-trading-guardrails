@@ -25,17 +25,32 @@ export class RiskEngine {
   constructor(
     private provider: RiskDataProvider,
     private limits: RiskLimits,
-  ) {}
+  ) {
+    for (const [name, value] of Object.entries(limits)) {
+      if (!Number.isFinite(value) || value < 0) {
+        throw new Error(`Risk limit ${name} must be a finite nonnegative number.`);
+      }
+    }
+  }
 
   async evaluate(
     intent: TradingIntent,
     reviewerVerdict: ReviewerVerdictSchema,
   ): Promise<DynamicRiskResult> {
     const checks: RiskCheckResult[] = [];
-    const dailyStatsSnapshot =
+    const today = new Date().toISOString().slice(0, 10);
+    const rawDailyStats =
       intent.action === "cex.place_order" && "account" in intent
-        ? await this.provider.getDailyStats(intent.account, new Date().toISOString().slice(0, 10))
+        ? await this.provider.getDailyStats(intent.account, today)
         : undefined;
+    const dailyStatsSnapshot =
+      rawDailyStats &&
+      intent.action === "cex.place_order" &&
+      "account" in intent &&
+      rawDailyStats.account === intent.account &&
+      rawDailyStats.date === today
+        ? rawDailyStats
+        : null;
     const marketDataSnapshot =
       intent.action === "cex.place_order" && "symbol" in intent
         ? await this.provider.getMarketData(intent.symbol)

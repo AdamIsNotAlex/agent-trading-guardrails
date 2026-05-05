@@ -35,4 +35,5 @@ export interface GuardrailDecision {
   policyOutput: PolicyOutput | null;
   riskResult: DynamicRiskResult | null;
   decidedAt: string;
+  decisionToken?: string;
 }

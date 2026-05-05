@@ -99,8 +99,16 @@ export const ethereumSepoliaSimulation: OnchainSimulationIntent = {
   chain: "ethereum",
   chainEnvironment: "sepolia",
   to: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-  data: "0xa9059cbb000000000000000000000000recipient0000000000000000000000000000000000000000000000000000000000000064",
+  data: "0xa9059cbb0000000000000000000000007265636970696e740000000000000000000000000000000000000000000000000000000000000000000000000000000000000064",
   value: "0",
+  expectedDeltas: [
+    {
+      address: "0x7265636970696e74000000000000000000000000",
+      asset: "USDC",
+      minDelta: "99",
+      maxDelta: "101",
+    },
+  ],
 };
 
 export const solanaDevnetSimulation: OnchainSimulationIntent = {
@@ -132,7 +140,15 @@ export const ethereumSepoliaSigning: OnchainSigningIntent = {
   chain: "ethereum",
   chainEnvironment: "sepolia",
   to: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-  data: "0xa9059cbb000000000000000000000000recipient0000000000000000000000000000000000000000000000000000000000000064",
+  data: "0xa9059cbb0000000000000000000000007265636970696e740000000000000000000000000000000000000000000000000000000000000000000000000000000000000064",
   value: "0",
   simulationId: "550e8400-e29b-41d4-a716-446655440004",
+  expectedDeltas: [
+    {
+      address: "0x7265636970696e74000000000000000000000000",
+      asset: "USDC",
+      minDelta: "99",
+      maxDelta: "101",
+    },
+  ],
 };

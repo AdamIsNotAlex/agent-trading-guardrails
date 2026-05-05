@@ -20,9 +20,14 @@ const config: SolanaConfig = {
 const signingIntent: OnchainSigningIntent = {
   ...solanaDevnetSimulation,
   action: "onchain.request_signature",
+  chain: "solana",
+  programId: TOKEN_PROGRAM,
   simulationId: "550e8400-e29b-41d4-a716-446655440005",
   intentId: "550e8400-e29b-41d4-a716-446655440007",
   idempotencyKey: "sign-sol-001",
+  expectedDeltas: [
+    { account: config.allowedAccounts[0], asset: "SOL", minDelta: "-101", maxDelta: "-99" },
+  ],
 };
 
 function makeMockProvider(opts?: {
@@ -62,6 +67,14 @@ describe("Instruction parsing", () => {
   it("detects authority change", () => {
     const instructions = parseInstructions([{ programId: TOKEN_PROGRAM, type: "setAuthority" }]);
     expect(hasAuthorityChange(instructions)).toBe(true);
+  });
+
+  it("rejects caller-labeled raw instruction data", () => {
+    expect(() =>
+      parseInstructions([
+        { programId: TOKEN_PROGRAM, type: "transfer", data: "encoded-authority-change" },
+      ]),
+    ).toThrow("caller-supplied type");
   });
 
   it("no authority change in normal transfer", () => {
@@ -159,7 +172,7 @@ describe("SolanaConnector execution", () => {
       return {
         success: true,
         logs: [],
-        balanceChanges: [],
+        balanceChanges: [{ account: config.allowedAccounts[0], asset: "SOL", delta: "-100" }],
         balanceChangesReliable: true,
         error: null,
       };
@@ -315,7 +328,9 @@ describe("SolanaConnector execution", () => {
     );
     const intent = { ...signingIntent, expectedDeltas: [] };
 
-    await expect(connector.execute(intent as never)).rejects.toThrow("Balance delta check failed");
+    await expect(connector.execute(intent as never)).rejects.toThrow(
+      "Solana expected balance deltas are required",
+    );
     expect(signAndBroadcast).not.toHaveBeenCalled();
   });
 
@@ -327,7 +342,12 @@ describe("SolanaConnector execution", () => {
       makeMockProvider({ balanceChangesReliable: false }),
       signer,
     );
-    const intent = { ...signingIntent, expectedDeltas: [] };
+    const intent = {
+      ...signingIntent,
+      expectedDeltas: [
+        { account: config.allowedAccounts[0], asset: "SOL", minDelta: "-101", maxDelta: "-99" },
+      ],
+    };
 
     await expect(connector.execute(intent as never)).rejects.toThrow("reliable balance changes");
     expect(signAndBroadcast).not.toHaveBeenCalled();
