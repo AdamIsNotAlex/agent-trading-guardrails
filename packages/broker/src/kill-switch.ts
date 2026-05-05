@@ -1,7 +1,19 @@
-import type { KillSwitch, KillSwitchScope } from "./interfaces.js";
+import { randomUUID } from "node:crypto";
+import type { Environment } from "@guardrails/schemas";
+import type { AuditWriter, KillSwitch, KillSwitchScope } from "./interfaces.js";
 
 export class InMemoryKillSwitch implements KillSwitch {
   private active = new Set<string>();
+  private audit?: AuditWriter;
+  private environment: Environment;
+
+  constructor(audit?: AuditWriter, environment?: Environment) {
+    if (audit && !environment) {
+      throw new Error("Kill switch audit requires an environment.");
+    }
+    this.audit = audit;
+    this.environment = environment ?? "dev";
+  }
 
   private key(scope: KillSwitchScope): string {
     switch (scope.type) {
@@ -24,6 +36,13 @@ export class InMemoryKillSwitch implements KillSwitch {
   }
 
   activate(scope: KillSwitchScope): void {
+    this.audit?.write({
+      eventType: "killswitch.activated",
+      environment: this.environment,
+      correlationId: randomUUID(),
+      ...(scope.type === "agent" ? { principal: scope.principal } : {}),
+      data: { scope },
+    });
     this.active.add(this.key(scope));
   }
 

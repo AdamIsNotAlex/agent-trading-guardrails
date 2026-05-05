@@ -299,9 +299,9 @@ Per-account and per-chain kill switches have code but zero test coverage.
 
 `killswitch.activated` exists in the audit event schema but is never emitted.
 
-- [ ] In `packages/broker/src/kill-switch.ts` `activate()` method, call `AuditWriter.write()` with `eventType: "killswitch.activated"` and the scope details.
-- [ ] This requires adding `AuditWriter` as a dependency to `InMemoryKillSwitch` (or emitting via an event/callback pattern).
-- [ ] Add test that activating a kill switch emits the audit event.
+- [x] In `packages/broker/src/kill-switch.ts` `activate()` method, call `AuditWriter.write()` with `eventType: "killswitch.activated"` and the scope details.
+- [x] This requires adding `AuditWriter` as a dependency to `InMemoryKillSwitch` (or emitting via an event/callback pattern).
+- [x] Add test that activating a kill switch emits the audit event.
 
 ### P2.11 — Add Solana `instructionType` to PolicyInput (Phase 4)
 

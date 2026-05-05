@@ -1,5 +1,5 @@
 import { ApprovalStore } from "@guardrails/approval";
-import type { AuditEventType, TradingIntent } from "@guardrails/schemas";
+import type { TradingIntent } from "@guardrails/schemas";
 import {
   binanceOrderStatus,
   binanceSpotOrder,
@@ -55,13 +55,13 @@ function createApprovalRequest(
 }
 
 function makeAudit(): AuditWriter & {
-  events: Array<{ eventType: AuditEventType; data?: unknown }>;
+  events: Array<Parameters<AuditWriter["write"]>[0]>;
 } {
-  const events: Array<{ eventType: AuditEventType; data?: unknown }> = [];
+  const events: Array<Parameters<AuditWriter["write"]>[0]> = [];
   return {
     events,
     write(event) {
-      events.push(event as { eventType: AuditEventType; data?: unknown });
+      events.push(event);
     },
   };
 }
@@ -446,6 +446,58 @@ describe("ExecutionBroker", () => {
 
     expect(result.status).toBe("rejected");
     expect(approvalStore.get(request.approvalId)?.state).toBe("approved");
+  });
+
+  it("requires environment when kill switch activation audit is enabled", () => {
+    expect(() => new InMemoryKillSwitch(makeAudit())).toThrow(
+      "Kill switch audit requires an environment.",
+    );
+  });
+
+  it("emits audit event when kill switch is activated", () => {
+    const audit = makeAudit();
+    const ks = new InMemoryKillSwitch(audit, config.environment);
+
+    ks.activate({ type: "account", account: binanceSpotOrder.account });
+
+    expect(audit.events).toHaveLength(1);
+    expect(audit.events[0]).toMatchObject({
+      eventType: "killswitch.activated",
+      environment: config.environment,
+      data: { scope: { type: "account", account: binanceSpotOrder.account } },
+    });
+    expect(audit.events[0].correlationId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    );
+    expect(audit.events[0]).not.toHaveProperty("principal");
+  });
+
+  it("includes principal for agent kill switch activation audit events", () => {
+    const audit = makeAudit();
+    const ks = new InMemoryKillSwitch(audit, config.environment);
+
+    ks.activate({ type: "agent", principal: binanceSpotOrder.principal });
+
+    expect(audit.events[0]).toMatchObject({
+      eventType: "killswitch.activated",
+      principal: binanceSpotOrder.principal,
+      data: { scope: { type: "agent", principal: binanceSpotOrder.principal } },
+    });
+  });
+
+  it("does not activate kill switch when activation audit fails", () => {
+    const ks = new InMemoryKillSwitch(
+      {
+        write() {
+          throw new Error("audit down");
+        },
+      },
+      config.environment,
+    );
+    const scope = { type: "global" } as const;
+
+    expect(() => ks.activate(scope)).toThrow("audit down");
+    expect(ks.isActive(scope)).toBe(false);
   });
 
   it("rejects when kill switch is active (global)", async () => {
