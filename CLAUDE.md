@@ -79,3 +79,4 @@ Key packages:
 - Use root `pnpm build` or `pnpm typecheck` for monorepo-wide TypeScript validation; both run `tsc -b` across project references.
 - Reviewer fixtures and env defaults use `REVIEWER_PROVIDER=openai` and `REVIEWER_MODEL=gpt-5.5`.
 - OPA is pinned to v1.16.1 in CI and Docker; policy upgrades require checksum and image digest updates plus `opa test packages/policy/src -v`.
+- Solana devnet genesis hash is `EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG`; do not use the truncated prefix when validating RPC endpoints.

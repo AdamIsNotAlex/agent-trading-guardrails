@@ -15,8 +15,9 @@
     "build": "tsc"
   },
   "dependencies": {
+    "@guardrails/broker": "workspace:*",
     "@guardrails/schemas": "workspace:*",
-    "@guardrails/broker": "workspace:*"
+    "@solana/web3.js": "^1.98.4"
   },
   "devDependencies": {
     "@types/node": "^25.6.0"

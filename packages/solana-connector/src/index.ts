@@ -1,5 +1,7 @@
 export { SolanaConnector } from "./connector.js";
 export { LocalDevSolanaSigner } from "./dev-signer.js";
+export type { DevnetSolanaRpcProviderConfig } from "./devnet-provider.js";
+export { DevnetSolanaRpcProvider } from "./devnet-provider.js";
 export type {
   ParsedInstruction,
   SolanaConfig,

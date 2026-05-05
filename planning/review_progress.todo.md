@@ -100,13 +100,13 @@ These items are needed for the system to work end-to-end against real infrastruc
 
 `SolanaRpcProvider` in `packages/solana-connector/src/interfaces.ts` lines 22-26 is interface-only. `@solana/web3.js` is not a declared dependency.
 
-- [ ] Add `@solana/web3.js` as a dependency to `packages/solana-connector/package.json`.
-- [ ] Create `packages/solana-connector/src/devnet-provider.ts` implementing `SolanaRpcProvider`:
-  - [ ] `simulateTransaction()` → use `@solana/web3.js` `simulateTransaction`.
-  - [ ] `getBalance()` → use `getBalance`.
-  - [ ] `getSlot()` → use `getSlot`.
-- [ ] Accept RPC URL via constructor config.
-- [ ] Add integration test with a mock or devnet (env-gated).
+- [x] Add `@solana/web3.js` as a dependency to `packages/solana-connector/package.json`.
+- [x] Create `packages/solana-connector/src/devnet-provider.ts` implementing `SolanaRpcProvider`:
+  - [x] `simulateTransaction()` → use `@solana/web3.js` `simulateTransaction`.
+  - [x] `getBalance()` → use `getBalance`.
+  - [x] `getSlot()` → use `getSlot`.
+- [x] Accept RPC URL via constructor config.
+- [x] Add integration test with a mock or devnet (env-gated).
 
 ### P1.3 — Implement concrete OPA HTTP PolicyEvaluator (Phase 4)
 
