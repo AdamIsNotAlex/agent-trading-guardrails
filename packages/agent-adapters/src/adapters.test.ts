@@ -120,6 +120,41 @@ describe("OpenClawAdapter", () => {
     expect(result.correlationId).toBeTruthy();
   });
 
+  it("passes futures margin type through propose order", async () => {
+    let capturedIntent: TradingIntent | undefined;
+    const adapter = new OpenClawAdapter(
+      makeCapturingService((intent) => {
+        capturedIntent = intent;
+      }),
+      "agent.openclaw.alpha",
+      "dev",
+    );
+
+    const result = await adapter.executeTool("propose_order", {
+      exchange: "binance",
+      account: "sub-1",
+      accountMode: "usdm_futures",
+      marginType: "isolated",
+      symbol: "ETH-USDT",
+      side: "buy",
+      orderType: "limit",
+      quantity: 0.002,
+      price: 3500,
+      maxNotionalUsd: 7,
+      maxSlippageBps: 30,
+      leverage: 1,
+      rationale: "Test futures order",
+      evidence: ["snapshot-1"],
+    });
+
+    expect(result.success).toBe(true);
+    expect(capturedIntent).toMatchObject({
+      action: "cex.place_order",
+      accountMode: "usdm_futures",
+      marginType: "isolated",
+    });
+  });
+
   it("can query order status", async () => {
     const adapter = new OpenClawAdapter(makeService(), "agent.openclaw.alpha", "dev");
     const result = await adapter.executeTool("get_order_status", {
@@ -359,6 +394,7 @@ describe("HermesAgentAdapter", () => {
       maxNotionalUsd: 5,
       maxSlippageBps: 20,
       leverage: 1,
+      marginType: "isolated",
       rationale: "Test futures",
       evidence: ["snapshot-2"],
     });

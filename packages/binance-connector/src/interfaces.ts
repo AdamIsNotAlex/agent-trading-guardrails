@@ -34,6 +34,7 @@ export interface BinanceApiClient {
   getPrice(symbol: string): Promise<BinanceMarketData>;
   getAccountSnapshot(account: string): Promise<BinanceAccountSnapshot>;
   placeSpotOrder(params: SpotOrderParams): Promise<BinanceOrderResult>;
+  getFuturesMarginType(params: FuturesMarginTypeParams): Promise<"isolated" | "cross">;
   placeFuturesOrder(params: FuturesOrderParams): Promise<BinanceOrderResult>;
   cancelOrder(params: CancelOrderParams): Promise<BinanceOrderResult>;
   getOrderStatus(params: OrderStatusParams): Promise<BinanceOrderResult>;
@@ -46,6 +47,11 @@ export interface SpotOrderParams {
   type: "LIMIT" | "MARKET";
   quantity?: number;
   price?: number;
+}
+
+export interface FuturesMarginTypeParams {
+  account: string;
+  symbol: string;
 }
 
 export interface FuturesOrderParams {

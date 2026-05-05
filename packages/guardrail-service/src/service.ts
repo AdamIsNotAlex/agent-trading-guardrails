@@ -441,6 +441,7 @@ export class GuardrailService {
 
     if ("exchange" in intent) policyInput.exchange = intent.exchange;
     if ("accountMode" in intent) policyInput.accountMode = intent.accountMode;
+    if ("marginType" in intent) policyInput.marginType = intent.marginType;
     if ("symbol" in intent) policyInput.symbol = intent.symbol;
     if ("chain" in intent) policyInput.chain = intent.chain;
     if ("chainEnvironment" in intent) policyInput.chainEnvironment = intent.chainEnvironment;

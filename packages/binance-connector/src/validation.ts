@@ -22,6 +22,9 @@ export function validateIntent(intent: TradingIntent, config: BinanceConfig): Va
         return { valid: false, reason: `Spot symbol ${intent.symbol} is not in the allowlist.` };
       }
     } else if (intent.accountMode === "usdm_futures") {
+      if (!("marginType" in intent) || intent.marginType !== "isolated") {
+        return { valid: false, reason: "USD-M futures orders must use isolated margin." };
+      }
       if ("symbol" in intent && !config.allowedFuturesSymbols.includes(intent.symbol)) {
         return { valid: false, reason: `Futures symbol ${intent.symbol} is not in the allowlist.` };
       }

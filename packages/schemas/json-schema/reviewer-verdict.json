@@ -10,11 +10,20 @@
         },
         "verdict": {
           "type": "string",
-          "enum": ["approve", "reject", "needs_human"]
+          "enum": [
+            "approve",
+            "reject",
+            "needs_human"
+          ]
         },
         "riskLevel": {
           "type": "string",
-          "enum": ["low", "medium", "high", "critical"]
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "critical"
+          ]
         },
         "reasons": {
           "type": "array",

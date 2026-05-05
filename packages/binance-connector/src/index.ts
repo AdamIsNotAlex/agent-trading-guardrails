@@ -6,6 +6,7 @@ export type {
   BinanceMarketData,
   BinanceOrderResult,
   CancelOrderParams,
+  FuturesMarginTypeParams,
   FuturesOrderParams,
   OrderStatusParams,
   SpotOrderParams,

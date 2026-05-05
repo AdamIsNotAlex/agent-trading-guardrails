@@ -9,6 +9,7 @@ export const PolicyInput = z
     resource: z.string().min(1),
     environment: Environment,
     accountMode: z.string().optional(),
+    marginType: z.string().optional(),
     exchange: z.string().optional(),
     symbol: z.string().optional(),
     chain: z.string().optional(),

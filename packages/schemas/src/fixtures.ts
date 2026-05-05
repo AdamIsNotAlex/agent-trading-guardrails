@@ -51,6 +51,7 @@ export const binanceFuturesOrder: CexOrderIntent = {
   maxNotionalUsd: 5,
   maxSlippageBps: 20,
   leverage: 1,
+  marginType: "isolated",
 };
 
 export const binanceCancelOrder: CexCancelIntent = {

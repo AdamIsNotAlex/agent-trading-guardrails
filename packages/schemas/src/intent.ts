@@ -5,6 +5,7 @@ import {
   Chain,
   ChainEnvironment,
   Environment,
+  MarginType,
   OrderSide,
   OrderType,
 } from "./common.js";
@@ -37,6 +38,7 @@ export const CexOrderIntent = IntentEnvelope.extend({
   maxNotionalUsd: z.number().positive(),
   maxSlippageBps: z.number().nonnegative().int(),
   leverage: z.number().int().min(1).optional(),
+  marginType: MarginType.optional(),
 }).strict();
 export type CexOrderIntent = z.infer<typeof CexOrderIntent>;
 

@@ -123,9 +123,35 @@ test_hard_deny_coinm_futures if {
 test_hard_deny_leverage_cap if {
 	inp := object.union(base_input, {
 		"accountMode": "usdm_futures",
+		"marginType": "isolated",
 		"leverage": 10,
 	})
 	guardrail.decision == "deny" with input as inp
+}
+
+# Hard deny: USD-M futures cross margin
+test_hard_deny_futures_cross_margin if {
+	inp := object.union(base_input, {
+		"accountMode": "usdm_futures",
+		"marginType": "cross",
+		"leverage": 1,
+		"maxNotionalUsd": 4,
+	})
+	guardrail.decision == "deny" with input as inp
+	some reason in guardrail.hard_deny_reasons with input as inp
+	reason.rule == "futures_cross_margin_denied"
+}
+
+# Hard deny: USD-M futures missing margin type
+test_hard_deny_futures_missing_margin_type if {
+	inp := object.union(base_input, {
+		"accountMode": "usdm_futures",
+		"leverage": 1,
+		"maxNotionalUsd": 4,
+	})
+	guardrail.decision == "deny" with input as inp
+	some reason in guardrail.hard_deny_reasons with input as inp
+	reason.rule == "futures_cross_margin_denied"
 }
 
 # Hard deny: unlimited token approval
@@ -233,6 +259,7 @@ test_reviewer_alone_insufficient if {
 test_futures_leverage_escalation if {
 	inp := object.union(base_input, {
 		"accountMode": "usdm_futures",
+		"marginType": "isolated",
 		"leverage": 2,
 		"maxNotionalUsd": 5,
 	})
@@ -397,6 +424,7 @@ test_matching_human_approval_rule_escalates if {
 test_futures_above_futures_limit_escalated if {
 	inp := object.union(base_input, {
 		"accountMode": "usdm_futures",
+		"marginType": "isolated",
 		"maxNotionalUsd": 8,
 		"leverage": 1,
 	})
@@ -416,6 +444,7 @@ test_spot_below_spot_limit_allowed if {
 test_futures_within_limit_allowed if {
 	inp := object.union(base_input, {
 		"accountMode": "usdm_futures",
+		"marginType": "isolated",
 		"maxNotionalUsd": 4,
 		"leverage": 1,
 	})

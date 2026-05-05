@@ -24,7 +24,13 @@
             },
             "environment": {
               "type": "string",
-              "enum": ["dev", "paper", "testnet", "canary_live", "production"]
+              "enum": [
+                "dev",
+                "paper",
+                "testnet",
+                "canary_live",
+                "production"
+              ]
             },
             "requestedAt": {
               "type": "string",
@@ -48,7 +54,11 @@
             },
             "chainEnvironment": {
               "type": "string",
-              "enum": ["sepolia", "devnet", "mainnet"]
+              "enum": [
+                "sepolia",
+                "devnet",
+                "mainnet"
+              ]
             },
             "to": {
               "type": "string",
@@ -102,7 +112,12 @@
                     "$ref": "#/definitions/onchain-signing-intent/anyOf/0/properties/expectedDeltas/items/properties/minDelta"
                   }
                 },
-                "required": ["address", "asset", "minDelta", "maxDelta"],
+                "required": [
+                  "address",
+                  "asset",
+                  "minDelta",
+                  "maxDelta"
+                ],
                 "additionalProperties": false
               }
             }
@@ -202,7 +217,12 @@
                     "$ref": "#/definitions/onchain-signing-intent/anyOf/0/properties/expectedDeltas/items/properties/minDelta"
                   }
                 },
-                "required": ["account", "asset", "minDelta", "maxDelta"],
+                "required": [
+                  "account",
+                  "asset",
+                  "minDelta",
+                  "maxDelta"
+                ],
                 "additionalProperties": false
               }
             }

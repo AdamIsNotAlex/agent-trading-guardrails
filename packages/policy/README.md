@@ -20,7 +20,7 @@ The normalized `PolicyInput` is then sent to OPA as `input`. OPA evaluates the p
 | `action` | From intent envelope |
 | `resource` | From intent envelope |
 | `environment` | From intent envelope |
-| `exchange`, `accountMode`, `symbol` | From CEX intents |
+| `exchange`, `accountMode`, `marginType`, `symbol` | From CEX intents |
 | `chain`, `chainEnvironment` | From onchain intents |
 | `maxNotionalUsd`, `leverage` | From order intents |
 | `maxTokenApprovalAmount` | From signing intents |

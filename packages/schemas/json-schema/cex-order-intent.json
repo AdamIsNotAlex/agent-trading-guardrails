@@ -22,7 +22,13 @@
         },
         "environment": {
           "type": "string",
-          "enum": ["dev", "paper", "testnet", "canary_live", "production"]
+          "enum": [
+            "dev",
+            "paper",
+            "testnet",
+            "canary_live",
+            "production"
+          ]
         },
         "requestedAt": {
           "type": "string",
@@ -54,7 +60,10 @@
         },
         "accountMode": {
           "type": "string",
-          "enum": ["spot", "usdm_futures"]
+          "enum": [
+            "spot",
+            "usdm_futures"
+          ]
         },
         "symbol": {
           "type": "string",
@@ -62,11 +71,17 @@
         },
         "side": {
           "type": "string",
-          "enum": ["buy", "sell"]
+          "enum": [
+            "buy",
+            "sell"
+          ]
         },
         "orderType": {
           "type": "string",
-          "enum": ["limit", "market"]
+          "enum": [
+            "limit",
+            "market"
+          ]
         },
         "quantity": {
           "type": "number",
@@ -87,6 +102,13 @@
         "leverage": {
           "type": "integer",
           "minimum": 1
+        },
+        "marginType": {
+          "type": "string",
+          "enum": [
+            "isolated",
+            "cross"
+          ]
         }
       },
       "required": [

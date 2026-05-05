@@ -6,7 +6,11 @@
       "properties": {
         "decision": {
           "type": "string",
-          "enum": ["allow", "deny", "needs_human"]
+          "enum": [
+            "allow",
+            "deny",
+            "needs_human"
+          ]
         },
         "reasons": {
           "type": "array",
@@ -22,7 +26,10 @@
                 "minLength": 1
               }
             },
-            "required": ["rule", "message"],
+            "required": [
+              "rule",
+              "message"
+            ],
             "additionalProperties": false
           }
         },

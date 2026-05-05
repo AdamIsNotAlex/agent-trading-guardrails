@@ -315,10 +315,10 @@ The hard-deny rule for Solana authority changes in `packages/policy/src/rules/de
 
 Leverage cap is enforced, but no `marginType`/`ISOLATED` field exists anywhere.
 
-- [ ] Add `marginType?: "isolated" | "cross"` field to the CEX order intent schema in `packages/schemas/src/intent.ts`.
-- [ ] In `packages/binance-connector/src/validation.ts`, for `usdm_futures` intents, require `marginType === "isolated"` and reject `"cross"`.
-- [ ] Add `marginType` to `PolicyInput` and add a Rego rule enforcing isolated-mode in canary-live.
-- [ ] Add test that cross-margin futures intents are rejected.
+- [x] Add `marginType?: "isolated" | "cross"` field to the CEX order intent schema in `packages/schemas/src/intent.ts`.
+- [x] In `packages/binance-connector/src/validation.ts`, for `usdm_futures` intents, require `marginType === "isolated"` and reject `"cross"`.
+- [x] Add `marginType` to `PolicyInput` and add a Rego rule enforcing isolated-mode in canary-live.
+- [x] Add test that cross-margin futures intents are rejected.
 
 ### P2.13 — Add guarded adapter surface for `onchain.request_signature` and `onchain.get_portfolio` (Phase 12)
 

@@ -43,6 +43,9 @@ export type OrderType = z.infer<typeof OrderType>;
 export const AccountMode = z.enum(["spot", "usdm_futures"]);
 export type AccountMode = z.infer<typeof AccountMode>;
 
+export const MarginType = z.enum(["isolated", "cross"]);
+export type MarginType = z.infer<typeof MarginType>;
+
 export const Chain = z.enum(["ethereum", "solana"]);
 export type Chain = z.infer<typeof Chain>;
 

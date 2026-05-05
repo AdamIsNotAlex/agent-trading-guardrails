@@ -391,6 +391,7 @@ describe("PolicyInput", () => {
       resource: "cex:binance:subaccount-1:ETH-USDC",
       environment: "canary_live" as const,
       accountMode: "spot",
+      marginType: "isolated",
       exchange: "binance",
       symbol: "ETH-USDC",
       instructionType: "setAuthority",

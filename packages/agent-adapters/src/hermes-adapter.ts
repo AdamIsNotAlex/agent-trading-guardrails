@@ -52,6 +52,7 @@ export class HermesAgentAdapter {
           maxNotionalUsd: Number(params.maxNotionalUsd ?? 0),
           maxSlippageBps: Number(params.maxSlippageBps ?? 0),
           leverage: params.leverage != null ? Number(params.leverage) : undefined,
+          marginType: params.marginType != null ? String(params.marginType) : undefined,
         });
       case "cancel_order":
         return this.tools.proposeCancelOrder({

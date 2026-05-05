@@ -22,7 +22,11 @@
               },
               "status": {
                 "type": "string",
-                "enum": ["pass", "fail", "unavailable"]
+                "enum": [
+                  "pass",
+                  "fail",
+                  "unavailable"
+                ]
               },
               "value": {},
               "threshold": {},
@@ -30,7 +34,10 @@
                 "type": "string"
               }
             },
-            "required": ["check", "status"],
+            "required": [
+              "check",
+              "status"
+            ],
             "additionalProperties": false
           },
           "minItems": 1
@@ -56,7 +63,13 @@
               "type": "number"
             }
           },
-          "required": ["account", "date", "totalNotionalUsd", "realizedLossUsd", "orderCount"],
+          "required": [
+            "account",
+            "date",
+            "totalNotionalUsd",
+            "realizedLossUsd",
+            "orderCount"
+          ],
           "additionalProperties": false
         },
         "evaluatedAt": {
@@ -64,7 +77,12 @@
           "format": "date-time"
         }
       },
-      "required": ["intentId", "passed", "checks", "evaluatedAt"],
+      "required": [
+        "intentId",
+        "passed",
+        "checks",
+        "evaluatedAt"
+      ],
       "additionalProperties": false
     }
   },

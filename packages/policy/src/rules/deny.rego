@@ -27,6 +27,11 @@ hard_deny_reasons contains {"rule": "leverage_cap_exceeded", "message": "USD-M f
 	input.leverage > data.policy.limits[input.environment].max_leverage
 }
 
+hard_deny_reasons contains {"rule": "futures_cross_margin_denied", "message": "USD-M futures orders must use isolated margin."} if {
+	input.accountMode == "usdm_futures"
+	not input.marginType == "isolated"
+}
+
 hard_deny_reasons contains {"rule": "unlimited_approval_denied", "message": "Unlimited token approvals are not permitted."} if {
 	input.maxTokenApprovalAmount == "unlimited"
 }

@@ -1,6 +1,11 @@
 import type { ExecutionConnector } from "@guardrails/broker";
 import type { TradingIntent } from "@guardrails/schemas";
-import type { BinanceApiClient, BinanceConfig, OrderStatusParams } from "./interfaces.js";
+import type {
+  BinanceApiClient,
+  BinanceConfig,
+  FuturesMarginTypeParams,
+  OrderStatusParams,
+} from "./interfaces.js";
 import { BinancePaperSimulator } from "./paper-simulator.js";
 import { rejectMarginModes, validateIntent } from "./validation.js";
 
@@ -12,6 +17,24 @@ export class BinanceConnector implements ExecutionConnector {
     private client: BinanceApiClient | null,
     private mode: "paper" | "live",
   ) {}
+
+  private validateExecutableIntent(intent: TradingIntent): void {
+    const marginCheck = rejectMarginModes(intent);
+    if (!marginCheck.valid) throw new Error(marginCheck.reason);
+
+    const validation = validateIntent(intent, this.config);
+    if (!validation.valid) throw new Error(validation.reason);
+  }
+
+  private async verifyFuturesIsolatedMargin(params: FuturesMarginTypeParams): Promise<void> {
+    if (this.mode !== "live") return;
+    if (!this.client) throw new Error("Binance API client not configured for live mode.");
+
+    const marginType = await this.client.getFuturesMarginType(params);
+    if (marginType !== "isolated") {
+      throw new Error(`USD-M futures ${params.symbol} must be configured for isolated margin.`);
+    }
+  }
 
   async revalidate(intent: TradingIntent): Promise<{ passed: boolean; reason?: string }> {
     const marginCheck = rejectMarginModes(intent);
@@ -34,12 +57,30 @@ export class BinanceConnector implements ExecutionConnector {
           return { passed: false, reason: "Failed to fetch market data for revalidation." };
         }
       }
+
+      if (intent.action === "cex.place_order" && intent.accountMode === "usdm_futures") {
+        try {
+          await this.verifyFuturesIsolatedMargin({
+            account: intent.account,
+            symbol: intent.symbol,
+          });
+        } catch (err) {
+          return {
+            passed: false,
+            reason: err instanceof Error ? err.message : "Failed to verify futures margin type.",
+          };
+        }
+      }
     }
 
     return { passed: true };
   }
 
   async execute(intent: TradingIntent): ReturnType<ExecutionConnector["execute"]> {
+    if (intent.action === "cex.place_order") {
+      this.validateExecutableIntent(intent);
+    }
+
     if (intent.action === "cex.place_order" && "accountMode" in intent) {
       if (intent.accountMode === "spot") {
         return this.executeSpotOrder(intent);
@@ -116,6 +157,7 @@ export class BinanceConnector implements ExecutionConnector {
     }
 
     if (!this.client) throw new Error("Binance API client not configured for live mode.");
+    await this.verifyFuturesIsolatedMargin({ account: params.account, symbol: params.symbol });
     const result = await this.client.placeFuturesOrder(params);
     return { orderId: result.orderId };
   }

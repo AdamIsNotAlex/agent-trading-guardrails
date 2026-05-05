@@ -31,6 +31,7 @@ export class GuardedToolSurface {
       maxNotionalUsd: number;
       maxSlippageBps: number;
       leverage?: number;
+      marginType?: string;
       rationale: string;
       evidence: string[];
       environment: string;

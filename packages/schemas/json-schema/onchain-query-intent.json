@@ -22,7 +22,13 @@
         },
         "environment": {
           "type": "string",
-          "enum": ["dev", "paper", "testnet", "canary_live", "production"]
+          "enum": [
+            "dev",
+            "paper",
+            "testnet",
+            "canary_live",
+            "production"
+          ]
         },
         "requestedAt": {
           "type": "string",
@@ -46,11 +52,18 @@
         },
         "chain": {
           "type": "string",
-          "enum": ["ethereum", "solana"]
+          "enum": [
+            "ethereum",
+            "solana"
+          ]
         },
         "chainEnvironment": {
           "type": "string",
-          "enum": ["sepolia", "devnet", "mainnet"]
+          "enum": [
+            "sepolia",
+            "devnet",
+            "mainnet"
+          ]
         },
         "address": {
           "type": "string",

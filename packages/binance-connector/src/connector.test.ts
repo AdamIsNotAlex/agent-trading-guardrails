@@ -36,6 +36,9 @@ function makeMockClient(): BinanceApiClient {
         avgPrice: 3500,
       };
     },
+    async getFuturesMarginType() {
+      return "isolated";
+    },
     async placeFuturesOrder(params) {
       return {
         orderId: "live-futures-001",
@@ -289,6 +292,54 @@ describe("BinanceConnector validation", () => {
     const result = await connector.revalidate(intent);
     expect(result.passed).toBe(false);
     expect(result.reason).toContain("Leverage");
+  });
+
+  it("rejects cross-margin futures", async () => {
+    const connector = new BinanceConnector(config, null, "paper");
+    const intent = { ...binanceFuturesOrder, marginType: "cross" as const };
+    const result = await connector.revalidate(intent);
+    expect(result.passed).toBe(false);
+    expect(result.reason).toContain("isolated margin");
+  });
+
+  it("rejects futures orders without margin type", async () => {
+    const connector = new BinanceConnector(config, null, "paper");
+    const { marginType: _marginType, ...intent } = binanceFuturesOrder;
+    const result = await connector.revalidate(intent);
+    expect(result.passed).toBe(false);
+    expect(result.reason).toContain("isolated margin");
+  });
+
+  it("rejects direct cross-margin futures execution", async () => {
+    const connector = new BinanceConnector(config, null, "paper");
+    await expect(
+      connector.execute({ ...binanceFuturesOrder, marginType: "cross" }),
+    ).rejects.toThrow("isolated margin");
+  });
+
+  it("rejects live futures execution when exchange margin mode is cross", async () => {
+    const client: BinanceApiClient = {
+      ...makeMockClient(),
+      async getFuturesMarginType() {
+        return "cross";
+      },
+    };
+    const connector = new BinanceConnector(config, client, "live");
+
+    await expect(connector.execute(binanceFuturesOrder)).rejects.toThrow("isolated margin");
+  });
+
+  it("fails live futures revalidation when exchange margin mode is cross", async () => {
+    const client: BinanceApiClient = {
+      ...makeMockClient(),
+      async getFuturesMarginType() {
+        return "cross";
+      },
+    };
+    const connector = new BinanceConnector(config, client, "live");
+    const result = await connector.revalidate(binanceFuturesOrder);
+    expect(result.passed).toBe(false);
+    expect(result.reason).toContain("isolated margin");
   });
 
   it("gets market data through broker only", async () => {

@@ -7,7 +7,11 @@ import type {
   ReviewerVerdictSchema,
   TradingIntent,
 } from "@guardrails/schemas";
-import { binanceSpotOrder, solanaDevnetSimulation } from "@guardrails/schemas/fixtures";
+import {
+  binanceFuturesOrder,
+  binanceSpotOrder,
+  solanaDevnetSimulation,
+} from "@guardrails/schemas/fixtures";
 import { describe, expect, it, vi } from "vitest";
 import type { GuardrailConfig } from "./config.js";
 import type { PolicyEvaluator, ReviewerAdapter, RiskEngine } from "./interfaces.js";
@@ -314,6 +318,63 @@ describe("GuardrailService", () => {
       expect(result.outcome).toBe("allow");
       expect(policyInput?.dailyNotionalUsd).toBe(42);
       expect(policyInput?.dailyRealizedLossUsd).toBe(7);
+    });
+
+    it("passes futures margin type to policy evaluation", async () => {
+      let policyInput: PolicyInput | undefined;
+      const policy: PolicyEvaluator = {
+        async evaluate(input: PolicyInput): Promise<PolicyOutput> {
+          policyInput = input;
+          return {
+            decision: "allow",
+            reasons: [],
+            requiresHumanApproval: false,
+            matchedAllowRules: ["test-allow"],
+            matchedDenyRules: [],
+            evaluatedAt: now,
+          };
+        },
+        async isHealthy() {
+          return true;
+        },
+      };
+      const svc = new GuardrailService(config, makeReviewer(), policy, makeRisk(), nullAuditWriter);
+
+      const result = await svc.evaluate(binanceFuturesOrder);
+
+      expect(result.outcome).toBe("allow");
+      expect(policyInput?.marginType).toBe("isolated");
+    });
+
+    it("passes cross futures margin type to policy evaluation", async () => {
+      let policyInput: PolicyInput | undefined;
+      const policy: PolicyEvaluator = {
+        async evaluate(input: PolicyInput): Promise<PolicyOutput> {
+          policyInput = input;
+          return {
+            decision: "deny",
+            reasons: [
+              {
+                rule: "futures_cross_margin_denied",
+                message: "USD-M futures orders must use isolated margin.",
+              },
+            ],
+            requiresHumanApproval: false,
+            matchedAllowRules: [],
+            matchedDenyRules: ["futures_cross_margin_denied"],
+            evaluatedAt: now,
+          };
+        },
+        async isHealthy() {
+          return true;
+        },
+      };
+      const svc = new GuardrailService(config, makeReviewer(), policy, makeRisk(), nullAuditWriter);
+
+      const result = await svc.evaluate({ ...binanceFuturesOrder, marginType: "cross" });
+
+      expect(result.outcome).toBe("deny");
+      expect(policyInput?.marginType).toBe("cross");
     });
 
     it("passes Solana authority instruction type to policy evaluation", async () => {
