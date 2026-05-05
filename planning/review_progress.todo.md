@@ -239,7 +239,7 @@ Most live trading safety gates are docs-only with no enforcement code.
 - [ ] Add an `ipAllowlist` config field to `BinanceConnector` config — validate that it is non-empty before enabling live mode.
 - [ ] Implement dry-run report: before the first live trade, execute the full pipeline (validate → review → policy → risk → broker revalidate) with `dryRun: true` and output a summary report without executing.
 - [ ] Implement post-trade reconciliation: after the first live trade, call `getOrderStatus` (from P1.8) and compare the execution result against the expected outcome, log any discrepancies.
-- [ ] Set futures-specific daily notional cap to USD 25 in `packages/policy/src/policy.json` — add a `futures_auto_max_daily_notional_usd: 25` field under `canary_live` limits and reference it in `escalation.rego` for `usdm_futures` actions.
+- [x] Set futures-specific daily notional cap to USD 25 in `packages/policy/src/policy.json` — add a `futures_auto_max_daily_notional_usd: 25` field under `canary_live` limits and reference it in `escalation.rego` for `usdm_futures` actions.
 
 ### P2.4 — Strengthen red-team test assertions (Phase 17)
 

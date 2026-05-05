@@ -324,6 +324,42 @@ test_daily_notional_escalation if {
 	reason.rule == "daily_notional_above_threshold"
 }
 
+# Futures daily notional uses tighter futures threshold
+test_futures_daily_notional_escalation if {
+	inp := object.union(base_input, {
+		"accountMode": "usdm_futures",
+		"marginType": "isolated",
+		"maxNotionalUsd": 4,
+		"leverage": 1,
+		"dailyNotionalUsd": 30,
+	})
+	guardrail.decision == "needs_human" with input as inp
+	count(guardrail.escalation_reasons) == 1 with input as inp
+	some reason in guardrail.escalation_reasons with input as inp
+	reason.rule == "daily_notional_above_threshold"
+}
+
+# Futures daily notional falls back to generic threshold when no futures threshold is configured
+test_futures_daily_notional_falls_back_to_generic_threshold if {
+	inp := object.union(base_input, {
+		"accountMode": "usdm_futures",
+		"marginType": "isolated",
+		"maxNotionalUsd": 4,
+		"leverage": 1,
+		"dailyNotionalUsd": 60,
+	})
+	limits := object.remove(data.policy.limits.canary_live, ["futures_auto_max_daily_notional_usd"])
+	guardrail.decision == "needs_human" with input as inp with data.policy.limits.canary_live as limits
+	some reason in guardrail.escalation_reasons with input as inp with data.policy.limits.canary_live as limits
+	reason.rule == "daily_notional_above_threshold"
+}
+
+# Spot daily notional above futures threshold remains allowed
+test_spot_daily_notional_uses_spot_threshold if {
+	inp := object.union(base_input, {"dailyNotionalUsd": 30})
+	guardrail.decision == "allow" with input as inp
+}
+
 # Daily loss escalation
 test_daily_loss_escalation if {
 	inp := object.union(base_input, {"dailyRealizedLossUsd": 50})

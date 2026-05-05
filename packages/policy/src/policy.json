@@ -25,6 +25,7 @@
       "canary_live": {
         "auto_max_notional_usd": 10,
         "auto_max_daily_notional_usd": 50,
+        "futures_auto_max_daily_notional_usd": 25,
         "auto_max_daily_loss_usd": 25,
         "max_leverage": 3,
         "default_max_leverage": 1

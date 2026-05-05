@@ -22,9 +22,19 @@ escalation_reasons contains {"rule": "notional_above_auto_threshold", "message":
 escalation_reasons contains {"rule": "daily_notional_above_threshold", "message": "Daily notional exceeds automatic execution threshold."} if {
 	input.action == "cex.place_order"
 	input.dailyNotionalUsd
+	input.dailyNotionalUsd > daily_notional_limit
+}
+
+daily_notional_limit := limit if {
+	input.accountMode == "usdm_futures"
 	limits := data.policy.limits[input.environment]
-	limits.auto_max_daily_notional_usd
-	input.dailyNotionalUsd > limits.auto_max_daily_notional_usd
+	limit := object.get(limits, "futures_auto_max_daily_notional_usd", limits.auto_max_daily_notional_usd)
+}
+
+daily_notional_limit := limit if {
+	not input.accountMode == "usdm_futures"
+	limits := data.policy.limits[input.environment]
+	limit := limits.auto_max_daily_notional_usd
 }
 
 escalation_reasons contains {"rule": "daily_loss_above_threshold", "message": "Daily loss exceeds automatic execution threshold."} if {
