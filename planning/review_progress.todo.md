@@ -199,10 +199,10 @@ No concrete `OpenAiLlmProvider` HTTP client exists. `ReviewerAdapter` accepts a 
 
 Approving an `allowlist_onboarding` request does nothing — no policy change, no audit event.
 
-- [ ] When `ApprovalStore.approve()` is called on an `allowlist_onboarding` request, trigger a callback/hook that:
-  - [ ] Writes the new allowlist entry to a durable store (e.g., appends to a policy config file or database).
-  - [ ] Emits an `allowlist.updated` audit event via `AuditWriter`.
-- [ ] Add test that approving an `allowlist_onboarding` request emits the audit event and persists the policy change.
+- [x] When `ApprovalStore.approve()` is called on an `allowlist_onboarding` request, trigger a callback/hook that:
+  - [x] Writes the new allowlist entry to a durable store (e.g., appends to a policy config file or database).
+  - [x] Emits an `allowlist.updated` audit event via `AuditWriter`.
+- [x] Add test that approving an `allowlist_onboarding` request emits the audit event and persists the policy change.
 
 ---
 

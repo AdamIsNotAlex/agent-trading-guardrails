@@ -1,5 +1,10 @@
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { JsonFileAllowlistOnboardingStore } from "./allowlist-store.js";
 import { ApprovalCli } from "./cli.js";
+import type { AllowlistOnboardingEntry, ApprovalAuditWriter } from "./interfaces.js";
 import { ApprovalStore } from "./store.js";
 
 function makeStore(timeoutSeconds = 300) {
@@ -12,7 +17,7 @@ const baseParams = {
   principal: "agent.openclaw.alpha",
   action: "cex.place_order",
   resource: "cex:binance:sub:ETH-USDC",
-  environment: "canary_live",
+  environment: "canary_live" as const,
   escalationReason: "Notional above auto threshold.",
   approvalType: "one_time" as const,
   intentData: { symbol: "ETH-USDC", maxNotionalUsd: 20 },
@@ -83,12 +88,72 @@ describe("ApprovalStore", () => {
     expect(store.approve(req.approvalId, "op")).toBeNull();
   });
 
-  it("supports allowlist onboarding type", () => {
+  it("persists allowlist onboarding approvals and emits audit events", () => {
+    const allowlistPath = join(mkdtempSync(join(tmpdir(), "allowlist-")), "allowlist.json");
+    const auditEvents: Parameters<ApprovalAuditWriter["write"]>[0][] = [];
+    const store = new ApprovalStore({
+      defaultTimeoutSeconds: 300,
+      allowlistOnboarding: {
+        store: new JsonFileAllowlistOnboardingStore(allowlistPath),
+        audit: { write: (event) => auditEvents.push(event) },
+      },
+    });
+    const req = store.create({ ...baseParams, approvalType: "allowlist_onboarding" });
+
+    const approved = store.approve(req.approvalId, "admin");
+    const entries = JSON.parse(readFileSync(allowlistPath, "utf8")) as AllowlistOnboardingEntry[];
+
+    expect(approved?.approvalType).toBe("allowlist_onboarding");
+    expect(entries).toMatchObject([
+      {
+        effect: "allow",
+        principal: baseParams.principal,
+        action: baseParams.action,
+        resource: baseParams.resource,
+        condition: {
+          environment: baseParams.environment,
+          maxNotionalUsd: baseParams.intentData.maxNotionalUsd,
+          requiresHumanApproval: false,
+        },
+      },
+    ]);
+    expect(auditEvents).toHaveLength(1);
+    expect(auditEvents[0]).toMatchObject({
+      eventType: "allowlist.updated",
+      environment: baseParams.environment,
+      intentId: baseParams.intentId,
+      principal: baseParams.principal,
+      correlationId: baseParams.correlationId,
+      data: { updatedBy: "admin", policyEntry: entries[0] },
+    });
+  });
+
+  it("rolls back allowlist persistence when audit emission fails", () => {
+    const allowlistPath = join(mkdtempSync(join(tmpdir(), "allowlist-")), "allowlist.json");
+    const store = new ApprovalStore({
+      defaultTimeoutSeconds: 300,
+      allowlistOnboarding: {
+        store: new JsonFileAllowlistOnboardingStore(allowlistPath),
+        audit: {
+          write() {
+            throw new Error("audit unavailable");
+          },
+        },
+      },
+    });
+    const req = store.create({ ...baseParams, approvalType: "allowlist_onboarding" });
+
+    expect(() => store.approve(req.approvalId, "admin")).toThrow("audit unavailable");
+    expect(JSON.parse(readFileSync(allowlistPath, "utf8"))).toEqual([]);
+    expect(store.get(req.approvalId)?.state).toBe("pending");
+  });
+
+  it("fails closed when allowlist onboarding persistence is not configured", () => {
     const store = makeStore();
     const req = store.create({ ...baseParams, approvalType: "allowlist_onboarding" });
-    expect(req.approvalType).toBe("allowlist_onboarding");
-    const approved = store.approve(req.approvalId, "admin");
-    expect(approved?.approvalType).toBe("allowlist_onboarding");
+
+    expect(() => store.approve(req.approvalId, "admin")).toThrow("not configured");
+    expect(store.get(req.approvalId)?.state).toBe("pending");
   });
 
   it("does not require interactive terminal for creation", () => {

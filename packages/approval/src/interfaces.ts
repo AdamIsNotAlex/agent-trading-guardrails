@@ -1,3 +1,5 @@
+import type { Environment } from "@guardrails/schemas";
+
 export type ApprovalState = "pending" | "approved" | "denied" | "timeout";
 export type ApprovalType = "one_time" | "allowlist_onboarding";
 
@@ -8,7 +10,7 @@ export interface ApprovalRequest {
   principal: string;
   action: string;
   resource: string;
-  environment: string;
+  environment: Environment;
   escalationReason: string;
   approvalType: ApprovalType;
   state: ApprovalState;
@@ -19,8 +21,36 @@ export interface ApprovalRequest {
   timeoutAt: string;
 }
 
+export interface AllowlistOnboardingEntry {
+  name: string;
+  effect: "allow";
+  principal: string;
+  action: string;
+  resource: string;
+  condition: Record<string, unknown>;
+}
+
+export interface AllowlistOnboardingStore {
+  add(entry: AllowlistOnboardingEntry): () => void;
+}
+
+export interface ApprovalAuditWriter {
+  write(event: {
+    eventType: "allowlist.updated";
+    environment: Environment;
+    intentId: string;
+    principal: string;
+    correlationId: string;
+    data: Record<string, unknown>;
+  }): void;
+}
+
 export interface ApprovalConfig {
   defaultTimeoutSeconds: number;
+  allowlistOnboarding?: {
+    store: AllowlistOnboardingStore;
+    audit: ApprovalAuditWriter;
+  };
 }
 
 export interface ApprovalNotifier {

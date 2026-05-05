@@ -1,5 +1,12 @@
 import { randomUUID } from "node:crypto";
-import type { ApprovalConfig, ApprovalRequest, ApprovalState, ApprovalType } from "./interfaces.js";
+import type { Environment } from "@guardrails/schemas";
+import type {
+  AllowlistOnboardingEntry,
+  ApprovalConfig,
+  ApprovalRequest,
+  ApprovalState,
+  ApprovalType,
+} from "./interfaces.js";
 
 export class ApprovalStore {
   private requests = new Map<string, ApprovalRequest>();
@@ -12,7 +19,7 @@ export class ApprovalStore {
     principal: string;
     action: string;
     resource: string;
-    environment: string;
+    environment: Environment;
     escalationReason: string;
     approvalType: ApprovalType;
     intentData: Record<string, unknown>;
@@ -48,8 +55,12 @@ export class ApprovalStore {
       request.state = "timeout";
       return null;
     }
+    const decidedAt = new Date().toISOString();
+    if (request.approvalType === "allowlist_onboarding") {
+      this.applyAllowlistOnboarding(request, decidedBy, decidedAt);
+    }
     request.state = "approved";
-    request.decidedAt = new Date().toISOString();
+    request.decidedAt = decidedAt;
     request.decidedBy = decidedBy;
     return request;
   }
@@ -61,6 +72,64 @@ export class ApprovalStore {
     request.decidedAt = new Date().toISOString();
     request.decidedBy = decidedBy;
     return request;
+  }
+
+  private applyAllowlistOnboarding(
+    request: ApprovalRequest,
+    decidedBy: string,
+    decidedAt: string,
+  ): void {
+    if (!this.config.allowlistOnboarding) {
+      throw new Error("Allowlist onboarding persistence is not configured.");
+    }
+    const entry = this.buildAllowlistEntry(request);
+    const rollback = this.config.allowlistOnboarding.store.add(entry);
+    try {
+      this.config.allowlistOnboarding.audit.write({
+        eventType: "allowlist.updated",
+        environment: request.environment,
+        intentId: request.intentId,
+        principal: request.principal,
+        correlationId: request.correlationId,
+        data: {
+          approvalId: request.approvalId,
+          updatedBy: decidedBy,
+          updatedAt: decidedAt,
+          policyEntry: entry,
+        },
+      });
+    } catch (err) {
+      rollback();
+      throw err;
+    }
+  }
+
+  private buildAllowlistEntry(request: ApprovalRequest): AllowlistOnboardingEntry {
+    return {
+      name: `approval-${request.approvalId}`,
+      effect: "allow",
+      principal: request.principal,
+      action: request.action,
+      resource: request.resource,
+      condition: this.buildAllowlistCondition(request),
+    };
+  }
+
+  private buildAllowlistCondition(request: ApprovalRequest): Record<string, unknown> {
+    const condition: Record<string, unknown> = {
+      environment: request.environment,
+      requiresHumanApproval: false,
+    };
+    if (typeof request.intentData.accountMode === "string") {
+      condition.accountMode = request.intentData.accountMode;
+    }
+    if (typeof request.intentData.maxNotionalUsd === "number") {
+      condition.maxNotionalUsd = request.intentData.maxNotionalUsd;
+    }
+    if (typeof request.intentData.leverage === "number") {
+      condition.maxLeverage = request.intentData.leverage;
+    }
+    return condition;
   }
 
   checkTimeouts(): ApprovalRequest[] {
