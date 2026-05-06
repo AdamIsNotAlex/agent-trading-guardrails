@@ -24,6 +24,8 @@ import {
 } from "./index.js";
 
 const now = "2026-05-04T12:00:00.000Z";
+const UINT256_MAX =
+  "115792089237316195423570985008687907853269984665640564039457584007913129639935";
 
 describe("CexOrderIntent", () => {
   it("accepts valid Binance spot order", () => {
@@ -103,6 +105,39 @@ describe("OnchainSigningIntent", () => {
   it("requires simulationId", () => {
     const { simulationId: _, ...noSim } = ethereumSepoliaSigning;
     expect(() => OnchainSigningIntent.parse(noSim)).toThrow();
+  });
+
+  it("accepts finite decimal token approval metadata", () => {
+    expect(
+      OnchainSigningIntent.parse({ ...ethereumSepoliaSigning, maxTokenApprovalAmount: "100" }),
+    ).toMatchObject({ maxTokenApprovalAmount: "100" });
+  });
+
+  it("rejects non-decimal token approval metadata", () => {
+    expect(() =>
+      OnchainSigningIntent.parse({
+        ...ethereumSepoliaSigning,
+        maxTokenApprovalAmount: "unlimited",
+      }),
+    ).toThrow();
+  });
+
+  it("accepts max uint256 token approval metadata for policy hard-deny", () => {
+    expect(
+      OnchainSigningIntent.parse({
+        ...ethereumSepoliaSigning,
+        maxTokenApprovalAmount: UINT256_MAX,
+      }),
+    ).toMatchObject({ maxTokenApprovalAmount: UINT256_MAX });
+  });
+
+  it("allows approval calldata without metadata through schema for policy hard-deny", () => {
+    expect(
+      OnchainSigningIntent.parse({
+        ...ethereumSepoliaSigning,
+        data: `0x095ea7b30000000000000000000000007265636970696e74000000000000000000000000000000000000000000000000000000000000000000000000000000000000064`,
+      }),
+    ).not.toHaveProperty("maxTokenApprovalAmount");
   });
 });
 

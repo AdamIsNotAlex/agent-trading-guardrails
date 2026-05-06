@@ -109,6 +109,8 @@ export const OnchainSimulationIntent = z.union([
 ]);
 export type OnchainSimulationIntent = z.infer<typeof OnchainSimulationIntent>;
 
+const TokenApprovalAmount = z.string().regex(/^(0|[1-9]\d*)$/);
+
 const OnchainSigningBase = {
   action: z.literal("onchain.request_signature"),
   chainEnvironment: ChainEnvironment,
@@ -118,7 +120,7 @@ const OnchainSigningBase = {
   programId: z.string().optional(),
   instructions: z.array(z.record(z.unknown())).optional(),
   simulationId: z.string().uuid(),
-  maxTokenApprovalAmount: z.string().optional(),
+  maxTokenApprovalAmount: TokenApprovalAmount.optional(),
 };
 
 const EvmOnchainSigningIntent = IntentEnvelope.extend({

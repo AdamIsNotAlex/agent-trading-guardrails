@@ -36,6 +36,34 @@ hard_deny_reasons contains {"rule": "unlimited_approval_denied", "message": "Unl
 	input.maxTokenApprovalAmount == "unlimited"
 }
 
+hard_deny_reasons contains {"rule": "unlimited_approval_denied", "message": "Unlimited token approvals are not permitted."} if {
+	input.maxTokenApprovalAmount == "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+}
+
+hard_deny_reasons contains {"rule": "unlimited_approval_denied", "message": "Unlimited token approvals are not permitted."} if {
+	input.tokenApprovalUnlimited == true
+}
+
+hard_deny_reasons contains {"rule": "token_approval_facts_missing", "message": "ERC-20 approval policy facts are incomplete."} if {
+	input.isTokenApproval == true
+	not approval_facts_complete
+}
+
+hard_deny_reasons contains {"rule": "token_approval_amount_missing", "message": "ERC-20 approvals require explicit approval amount metadata."} if {
+	input.isTokenApproval == true
+	input.tokenApprovalAmountMissing == true
+}
+
+hard_deny_reasons contains {"rule": "token_approval_cap_exceeded", "message": "ERC-20 approval amount exceeds policy cap."} if {
+	input.isTokenApproval == true
+	input.tokenApprovalAmountExceedsCap == true
+}
+
+hard_deny_reasons contains {"rule": "token_approval_cap_exceeded", "message": "ERC-20 approval amount exceeds policy cap."} if {
+	input.isTokenApproval == true
+	decimal_string_exceeds(input.tokenApprovalAmount, data.policy.limits[input.environment].max_token_approval_amount)
+}
+
 hard_deny_reasons contains {"rule": "mainnet_onchain_denied", "message": "Mainnet onchain signing is not permitted."} if {
 	input.action == "onchain.request_signature"
 	input.chainEnvironment == "mainnet"
@@ -67,6 +95,25 @@ hard_deny_reasons contains {"rule": "solana_instruction_type_unknown", "message"
 
 supported_solana_instruction_type if {
 	input.instructionType in {"transfer", "setAuthority", "SetAuthority", "authority_change"}
+}
+
+approval_facts_complete if {
+	input.tokenApprovalAmountMissing in {true, false}
+	input.tokenApprovalUnlimited in {true, false}
+	input.tokenApprovalAmountExceedsCap in {true, false}
+}
+
+decimal_string_exceeds(amount, cap) if {
+	is_string(amount)
+	is_string(cap)
+	count(amount) > count(cap)
+}
+
+decimal_string_exceeds(amount, cap) if {
+	is_string(amount)
+	is_string(cap)
+	count(amount) == count(cap)
+	amount > cap
 }
 
 contract_allowed(_) if {

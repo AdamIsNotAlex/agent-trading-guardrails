@@ -19,6 +19,13 @@ import type { PolicyEvaluator, ReviewerAdapter, RiskEngine } from "./interfaces.
 import { GuardrailService } from "./service.js";
 
 const now = "2026-05-04T12:00:00.000Z";
+const UINT256_MAX =
+  "115792089237316195423570985008687907853269984665640564039457584007913129639935";
+const APPROVAL_SPENDER = "0000000000000000000000007265636970696e74000000000000000000000000";
+const APPROVAL_AMOUNT_100 = "0000000000000000000000000000000000000000000000000000000000000064";
+const ERC20_APPROVAL_100 = `0x095ea7b3${APPROVAL_SPENDER}${APPROVAL_AMOUNT_100}`;
+const ERC20_APPROVAL_ABOVE_TESTNET_CAP = `0x095ea7b3${APPROVAL_SPENDER}${1_000_000_000_001n.toString(16).padStart(64, "0")}`;
+const ERC20_APPROVAL_MAX = `0x095ea7b3${APPROVAL_SPENDER}${"f".repeat(64)}`;
 
 const config: GuardrailConfig = {
   environment: "canary_live",
@@ -321,6 +328,240 @@ describe("GuardrailService", () => {
       expect(policyInput?.dailyNotionalUsd).toBe(42);
       expect(policyInput?.projectedDailyNotionalUsd).toBe(52);
       expect(policyInput?.dailyRealizedLossUsd).toBe(7);
+    });
+
+    it("classifies ERC-20 approval calldata for policy evaluation", async () => {
+      let policyInput: PolicyInput | undefined;
+      const policy: PolicyEvaluator = {
+        async evaluate(input: PolicyInput): Promise<PolicyOutput> {
+          policyInput = input;
+          return {
+            decision: "deny",
+            reasons: [{ rule: "token_approval_amount_missing", message: "metadata required" }],
+            requiresHumanApproval: false,
+            matchedAllowRules: [],
+            matchedDenyRules: ["token_approval_amount_missing"],
+            evaluatedAt: now,
+          };
+        },
+        async isHealthy() {
+          return true;
+        },
+      };
+      const svc = new GuardrailService(
+        { ...config, environment: "testnet" },
+        makeReviewer(),
+        policy,
+        makeRisk(),
+        nullAuditWriter,
+      );
+
+      await svc.evaluate({ ...ethereumSepoliaSigning, data: ERC20_APPROVAL_100 });
+
+      expect(policyInput).toMatchObject({
+        isTokenApproval: true,
+        tokenApprovalAmount: "100",
+        tokenApprovalAmountMissing: true,
+        tokenApprovalUnlimited: false,
+        tokenApprovalAmountExceedsCap: false,
+      });
+    });
+
+    it("passes max uint256 approval as an unlimited deny fact", async () => {
+      let policyInput: PolicyInput | undefined;
+      const policy: PolicyEvaluator = {
+        async evaluate(input: PolicyInput): Promise<PolicyOutput> {
+          policyInput = input;
+          return {
+            decision: "deny",
+            reasons: [{ rule: "unlimited_approval_denied", message: "Unlimited approval." }],
+            requiresHumanApproval: false,
+            matchedAllowRules: [],
+            matchedDenyRules: ["unlimited_approval_denied"],
+            evaluatedAt: now,
+          };
+        },
+        async isHealthy() {
+          return true;
+        },
+      };
+      const svc = new GuardrailService(
+        { ...config, environment: "testnet" },
+        makeReviewer(),
+        policy,
+        makeRisk(),
+        nullAuditWriter,
+      );
+
+      await svc.evaluate({
+        ...ethereumSepoliaSigning,
+        data: ERC20_APPROVAL_MAX,
+        maxTokenApprovalAmount: UINT256_MAX,
+      });
+
+      expect(policyInput).toMatchObject({
+        isTokenApproval: true,
+        tokenApprovalAmount: UINT256_MAX,
+        tokenApprovalAmountMissing: false,
+        tokenApprovalUnlimited: true,
+      });
+    });
+
+    it("denies malformed approval calldata before it can allow", async () => {
+      const policy: PolicyEvaluator = {
+        async evaluate(input: PolicyInput): Promise<PolicyOutput> {
+          const malformedApproval = input.isTokenApproval && input.tokenApprovalAmountMissing;
+          return {
+            decision: malformedApproval ? "deny" : "allow",
+            reasons: malformedApproval
+              ? [{ rule: "token_approval_amount_missing", message: "metadata required" }]
+              : [],
+            requiresHumanApproval: false,
+            matchedAllowRules: malformedApproval ? [] : ["test-allow"],
+            matchedDenyRules: malformedApproval ? ["token_approval_amount_missing"] : [],
+            evaluatedAt: now,
+          };
+        },
+        async isHealthy() {
+          return true;
+        },
+      };
+      const svc = new GuardrailService(
+        { ...config, environment: "testnet" },
+        makeReviewer(),
+        policy,
+        makeRisk(),
+        nullAuditWriter,
+      );
+
+      const result = await svc.evaluate({
+        ...ethereumSepoliaSigning,
+        data: "0x095ea7b3000000000000000000000000",
+        maxTokenApprovalAmount: "100",
+      });
+
+      expect(result.outcome).toBe("deny");
+      expect(result.reasons[0].rule).toBe("token_approval_amount_missing");
+    });
+
+    it("passes explicit max uint256 metadata as an unlimited deny fact", async () => {
+      let policyInput: PolicyInput | undefined;
+      const policy: PolicyEvaluator = {
+        async evaluate(input: PolicyInput): Promise<PolicyOutput> {
+          policyInput = input;
+          return {
+            decision: input.tokenApprovalUnlimited ? "deny" : "allow",
+            reasons: input.tokenApprovalUnlimited
+              ? [{ rule: "unlimited_approval_denied", message: "Unlimited approval." }]
+              : [],
+            requiresHumanApproval: false,
+            matchedAllowRules: input.tokenApprovalUnlimited ? [] : ["test-allow"],
+            matchedDenyRules: input.tokenApprovalUnlimited ? ["unlimited_approval_denied"] : [],
+            evaluatedAt: now,
+          };
+        },
+        async isHealthy() {
+          return true;
+        },
+      };
+      const svc = new GuardrailService(
+        { ...config, environment: "testnet" },
+        makeReviewer(),
+        policy,
+        makeRisk(),
+        nullAuditWriter,
+      );
+
+      const result = await svc.evaluate({
+        ...ethereumSepoliaSigning,
+        maxTokenApprovalAmount: UINT256_MAX,
+      });
+
+      expect(result.outcome).toBe("deny");
+      expect(policyInput).toMatchObject({
+        isTokenApproval: true,
+        tokenApprovalAmount: UINT256_MAX,
+        tokenApprovalAmountMissing: false,
+        tokenApprovalUnlimited: true,
+      });
+    });
+
+    it("passes approval amounts above cap as a deny fact", async () => {
+      let policyInput: PolicyInput | undefined;
+      const policy: PolicyEvaluator = {
+        async evaluate(input: PolicyInput): Promise<PolicyOutput> {
+          policyInput = input;
+          return {
+            decision: input.tokenApprovalAmountExceedsCap ? "deny" : "allow",
+            reasons: input.tokenApprovalAmountExceedsCap
+              ? [{ rule: "token_approval_cap_exceeded", message: "Above cap." }]
+              : [],
+            requiresHumanApproval: false,
+            matchedAllowRules: input.tokenApprovalAmountExceedsCap ? [] : ["test-allow"],
+            matchedDenyRules: input.tokenApprovalAmountExceedsCap
+              ? ["token_approval_cap_exceeded"]
+              : [],
+            evaluatedAt: now,
+          };
+        },
+        async isHealthy() {
+          return true;
+        },
+      };
+      const svc = new GuardrailService(
+        { ...config, environment: "testnet" },
+        makeReviewer(),
+        policy,
+        makeRisk(),
+        nullAuditWriter,
+      );
+
+      const result = await svc.evaluate({
+        ...ethereumSepoliaSigning,
+        data: ERC20_APPROVAL_ABOVE_TESTNET_CAP,
+        maxTokenApprovalAmount: "1000000000001",
+      });
+
+      expect(result.outcome).toBe("deny");
+      expect(policyInput).toMatchObject({
+        isTokenApproval: true,
+        tokenApprovalAmount: "1000000000001",
+        tokenApprovalAmountMissing: false,
+        tokenApprovalAmountExceedsCap: true,
+      });
+    });
+
+    it("denies approval calldata without explicit approval metadata", async () => {
+      const policy: PolicyEvaluator = {
+        async evaluate(input: PolicyInput): Promise<PolicyOutput> {
+          const missingMetadata = input.isTokenApproval && input.tokenApprovalAmountMissing;
+          return {
+            decision: missingMetadata ? "deny" : "allow",
+            reasons: missingMetadata
+              ? [{ rule: "token_approval_amount_missing", message: "metadata required" }]
+              : [],
+            requiresHumanApproval: false,
+            matchedAllowRules: missingMetadata ? [] : ["test-allow"],
+            matchedDenyRules: missingMetadata ? ["token_approval_amount_missing"] : [],
+            evaluatedAt: now,
+          };
+        },
+        async isHealthy() {
+          return true;
+        },
+      };
+      const svc = new GuardrailService(
+        { ...config, environment: "testnet" },
+        makeReviewer(),
+        policy,
+        makeRisk(),
+        nullAuditWriter,
+      );
+
+      const result = await svc.evaluate({ ...ethereumSepoliaSigning, data: ERC20_APPROVAL_100 });
+
+      expect(result.outcome).toBe("deny");
+      expect(result.reasons[0].rule).toBe("token_approval_amount_missing");
     });
 
     it("passes futures margin type to policy evaluation", async () => {

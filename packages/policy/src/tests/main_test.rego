@@ -165,6 +165,113 @@ test_hard_deny_unlimited_approval if {
 	guardrail.decision == "deny" with input as inp
 }
 
+# Hard deny: max uint256 token approval
+test_hard_deny_max_uint256_approval if {
+	inp := object.union(base_input, {
+		"action": "onchain.request_signature",
+		"chain": "ethereum",
+		"resource": "onchain:ethereum:sepolia:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+		"isTokenApproval": true,
+		"tokenApprovalAmountMissing": false,
+		"tokenApprovalUnlimited": true,
+		"tokenApprovalAmountExceedsCap": false,
+	})
+	guardrail.decision == "deny" with input as inp
+	some reason in guardrail.hard_deny_reasons with input as inp
+	reason.rule == "unlimited_approval_denied"
+}
+
+# Hard deny: explicit max uint256 metadata without approval calldata
+test_hard_deny_explicit_max_uint256_metadata if {
+	inp := object.union(base_input, {
+		"action": "onchain.request_signature",
+		"chain": "ethereum",
+		"resource": "onchain:ethereum:sepolia:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+		"maxTokenApprovalAmount": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+	})
+	guardrail.decision == "deny" with input as inp
+	some reason in guardrail.hard_deny_reasons with input as inp
+	reason.rule == "unlimited_approval_denied"
+}
+
+# Hard deny: approval policy facts missing
+test_hard_deny_approval_facts_missing if {
+	inp := object.union(base_input, {
+		"action": "onchain.request_signature",
+		"chain": "ethereum",
+		"resource": "onchain:ethereum:sepolia:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+		"isTokenApproval": true,
+	})
+	guardrail.decision == "deny" with input as inp
+	some reason in guardrail.hard_deny_reasons with input as inp
+	reason.rule == "token_approval_facts_missing"
+}
+
+# Hard deny: approval calldata missing explicit amount metadata
+test_hard_deny_approval_amount_missing if {
+	inp := object.union(base_input, {
+		"action": "onchain.request_signature",
+		"chain": "ethereum",
+		"resource": "onchain:ethereum:sepolia:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+		"isTokenApproval": true,
+		"tokenApprovalAmountMissing": true,
+	})
+	guardrail.decision == "deny" with input as inp
+	some reason in guardrail.hard_deny_reasons with input as inp
+	reason.rule == "token_approval_amount_missing"
+}
+
+# Hard deny: approval amount above configured cap
+test_hard_deny_approval_amount_above_cap if {
+	inp := object.union(base_input, {
+		"action": "onchain.request_signature",
+		"chain": "ethereum",
+		"resource": "onchain:ethereum:sepolia:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+		"isTokenApproval": true,
+		"tokenApprovalAmountMissing": false,
+		"tokenApprovalUnlimited": false,
+		"tokenApprovalAmountExceedsCap": true,
+	})
+	guardrail.decision == "deny" with input as inp
+	some reason in guardrail.hard_deny_reasons with input as inp
+	reason.rule == "token_approval_cap_exceeded"
+}
+
+# Hard deny: approval amount above configured policy data cap
+test_hard_deny_approval_amount_above_policy_data_cap if {
+	inp := object.union(base_input, {
+		"action": "onchain.request_signature",
+		"chain": "ethereum",
+		"resource": "onchain:ethereum:sepolia:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+		"environment": "testnet",
+		"isTokenApproval": true,
+		"tokenApprovalAmount": "1000000000001",
+		"tokenApprovalAmountMissing": false,
+		"tokenApprovalUnlimited": false,
+		"tokenApprovalAmountExceedsCap": false,
+	})
+	guardrail.decision == "deny" with input as inp
+	some reason in guardrail.hard_deny_reasons with input as inp
+	reason.rule == "token_approval_cap_exceeded"
+}
+
+# Finite approval inside cap is not hard-denied solely by approval rules
+test_finite_approval_within_cap_not_hard_denied_by_approval_rule if {
+	inp := object.union(base_input, {
+		"action": "onchain.request_signature",
+		"chain": "ethereum",
+		"chainEnvironment": "sepolia",
+		"resource": "onchain:ethereum:sepolia:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+		"contractAddress": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+		"isTokenApproval": true,
+		"tokenApprovalAmount": "100",
+		"tokenApprovalAmountMissing": false,
+		"tokenApprovalUnlimited": false,
+		"tokenApprovalAmountExceedsCap": false,
+	})
+	guardrail.decision == "allow" with input as inp
+}
+
 # Hard deny: mainnet onchain signing
 test_hard_deny_mainnet_onchain_signing if {
 	inp := object.union(base_input, {

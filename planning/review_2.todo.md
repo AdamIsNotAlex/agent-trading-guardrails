@@ -42,7 +42,7 @@ Diff reviewed: `master` vs `0877f5664efac5dfc9b2cd7e60cc7dbf894818bc`
   - [x] `pnpm typecheck` — passed.
   - [x] `pnpm test` — failed before changes in `packages/red-team/src/red-team.test.ts` (`signer unavailable → broker rejects`, `global kill switch blocks broker execution`).
   - [x] `opa test packages/policy/src -v` if local OPA is installed — OPA installed and 51/51 tests passed.
-- [ ] If schema shapes change, plan to regenerate JSON schema files.
+- [x] If schema shapes change, plan to regenerate JSON schema files.
   - Command: `pnpm --filter @guardrails/schemas generate:json-schema`
 
 ## Phase 1: Critical Issue 1 — Unlimited Token Approval Bypass
@@ -65,7 +65,7 @@ Relevant files:
 
 ### Design Checklist
 
-- [ ] Decide the minimal structured representation needed for token approval facts.
+- [x] Decide the minimal structured representation needed for token approval facts.
   - Preferred direction: compute explicit policy facts before OPA instead of asking Rego to parse huge integers.
   - Candidate facts:
     - `isTokenApproval: boolean`
@@ -73,65 +73,65 @@ Relevant files:
     - `tokenApprovalAmountMissing: boolean`
     - `tokenApprovalUnlimited: boolean`
     - `tokenApprovalAmountExceedsCap: boolean`
-- [ ] Define the exact detection scope.
-  - [ ] Ethereum ERC-20 `approve(address,uint256)` selector: `0x095ea7b3`.
-  - [ ] Any existing explicit `maxTokenApprovalAmount` field.
-  - [ ] Omitted approval amount when calldata indicates an approval.
-- [ ] Define safe amount parsing rules.
-  - [ ] Treat non-decimal strings as invalid for approval amounts unless they are explicitly denied sentinel values.
-  - [ ] Use `BigInt` in TypeScript for large approval amounts; do not use `number` for uint256-sized values.
-  - [ ] Deny max uint256 exactly: `115792089237316195423570985008687907853269984665640564039457584007913129639935`.
-  - [ ] Deny common unbounded aliases: `unlimited`, `max`, `uint256.max`, `MaxUint256`, case-insensitive if accepted as input.
-- [ ] Decide where the per-token/per-environment approval cap lives.
+- [x] Define the exact detection scope.
+  - [x] Ethereum ERC-20 `approve(address,uint256)` selector: `0x095ea7b3`.
+  - [x] Any existing explicit `maxTokenApprovalAmount` field.
+  - [x] Omitted approval amount when calldata indicates an approval.
+- [x] Define safe amount parsing rules.
+  - [x] Treat non-decimal strings as invalid for approval amounts unless they are explicitly denied sentinel values.
+  - [x] Use `BigInt` in TypeScript for large approval amounts; do not use `number` for uint256-sized values.
+  - [x] Deny max uint256 exactly: `115792089237316195423570985008687907853269984665640564039457584007913129639935`.
+  - [x] Deny common unbounded aliases: `unlimited`, `max`, `uint256.max`, `MaxUint256`, case-insensitive if accepted as input.
+- [x] Decide where the per-token/per-environment approval cap lives.
   - Preferred direction: add a policy data limit and pass a precomputed boolean to OPA.
   - Avoid adding exchange-specific or chain-specific abstractions unless needed for the finding.
 
 ### Implementation Checklist
 
-- [ ] Update the schema layer to make approval metadata explicit and validated.
-  - [ ] Restrict `maxTokenApprovalAmount` to a finite decimal string if retained.
-  - [ ] Add schema tests for valid finite amount, invalid non-decimal amount, max uint256, and missing approval amount for approval calldata.
-  - [ ] Update fixtures to use valid approval metadata where required.
-- [ ] Update guardrail-service policy input normalization.
-  - [ ] Detect ERC-20 approval calldata from `intent.data` for Ethereum signing intents.
-  - [ ] Extract the `uint256` amount from calldata when possible.
-  - [ ] Derive policy facts for missing, unlimited, and cap-exceeding approval amounts.
-  - [ ] Ensure malformed approval calldata fails closed before policy allow can occur.
-- [ ] Update `PolicyInput` schema to include the new approval facts.
-  - [ ] Keep new fields optional only if absence is impossible for non-approval actions.
-  - [ ] Avoid allowing `undefined` to mean safe for approval-like calldata.
-- [ ] Update Rego hard-deny rules.
-  - [ ] Deny explicit unlimited/max approval facts.
-  - [ ] Deny missing approval amount when `isTokenApproval` is true.
-  - [ ] Deny approval amount above configured cap.
-  - [ ] Preserve existing hard-deny precedence over escalation and allow rules.
-- [ ] Update policy data if a cap is introduced.
-  - [ ] Add conservative testnet/canary limits.
-  - [ ] Do not loosen existing allowlists.
-- [ ] Regenerate JSON schemas after schema changes.
+- [x] Update the schema layer to make approval metadata explicit and validated.
+  - [x] Restrict `maxTokenApprovalAmount` to a finite decimal string if retained.
+  - [x] Add schema tests for valid finite amount, invalid non-decimal amount, max uint256, and missing approval amount for approval calldata.
+  - [x] Update fixtures to use valid approval metadata where required.
+- [x] Update guardrail-service policy input normalization.
+  - [x] Detect ERC-20 approval calldata from `intent.data` for Ethereum signing intents.
+  - [x] Extract the `uint256` amount from calldata when possible.
+  - [x] Derive policy facts for missing, unlimited, and cap-exceeding approval amounts.
+  - [x] Ensure malformed approval calldata fails closed before policy allow can occur.
+- [x] Update `PolicyInput` schema to include the new approval facts.
+  - [x] Keep new fields optional only if absence is impossible for non-approval actions.
+  - [x] Avoid allowing `undefined` to mean safe for approval-like calldata.
+- [x] Update Rego hard-deny rules.
+  - [x] Deny explicit unlimited/max approval facts.
+  - [x] Deny missing approval amount when `isTokenApproval` is true.
+  - [x] Deny approval amount above configured cap.
+  - [x] Preserve existing hard-deny precedence over escalation and allow rules.
+- [x] Update policy data if a cap is introduced.
+  - [x] Add conservative testnet/canary limits.
+  - [x] Do not loosen existing allowlists.
+- [x] Regenerate JSON schemas after schema changes.
 
 ### Regression Tests
 
-- [ ] Add Rego tests:
-  - [ ] Literal `unlimited` is denied.
-  - [ ] Max uint256 is denied.
-  - [ ] Approval calldata with omitted approval amount is denied.
-  - [ ] Approval amount above cap is denied.
-  - [ ] Finite approval amount within cap is not hard-denied solely by approval rule.
-- [ ] Add guardrail-service tests:
-  - [ ] ERC-20 approval calldata is classified as token approval.
-  - [ ] Max uint256 approval reaches policy as a deny fact.
-  - [ ] Missing approval amount for approval calldata cannot become `allow`.
-- [ ] Add red-team tests with realistic onchain signing payloads:
-  - [ ] Unknown contract approval is denied by unknown-contract rule.
-  - [ ] Allowlisted contract with max approval is denied by unlimited approval rule.
-  - [ ] Approval encoded in calldata without explicit amount metadata is denied.
+- [x] Add Rego tests:
+  - [x] Literal `unlimited` is denied.
+  - [x] Max uint256 is denied.
+  - [x] Approval calldata with omitted approval amount is denied.
+  - [x] Approval amount above cap is denied.
+  - [x] Finite approval amount within cap is not hard-denied solely by approval rule.
+- [x] Add guardrail-service tests:
+  - [x] ERC-20 approval calldata is classified as token approval.
+  - [x] Max uint256 approval reaches policy as a deny fact.
+  - [x] Missing approval amount for approval calldata cannot become `allow`.
+- [x] Add red-team tests with realistic onchain signing payloads:
+  - [x] Unknown contract approval is denied by unknown-contract rule.
+  - [x] Allowlisted contract with max approval is denied by unlimited approval rule.
+  - [x] Approval encoded in calldata without explicit amount metadata is denied.
 
 ### Acceptance Criteria
 
-- [ ] No onchain signing request can become `allow` when it requests an unlimited or unbounded token approval.
-- [ ] Policy tests prove the hard-deny rule, not only schema rejection.
-- [ ] Red-team tests use realistic onchain payloads instead of `binanceSpotOrder` stubs.
+- [x] No onchain signing request can become `allow` when it requests an unlimited or unbounded token approval.
+- [x] Policy tests prove the hard-deny rule, not only schema rejection.
+- [x] Red-team tests use realistic onchain payloads instead of `binanceSpotOrder` stubs.
 
 ## Phase 2: Critical Issue 2 — OPA Output Normalization Fail-Open
 

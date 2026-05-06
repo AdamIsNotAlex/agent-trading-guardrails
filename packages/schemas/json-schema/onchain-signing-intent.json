@@ -75,7 +75,8 @@
               "format": "uuid"
             },
             "maxTokenApprovalAmount": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^(0|[1-9]\\d*)$"
             },
             "chain": {
               "type": "string",

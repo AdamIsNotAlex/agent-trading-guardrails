@@ -8,11 +8,12 @@ import {
 } from "@guardrails/broker";
 import type {
   DynamicRiskResult,
+  PolicyInput,
   PolicyOutput,
   ReviewerVerdictSchema,
   TradingIntent,
 } from "@guardrails/schemas";
-import { binanceSpotOrder } from "@guardrails/schemas/fixtures";
+import { binanceSpotOrder, ethereumSepoliaSigning } from "@guardrails/schemas/fixtures";
 import {
   type GuardrailConfig,
   GuardrailService,
@@ -24,6 +25,12 @@ import { describe, expect, it } from "vitest";
 import { hallucinatedClaims, promptInjectionPayloads } from "./fixtures.js";
 
 const now = "2026-05-04T12:00:00.000Z";
+const UINT256_MAX =
+  "115792089237316195423570985008687907853269984665640564039457584007913129639935";
+const APPROVAL_SPENDER = "0000000000000000000000007265636970696e74000000000000000000000000";
+const APPROVAL_AMOUNT_100 = "0000000000000000000000000000000000000000000000000000000000000064";
+const ERC20_APPROVAL_100 = `0x095ea7b3${APPROVAL_SPENDER}${APPROVAL_AMOUNT_100}`;
+const ERC20_APPROVAL_MAX = `0x095ea7b3${APPROVAL_SPENDER}${"f".repeat(64)}`;
 const nullAuditWriter = { write() {} };
 const brokerConfig = {
   environment: "canary_live" as const,
@@ -95,6 +102,54 @@ function makeDenyPolicy(rule: string, msg: string): PolicyEvaluator {
         requiresHumanApproval: false,
         matchedAllowRules: [],
         matchedDenyRules: [rule],
+        evaluatedAt: now,
+      };
+    },
+    async isHealthy() {
+      return true;
+    },
+  };
+}
+
+function makeOnchainHardDenyPolicy(): PolicyEvaluator {
+  return {
+    async evaluate(input: PolicyInput): Promise<PolicyOutput> {
+      if (input.chain === "ethereum" && input.contractAddress !== ethereumSepoliaSigning.to) {
+        return {
+          decision: "deny",
+          reasons: [{ rule: "unknown_contract_denied", message: "Not in allowlist." }],
+          requiresHumanApproval: false,
+          matchedAllowRules: [],
+          matchedDenyRules: ["unknown_contract_denied"],
+          evaluatedAt: now,
+        };
+      }
+      if (input.tokenApprovalUnlimited) {
+        return {
+          decision: "deny",
+          reasons: [{ rule: "unlimited_approval_denied", message: "Unlimited approval." }],
+          requiresHumanApproval: false,
+          matchedAllowRules: [],
+          matchedDenyRules: ["unlimited_approval_denied"],
+          evaluatedAt: now,
+        };
+      }
+      if (input.tokenApprovalAmountMissing) {
+        return {
+          decision: "deny",
+          reasons: [{ rule: "token_approval_amount_missing", message: "metadata required" }],
+          requiresHumanApproval: false,
+          matchedAllowRules: [],
+          matchedDenyRules: ["token_approval_amount_missing"],
+          evaluatedAt: now,
+        };
+      }
+      return {
+        decision: "allow",
+        reasons: [],
+        requiresHumanApproval: false,
+        matchedAllowRules: ["ethereum-sepolia-sign"],
+        matchedDenyRules: [],
         evaluatedAt: now,
       };
     },
@@ -408,26 +463,51 @@ describe("Hard-Deny Actions", () => {
 
   it("unknown onchain contract is denied", async () => {
     const svc = new GuardrailService(
-      config,
+      { ...config, environment: "testnet" },
       makeReviewer(),
-      makeDenyPolicy("unknown_contract", "Not in allowlist"),
+      makeOnchainHardDenyPolicy(),
       makeRisk(),
       nullAuditWriter,
     );
-    const result = await svc.evaluate(binanceSpotOrder);
+    const result = await svc.evaluate({
+      ...ethereumSepoliaSigning,
+      to: "0x1111111111111111111111111111111111111111",
+      resource: "onchain:ethereum:sepolia:0x1111111111111111111111111111111111111111",
+      data: ERC20_APPROVAL_100,
+      maxTokenApprovalAmount: "100",
+    });
     expect(result.outcome).toBe("deny");
+    expect(result.reasons[0].rule).toBe("unknown_contract_denied");
   });
 
-  it("unlimited approval is denied", async () => {
+  it("allowlisted contract with max approval is denied", async () => {
     const svc = new GuardrailService(
-      config,
+      { ...config, environment: "testnet" },
       makeReviewer(),
-      makeDenyPolicy("unlimited_approval", "Denied"),
+      makeOnchainHardDenyPolicy(),
       makeRisk(),
       nullAuditWriter,
     );
-    const result = await svc.evaluate(binanceSpotOrder);
+    const result = await svc.evaluate({
+      ...ethereumSepoliaSigning,
+      data: ERC20_APPROVAL_MAX,
+      maxTokenApprovalAmount: UINT256_MAX,
+    });
     expect(result.outcome).toBe("deny");
+    expect(result.reasons[0].rule).toBe("unlimited_approval_denied");
+  });
+
+  it("approval calldata without explicit metadata is denied", async () => {
+    const svc = new GuardrailService(
+      { ...config, environment: "testnet" },
+      makeReviewer(),
+      makeOnchainHardDenyPolicy(),
+      makeRisk(),
+      nullAuditWriter,
+    );
+    const result = await svc.evaluate({ ...ethereumSepoliaSigning, data: ERC20_APPROVAL_100 });
+    expect(result.outcome).toBe("deny");
+    expect(result.reasons[0].rule).toBe("token_approval_amount_missing");
   });
 });
 

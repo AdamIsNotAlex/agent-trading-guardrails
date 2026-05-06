@@ -6,21 +6,24 @@
         "auto_max_daily_notional_usd": 5000,
         "auto_max_daily_loss_usd": 1000,
         "max_leverage": 10,
-        "default_max_leverage": 3
+        "default_max_leverage": 3,
+        "max_token_approval_amount": "1000000000000"
       },
       "paper": {
         "auto_max_notional_usd": 1000,
         "auto_max_daily_notional_usd": 5000,
         "auto_max_daily_loss_usd": 1000,
         "max_leverage": 10,
-        "default_max_leverage": 3
+        "default_max_leverage": 3,
+        "max_token_approval_amount": "1000000000000"
       },
       "testnet": {
         "auto_max_notional_usd": 500,
         "auto_max_daily_notional_usd": 2000,
         "auto_max_daily_loss_usd": 500,
         "max_leverage": 5,
-        "default_max_leverage": 2
+        "default_max_leverage": 2,
+        "max_token_approval_amount": "1000000000000"
       },
       "canary_live": {
         "auto_max_notional_usd": 10,
@@ -28,14 +31,16 @@
         "futures_auto_max_daily_notional_usd": 25,
         "auto_max_daily_loss_usd": 25,
         "max_leverage": 3,
-        "default_max_leverage": 1
+        "default_max_leverage": 1,
+        "max_token_approval_amount": "100000000"
       },
       "production": {
         "auto_max_notional_usd": 500,
         "auto_max_daily_notional_usd": 2000,
         "auto_max_daily_loss_usd": 200,
         "max_leverage": 5,
-        "default_max_leverage": 1
+        "default_max_leverage": 1,
+        "max_token_approval_amount": "1000000000"
       }
     },
     "allowlists": {

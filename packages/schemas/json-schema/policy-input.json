@@ -60,6 +60,21 @@
         "maxTokenApprovalAmount": {
           "type": "string"
         },
+        "isTokenApproval": {
+          "type": "boolean"
+        },
+        "tokenApprovalAmount": {
+          "type": ["string", "null"]
+        },
+        "tokenApprovalAmountMissing": {
+          "type": "boolean"
+        },
+        "tokenApprovalUnlimited": {
+          "type": "boolean"
+        },
+        "tokenApprovalAmountExceedsCap": {
+          "type": "boolean"
+        },
         "reviewerVerdict": {
           "type": "string"
         },

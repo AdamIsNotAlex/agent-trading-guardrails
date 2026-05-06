@@ -27,6 +27,20 @@ type AuditContext = Pick<
   "promptId" | "sessionId" | "inputRef"
 >;
 
+type TokenApprovalFacts = Pick<
+  PolicyInput,
+  | "isTokenApproval"
+  | "tokenApprovalAmount"
+  | "tokenApprovalAmountMissing"
+  | "tokenApprovalUnlimited"
+  | "tokenApprovalAmountExceedsCap"
+>;
+
+const ERC20_APPROVE_SELECTOR = "0x095ea7b3";
+const UINT256_MAX =
+  "115792089237316195423570985008687907853269984665640564039457584007913129639935";
+const UNBOUNDED_APPROVAL_ALIASES = new Set(["unlimited", "max", "uint256.max", "maxuint256"]);
+
 export class GuardrailService {
   private idempotency = new IdempotencyStore();
   readonly config: GuardrailConfig;
@@ -208,6 +222,46 @@ export class GuardrailService {
       return undefined;
     }
     return dailyStats.totalNotionalUsd + intent.maxNotionalUsd;
+  }
+
+  private tokenApprovalFacts(intent: TradingIntent): TokenApprovalFacts {
+    if (intent.action !== "onchain.request_signature" || intent.chain !== "ethereum") {
+      return {
+        isTokenApproval: false,
+        tokenApprovalAmount: null,
+        tokenApprovalAmountMissing: false,
+        tokenApprovalUnlimited: false,
+        tokenApprovalAmountExceedsCap: false,
+      };
+    }
+
+    const data = intent.data?.toLowerCase() ?? "";
+    const hasApprovalSelector = data.startsWith(ERC20_APPROVE_SELECTOR);
+    const metadataAmount = parseApprovalMetadata(intent.maxTokenApprovalAmount);
+    if (!hasApprovalSelector && metadataAmount === null) {
+      return {
+        isTokenApproval: false,
+        tokenApprovalAmount: null,
+        tokenApprovalAmountMissing: false,
+        tokenApprovalUnlimited: false,
+        tokenApprovalAmountExceedsCap: false,
+      };
+    }
+
+    const calldataAmount = hasApprovalSelector ? extractErc20ApprovalAmount(data) : null;
+    const effectiveAmount = calldataAmount ?? metadataAmount;
+    const cap = approvalCapForEnvironment(intent.environment);
+    const amountExceedsCap = effectiveAmount !== null && cap !== null && effectiveAmount > cap;
+
+    return {
+      isTokenApproval: true,
+      tokenApprovalAmount: effectiveAmount?.toString() ?? null,
+      tokenApprovalAmountMissing:
+        metadataAmount === null || (hasApprovalSelector && calldataAmount === null),
+      tokenApprovalUnlimited:
+        calldataAmount?.toString() === UINT256_MAX || metadataAmount?.toString() === UINT256_MAX,
+      tokenApprovalAmountExceedsCap: amountExceedsCap,
+    };
   }
 
   private createDecisionToken(
@@ -574,6 +628,7 @@ export class GuardrailService {
       if ("leverage" in intent && intent.leverage != null) policyInput.leverage = intent.leverage;
       if ("maxTokenApprovalAmount" in intent)
         policyInput.maxTokenApprovalAmount = intent.maxTokenApprovalAmount;
+      Object.assign(policyInput, this.tokenApprovalFacts(intent));
 
       let policyOutput: PolicyOutput;
       try {
@@ -649,6 +704,34 @@ export class GuardrailService {
       this.idempotency.abort(idempotencyScope, payloadHash, err);
       throw err;
     }
+  }
+}
+
+function extractErc20ApprovalAmount(data: string): bigint | null {
+  if (!/^0x[0-9a-f]+$/.test(data) || data.length !== 138) return null;
+  return BigInt(`0x${data.slice(74, 138)}`);
+}
+
+function parseApprovalMetadata(value: string | undefined): bigint | null {
+  if (value === undefined) return null;
+  const normalized = value.toLowerCase();
+  if (UNBOUNDED_APPROVAL_ALIASES.has(normalized)) return BigInt(UINT256_MAX);
+  if (!/^(0|[1-9]\d*)$/.test(value)) return null;
+  return BigInt(value);
+}
+
+function approvalCapForEnvironment(environment: string): bigint | null {
+  switch (environment) {
+    case "dev":
+    case "paper":
+    case "testnet":
+      return 1_000_000_000_000n;
+    case "canary_live":
+      return 100_000_000n;
+    case "production":
+      return 1_000_000_000n;
+    default:
+      return null;
   }
 }
 
