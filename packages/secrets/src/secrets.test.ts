@@ -37,6 +37,34 @@ describe("VaultSecretProvider", () => {
     vi.unstubAllGlobals();
   });
 
+  function makeVaultProvider(): VaultSecretProvider {
+    return new VaultSecretProvider({
+      addr: "https://vault.example.com",
+      token: "vault-token",
+      mountPath: "secret",
+    });
+  }
+
+  async function expectVaultErrorWithoutLeaks(
+    action: () => Promise<unknown>,
+    expectedMessage: string,
+    leakedValues: string[],
+  ): Promise<void> {
+    let thrown: unknown;
+    try {
+      await action();
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown).toBeInstanceOf(Error);
+    const message = (thrown as Error).message;
+    expect(message).toBe(expectedMessage);
+    for (const leakedValue of leakedValues) {
+      expect(message).not.toContain(leakedValue);
+    }
+  }
+
   it("encodes key path components", async () => {
     const fetchMock = vi.fn(async () =>
       Response.json({ data: { data: { value: "secret-value" } } }),
@@ -56,18 +84,134 @@ describe("VaultSecretProvider", () => {
     );
   });
 
+  it("returns secret string for valid Vault KV v2 get response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ data: { data: { value: "secret-value" } } })),
+    );
+
+    await expect(makeVaultProvider().get("api-key")).resolves.toBe("secret-value");
+  });
+
+  it("returns null for Vault get 404", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 404 })),
+    );
+
+    await expect(makeVaultProvider().get("api-key")).resolves.toBeNull();
+  });
+
   it("throws on Vault auth and server failures", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => new Response(null, { status: 403 })),
     );
-    const provider = new VaultSecretProvider({
-      addr: "https://vault.example.com",
-      token: "vault-token",
-      mountPath: "secret",
-    });
 
-    await expect(provider.get("api-key")).rejects.toThrow("Vault get failed: 403");
+    await expect(makeVaultProvider().get("api-key")).rejects.toThrow("Vault get failed: 403");
+  });
+
+  it("throws for Vault get 200 non-JSON body without leaking it", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("secret-body", { status: 200 })),
+    );
+
+    await expectVaultErrorWithoutLeaks(
+      () => makeVaultProvider().get("api-key"),
+      "Malformed Vault get response: body must be valid JSON.",
+      ["secret-body", "vault-token"],
+    );
+  });
+
+  it("throws for Vault get 200 missing data", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({})),
+    );
+
+    await expect(makeVaultProvider().get("api-key")).rejects.toThrow(
+      "Malformed Vault get response: data must be an object.",
+    );
+  });
+
+  it("throws for Vault get 200 missing data.data.value", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ data: { data: {} } })),
+    );
+
+    await expect(makeVaultProvider().get("api-key")).rejects.toThrow(
+      "Malformed Vault get response: data.data.value must be a string.",
+    );
+  });
+
+  it("throws for Vault get 200 non-string value without leaking it", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ data: { data: { value: { secret: "leaked" } } } })),
+    );
+
+    await expectVaultErrorWithoutLeaks(
+      () => makeVaultProvider().get("api-key"),
+      "Malformed Vault get response: data.data.value must be a string.",
+      ["leaked", "vault-token"],
+    );
+  });
+
+  it("returns keys for valid Vault list response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ data: { keys: ["a", "b"] } })),
+    );
+
+    await expect(makeVaultProvider().list()).resolves.toEqual(["a", "b"]);
+  });
+
+  it("returns empty list for Vault list 404", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 404 })),
+    );
+
+    await expect(makeVaultProvider().list()).resolves.toEqual([]);
+  });
+
+  it("throws for Vault list 200 non-JSON body without leaking it", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("secret-body", { status: 200 })),
+    );
+
+    await expectVaultErrorWithoutLeaks(
+      () => makeVaultProvider().list(),
+      "Malformed Vault list response: body must be valid JSON.",
+      ["secret-body", "vault-token"],
+    );
+  });
+
+  it("throws for Vault list 200 missing data.keys", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ data: {} })),
+    );
+
+    await expect(makeVaultProvider().list()).rejects.toThrow(
+      "Malformed Vault list response: data.keys must be an array.",
+    );
+  });
+
+  it("throws for Vault list 200 non-string keys without leaking them", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ data: { keys: ["safe", { secret: "leaked" }] } })),
+    );
+
+    await expectVaultErrorWithoutLeaks(
+      () => makeVaultProvider().list(),
+      "Malformed Vault list response: data.keys must contain only strings.",
+      ["leaked", "vault-token"],
+    );
   });
 
   it("rejects dot segments in Vault keys and mount paths", async () => {

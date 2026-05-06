@@ -354,37 +354,37 @@ Relevant files:
 
 ### Implementation Checklist
 
-- [ ] Keep 404 behavior unchanged.
-  - [ ] `get()` returns `null` on 404.
-  - [ ] `list()` returns `[]` on 404.
-- [ ] Validate successful `get()` response shape.
-  - [ ] Require object body.
-  - [ ] Require `data.data.value` to exist.
-  - [ ] Require `value` to be a string.
-  - [ ] Throw descriptive error on malformed 200 responses.
-- [ ] Validate successful `list()` response shape.
-  - [ ] Require object body.
-  - [ ] Require `data.keys` to exist.
-  - [ ] Require every key to be a string.
-  - [ ] Throw descriptive error on malformed 200 responses.
-- [ ] Ensure thrown errors do not include secret values or Vault token.
+- [x] Keep 404 behavior unchanged.
+  - [x] `get()` returns `null` on 404.
+  - [x] `list()` returns `[]` on 404.
+- [x] Validate successful `get()` response shape.
+  - [x] Require object body.
+  - [x] Require `data.data.value` to exist.
+  - [x] Require `value` to be a string.
+  - [x] Throw descriptive error on malformed 200 responses.
+- [x] Validate successful `list()` response shape.
+  - [x] Require object body.
+  - [x] Require `data.keys` to exist.
+  - [x] Require every key to be a string.
+  - [x] Throw descriptive error on malformed 200 responses.
+- [x] Ensure thrown errors do not include secret values or Vault token.
 
 ### Regression Tests
 
-- [ ] `get()` returns secret string for valid KV v2 response.
-- [ ] `get()` returns `null` for 404.
-- [ ] `get()` throws for 200 missing `data`.
-- [ ] `get()` throws for 200 missing `data.data.value`.
-- [ ] `get()` throws for non-string `value`.
-- [ ] `list()` returns keys for valid response.
-- [ ] `list()` returns `[]` for 404.
-- [ ] `list()` throws for missing `data.keys`.
-- [ ] `list()` throws for non-string keys.
+- [x] `get()` returns secret string for valid KV v2 response.
+- [x] `get()` returns `null` for 404.
+- [x] `get()` throws for 200 missing `data`.
+- [x] `get()` throws for 200 missing `data.data.value`.
+- [x] `get()` throws for non-string `value`.
+- [x] `list()` returns keys for valid response.
+- [x] `list()` returns `[]` for 404.
+- [x] `list()` throws for missing `data.keys`.
+- [x] `list()` throws for non-string keys.
 
 ### Acceptance Criteria
 
-- [ ] Vault mount/API/schema misconfiguration cannot masquerade as empty secrets.
-- [ ] Error messages are diagnostic but do not leak sensitive values.
+- [x] Vault mount/API/schema misconfiguration cannot masquerade as empty secrets.
+- [x] Error messages are diagnostic but do not leak sensitive values.
 
 ## Phase 8: Broker Execution Evidence Schema
 
