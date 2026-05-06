@@ -8,6 +8,12 @@ import type {
   ApprovalType,
 } from "./interfaces.js";
 
+type PendingApprovalRequest = Extract<ApprovalRequest, { state: "pending" }>;
+type ApprovedApprovalRequest = Extract<ApprovalRequest, { state: "approved" }>;
+type DeniedApprovalRequest = Extract<ApprovalRequest, { state: "denied" }>;
+type TimeoutApprovalRequest = Extract<ApprovalRequest, { state: "timeout" }>;
+type ConsumedApprovalRequest = Extract<ApprovalRequest, { state: "consumed" }>;
+
 export class ApprovalStore {
   private requests = new Map<string, ApprovalRequest>();
 
@@ -47,16 +53,6 @@ export class ApprovalStore {
           reject(new Error(`Approval request ${approvalId} was not found.`));
           return;
         }
-        if (new Date() > new Date(request.timeoutAt)) {
-          try {
-            this.timeout(request, new Date().toISOString());
-          } catch (err) {
-            reject(err);
-            return;
-          }
-          reject(new Error(`Approval request ${approvalId} timed out.`));
-          return;
-        }
         if (request.state === "approved") {
           resolve(request);
           return;
@@ -71,6 +67,16 @@ export class ApprovalStore {
         }
         if (request.state === "consumed") {
           reject(new Error(`Approval request ${approvalId} was already used.`));
+          return;
+        }
+        if (new Date() > new Date(request.timeoutAt)) {
+          try {
+            this.timeout(request, new Date().toISOString());
+          } catch (err) {
+            reject(err);
+            return;
+          }
+          reject(new Error(`Approval request ${approvalId} timed out.`));
           return;
         }
         if (Date.now() >= deadline) {
@@ -118,10 +124,7 @@ export class ApprovalStore {
       }
       throw err;
     }
-    request.state = "approved";
-    request.decidedAt = decidedAt;
-    request.decidedBy = decidedBy;
-    return request;
+    return this.approveRequest(request, decidedAt, decidedBy);
   }
 
   deny(approvalId: string, decidedBy: string): ApprovalRequest | null {
@@ -133,10 +136,7 @@ export class ApprovalStore {
       return null;
     }
     this.writeDecisionAudit(request, "approval.denied", decidedBy, decidedAt, "denied");
-    request.state = "denied";
-    request.decidedAt = decidedAt;
-    request.decidedBy = decidedBy;
-    return request;
+    return this.denyRequest(request, decidedAt, decidedBy);
   }
 
   consumeOneTime(approvalId: string): ApprovalRequest | null {
@@ -145,12 +145,8 @@ export class ApprovalStore {
       return null;
     }
     const now = new Date();
-    if (now > new Date(request.timeoutAt)) {
-      this.timeout(request, now.toISOString());
-      return null;
-    }
-    request.state = "consumed";
-    return request;
+    if (now > new Date(request.timeoutAt)) return null;
+    return this.consumeRequest(request);
   }
 
   private applyAllowlistOnboarding(
@@ -206,9 +202,47 @@ export class ApprovalStore {
     });
   }
 
-  private timeout(request: ApprovalRequest, decidedAt: string): void {
+  private timeout(request: PendingApprovalRequest, decidedAt: string): TimeoutApprovalRequest {
     this.writeDecisionAudit(request, "approval.timeout", null, decidedAt, "timeout");
-    request.state = "timeout";
+    return this.timeoutRequest(request, decidedAt);
+  }
+
+  private approveRequest(
+    request: ApprovalRequest,
+    decidedAt: string,
+    decidedBy: string,
+  ): ApprovedApprovalRequest {
+    const approved = request as ApprovedApprovalRequest;
+    approved.state = "approved";
+    approved.decidedAt = decidedAt;
+    approved.decidedBy = decidedBy;
+    return approved;
+  }
+
+  private denyRequest(
+    request: ApprovalRequest,
+    decidedAt: string,
+    decidedBy: string,
+  ): DeniedApprovalRequest {
+    const denied = request as DeniedApprovalRequest;
+    denied.state = "denied";
+    denied.decidedAt = decidedAt;
+    denied.decidedBy = decidedBy;
+    return denied;
+  }
+
+  private timeoutRequest(request: ApprovalRequest, decidedAt: string): TimeoutApprovalRequest {
+    const timedOut = request as TimeoutApprovalRequest;
+    timedOut.state = "timeout";
+    timedOut.decidedAt = decidedAt;
+    timedOut.decidedBy = null;
+    return timedOut;
+  }
+
+  private consumeRequest(request: ApprovedApprovalRequest): ConsumedApprovalRequest {
+    const consumed = request as unknown as ConsumedApprovalRequest;
+    consumed.state = "consumed";
+    return consumed;
   }
 
   private writeDecisionAudit(
@@ -268,8 +302,7 @@ export class ApprovalStore {
     const timedOut: ApprovalRequest[] = [];
     for (const request of this.requests.values()) {
       if (request.state === "pending" && now > new Date(request.timeoutAt)) {
-        this.timeout(request, now.toISOString());
-        timedOut.push(request);
+        timedOut.push(this.timeout(request, now.toISOString()));
       }
     }
     return timedOut;

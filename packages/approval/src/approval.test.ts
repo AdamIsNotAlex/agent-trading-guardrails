@@ -64,6 +64,8 @@ describe("ApprovalStore", () => {
     const result = store.deny(req.approvalId, "operator-1");
     expect(result).not.toBeNull();
     expect(result?.state).toBe("denied");
+    expect(result?.decidedBy).toBe("operator-1");
+    expect(result?.decidedAt).toBeTruthy();
   });
 
   it("emits approval decision and timeout audit events", () => {
@@ -84,7 +86,7 @@ describe("ApprovalStore", () => {
     approvedStore.approve(approvedStore.create(baseParams).approvalId, "operator-1");
     deniedStore.deny(deniedStore.create(baseParams).approvalId, "operator-2");
     timeoutStore.create(baseParams);
-    timeoutStore.checkTimeouts();
+    const timedOut = timeoutStore.checkTimeouts()[0];
 
     expect(auditEvents.map((event) => event.eventType)).toEqual([
       "approval.approved",
@@ -93,7 +95,11 @@ describe("ApprovalStore", () => {
     ]);
     expect(auditEvents[0].data).toMatchObject({ decidedBy: "operator-1", state: "approved" });
     expect(auditEvents[1].data).toMatchObject({ decidedBy: "operator-2", state: "denied" });
-    expect(auditEvents[2].data).toMatchObject({ state: "timeout" });
+    expect(auditEvents[2].data).toMatchObject({
+      decidedAt: timedOut?.decidedAt,
+      decidedBy: null,
+      state: "timeout",
+    });
   });
 
   it("cannot approve already-decided request", () => {
@@ -124,6 +130,8 @@ describe("ApprovalStore", () => {
     const timedOut = store.checkTimeouts();
     expect(timedOut).toHaveLength(1);
     expect(timedOut[0].state).toBe("timeout");
+    expect(timedOut[0].decidedAt).toBeTruthy();
+    expect(timedOut[0].decidedBy).toBeNull();
   });
 
   it("cannot approve timed-out request", () => {
@@ -140,6 +148,51 @@ describe("ApprovalStore", () => {
     store.consumeOneTime(req.approvalId);
 
     await expect(store.waitForApproval(req.approvalId, 10)).rejects.toThrow("already used");
+  });
+
+  it("preserves approval decision provenance when consumed", () => {
+    const store = new ApprovalStore({ defaultTimeoutSeconds: 300 });
+    const req = store.create(baseParams);
+    const approved = store.approve(req.approvalId, "operator");
+    const consumed = store.consumeOneTime(req.approvalId);
+
+    expect(consumed).not.toBeNull();
+    expect(consumed?.state).toBe("consumed");
+    expect(consumed?.decidedAt).toBe(approved?.decidedAt);
+    expect(consumed?.decidedBy).toBe("operator");
+  });
+
+  it("does not erase approval provenance when approved request expires before consumption", () => {
+    const store = new ApprovalStore({ defaultTimeoutSeconds: 300 });
+    const req = store.create(baseParams);
+    const approved = store.approve(req.approvalId, "operator");
+    if (!approved) throw new Error("approval failed");
+    approved.timeoutAt = new Date(Date.now() - 1_000).toISOString();
+
+    const consumed = store.consumeOneTime(req.approvalId);
+
+    expect(consumed).toBeNull();
+    expect(store.get(req.approvalId)).toMatchObject({
+      state: "approved",
+      decidedAt: approved.decidedAt,
+      decidedBy: "operator",
+    });
+  });
+
+  it("wait returns approved requests without rewriting expired approval metadata", async () => {
+    const store = new ApprovalStore({ defaultTimeoutSeconds: 300 });
+    const req = store.create(baseParams);
+    const approved = store.approve(req.approvalId, "operator");
+    if (!approved) throw new Error("approval failed");
+    approved.timeoutAt = new Date(Date.now() - 1_000).toISOString();
+
+    const result = await store.waitForApproval(req.approvalId, 10);
+
+    expect(result).toMatchObject({
+      state: "approved",
+      decidedAt: approved.decidedAt,
+      decidedBy: "operator",
+    });
   });
 
   it("rejects wait when timeout audit fails", async () => {

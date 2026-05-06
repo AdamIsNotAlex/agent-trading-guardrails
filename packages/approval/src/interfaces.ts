@@ -3,7 +3,7 @@ import type { Environment } from "@guardrails/schemas";
 export type ApprovalState = "pending" | "approved" | "denied" | "timeout" | "consumed";
 export type ApprovalType = "one_time" | "allowlist_onboarding";
 
-export interface ApprovalRequest {
+interface ApprovalRequestBase {
   approvalId: string;
   intentId: string;
   correlationId: string;
@@ -13,13 +13,47 @@ export interface ApprovalRequest {
   environment: Environment;
   escalationReason: string;
   approvalType: ApprovalType;
-  state: ApprovalState;
   intentData: Record<string, unknown>;
   createdAt: string;
-  decidedAt: string | null;
-  decidedBy: string | null;
   timeoutAt: string;
 }
+
+export type PendingApprovalRequest = ApprovalRequestBase & {
+  state: "pending";
+  decidedAt: null;
+  decidedBy: null;
+};
+
+export type ApprovedApprovalRequest = ApprovalRequestBase & {
+  state: "approved";
+  decidedAt: string;
+  decidedBy: string;
+};
+
+export type DeniedApprovalRequest = ApprovalRequestBase & {
+  state: "denied";
+  decidedAt: string;
+  decidedBy: string;
+};
+
+export type TimeoutApprovalRequest = ApprovalRequestBase & {
+  state: "timeout";
+  decidedAt: string;
+  decidedBy: null;
+};
+
+export type ConsumedApprovalRequest = ApprovalRequestBase & {
+  state: "consumed";
+  decidedAt: string;
+  decidedBy: string;
+};
+
+export type ApprovalRequest =
+  | PendingApprovalRequest
+  | ApprovedApprovalRequest
+  | DeniedApprovalRequest
+  | TimeoutApprovalRequest
+  | ConsumedApprovalRequest;
 
 export interface AllowlistOnboardingEntry {
   name: string;

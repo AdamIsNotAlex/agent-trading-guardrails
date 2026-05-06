@@ -443,28 +443,28 @@ Relevant files:
 
 ### Implementation Checklist
 
-- [ ] Update `timeout()` to persist terminal timestamp.
-  - [ ] Set `request.decidedAt = decidedAt`.
-  - [ ] Keep `request.decidedBy = null` unless a system principal is preferred.
-- [ ] Tighten approval state typing.
-  - [ ] Consider a discriminated union for `pending`, `approved`, `denied`, `timeout`, and `consumed`.
-  - [ ] If a full union causes broad churn, add runtime assertions in store methods as a narrower first step.
-- [ ] Ensure `consumed` preserves prior approval metadata or adds `consumedAt` without erasing decision provenance.
-- [ ] Ensure audit events and request object agree on terminal timestamps.
+- [x] Update `timeout()` to persist terminal timestamp.
+  - [x] Set `request.decidedAt = decidedAt`.
+  - [x] Keep `request.decidedBy = null` unless a system principal is preferred.
+- [x] Tighten approval state typing.
+  - [x] Consider a discriminated union for `pending`, `approved`, `denied`, `timeout`, and `consumed`.
+  - [x] Full discriminated union landed without broad churn, so narrower runtime assertions were not needed.
+- [x] Ensure `consumed` preserves prior approval metadata or adds `consumedAt` without erasing decision provenance.
+- [x] Ensure audit events and request object agree on terminal timestamps.
 
 ### Regression Tests
 
-- [ ] Timed-out request has `state: "timeout"`.
-- [ ] Timed-out request has non-null `decidedAt`.
-- [ ] Timed-out request has expected `decidedBy` semantics.
-- [ ] Approved request cannot have null decision metadata through store APIs.
-- [ ] Denied request cannot have null decision metadata through store APIs.
-- [ ] Consumed approval preserves enough provenance for audit.
+- [x] Timed-out request has `state: "timeout"`.
+- [x] Timed-out request has non-null `decidedAt`.
+- [x] Timed-out request has expected `decidedBy` semantics.
+- [x] Approved request cannot have null decision metadata through store APIs.
+- [x] Denied request cannot have null decision metadata through store APIs.
+- [x] Consumed approval preserves enough provenance for audit.
 
 ### Acceptance Criteria
 
-- [ ] Approval terminal states are unambiguous in both memory and audit.
-- [ ] Timeout audit event and stored request metadata agree.
+- [x] Approval terminal states are unambiguous in both memory and audit.
+- [x] Timeout audit event and stored request metadata agree.
 
 ## Phase 10: Default-Deny Reason Export
 
