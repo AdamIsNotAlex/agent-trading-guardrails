@@ -2,6 +2,14 @@ import { randomUUID } from "node:crypto";
 import type { Environment } from "@guardrails/schemas";
 import type { AuditWriter, KillSwitch, KillSwitchScope } from "./interfaces.js";
 
+export class KillSwitchAuditError extends Error {
+  constructor(cause: unknown) {
+    super("Kill switch activated, but activation audit failed.");
+    this.name = "KillSwitchAuditError";
+    this.cause = cause;
+  }
+}
+
 export class InMemoryKillSwitch implements KillSwitch {
   private active = new Set<string>();
   private audit?: AuditWriter;
@@ -45,7 +53,9 @@ export class InMemoryKillSwitch implements KillSwitch {
         ...(scope.type === "agent" ? { principal: scope.principal } : {}),
         data: { scope },
       });
-    } catch {}
+    } catch (err) {
+      throw new KillSwitchAuditError(err);
+    }
   }
 
   deactivate(scope: KillSwitchScope): void {

@@ -324,24 +324,24 @@ Relevant files:
 
 ### Implementation Checklist
 
-- [ ] Remove the empty catch block.
-- [ ] Decide exact failure semantics.
+- [x] Remove the empty catch block.
+- [x] Decide exact failure semantics.
   - Preferred: keep the kill switch active, then throw a specific audit failure error so callers know audit failed.
   - Safety rationale: kill-switch activation should not be rolled back merely because audit failed.
-- [ ] Add an error type or clear error message for audit write failure.
-- [ ] Ensure any broker path invoking kill switch can surface or handle this failure safely.
-- [ ] If throwing would break intended synchronous interfaces, expose failure through a result object or injected logger instead.
+- [x] Add an error type or clear error message for audit write failure.
+- [x] Ensure any broker path invoking kill switch can surface or handle this failure safely.
+- [x] If throwing would break intended synchronous interfaces, expose failure through a result object or injected logger instead.
 
 ### Regression Tests
 
-- [ ] Audit writer throwing during activation is not swallowed.
-- [ ] Kill switch remains active after audit write failure.
-- [ ] Successful activation still writes `killswitch.activated` audit event.
+- [x] Audit writer throwing during activation is not swallowed.
+- [x] Kill switch remains active after audit write failure.
+- [x] Successful activation still writes `killswitch.activated` audit event.
 
 ### Acceptance Criteria
 
-- [ ] Operators cannot unknowingly trigger unaudited kill-switch changes.
-- [ ] Safety state remains conservative if audit fails.
+- [x] Operators cannot unknowingly trigger unaudited kill-switch changes.
+- [x] Safety state remains conservative if audit fails.
 
 ## Phase 7: Vault Provider Response Validation
 

@@ -18,7 +18,7 @@ import {
 } from "./broker.js";
 import { FileBrokerIdempotencyStore, InMemoryBrokerIdempotencyStore } from "./idempotency-store.js";
 import type { AuditWriter, BrokerIdempotencyStore, ExecutionConnector } from "./interfaces.js";
-import { InMemoryKillSwitch } from "./kill-switch.js";
+import { InMemoryKillSwitch, KillSwitchAuditError } from "./kill-switch.js";
 import { PaperExecutionConnector } from "./paper-connector.js";
 
 const config: BrokerConfig = {
@@ -602,18 +602,30 @@ describe("ExecutionBroker", () => {
     });
   });
 
-  it("activates kill switch when activation audit fails", () => {
+  it("surfaces audit failures while keeping kill switch active", () => {
+    const cause = new Error("audit down");
     const ks = new InMemoryKillSwitch(
       {
         write() {
-          throw new Error("audit down");
+          throw cause;
         },
       },
       config.environment,
     );
     const scope = { type: "global" } as const;
 
-    expect(() => ks.activate(scope)).not.toThrow();
+    let thrown: unknown;
+    try {
+      ks.activate(scope);
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown).toBeInstanceOf(KillSwitchAuditError);
+    expect(thrown).toMatchObject({
+      message: "Kill switch activated, but activation audit failed.",
+      cause,
+    });
     expect(ks.isActive(scope)).toBe(true);
   });
 
