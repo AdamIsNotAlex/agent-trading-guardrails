@@ -83,4 +83,70 @@ describe("transformOpaOutput", () => {
 
     expect(new Date(output.evaluatedAt).toString()).not.toBe("Invalid Date");
   });
+
+  it("rejects partial allow output", () => {
+    expect(() => transformOpaOutput({ decision: "allow" })).toThrow();
+  });
+
+  it("rejects output missing requires_human_approval", () => {
+    expect(() =>
+      transformOpaOutput({
+        decision: "allow",
+        reasons: [],
+        matched_allow_rules: ["allow-binance-spot"],
+        matched_deny_rules: [],
+        evaluatedAt,
+      }),
+    ).toThrow();
+  });
+
+  it("rejects output missing matched rule arrays", () => {
+    expect(() =>
+      transformOpaOutput({
+        decision: "deny",
+        reasons: [{ rule: "default_deny", message: "Default deny." }],
+        requires_human_approval: false,
+        evaluatedAt,
+      }),
+    ).toThrow();
+  });
+
+  it("rejects allow output without allow evidence", () => {
+    expect(() =>
+      transformOpaOutput({
+        decision: "allow",
+        reasons: [],
+        requires_human_approval: false,
+        matched_allow_rules: [],
+        matched_deny_rules: [],
+        evaluatedAt,
+      }),
+    ).toThrow();
+  });
+
+  it("rejects allow output with deny reasons but no matched allow rule", () => {
+    expect(() =>
+      transformOpaOutput({
+        decision: "allow",
+        reasons: [{ rule: "default_deny", message: "Default deny." }],
+        requires_human_approval: false,
+        matched_allow_rules: [],
+        matched_deny_rules: [],
+        evaluatedAt,
+      }),
+    ).toThrow();
+  });
+
+  it("rejects needs_human output without human approval flag", () => {
+    expect(() =>
+      transformOpaOutput({
+        decision: "needs_human",
+        reasons: [{ rule: "daily_notional_limit", message: "daily_notional_limit" }],
+        requires_human_approval: false,
+        matched_allow_rules: [],
+        matched_deny_rules: [],
+        evaluatedAt,
+      }),
+    ).toThrow();
+  });
 });

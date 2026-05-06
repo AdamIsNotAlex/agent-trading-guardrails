@@ -31,15 +31,17 @@ Diff reviewed: `master` vs `0877f5664efac5dfc9b2cd7e60cc7dbf894818bc`
 
 ## Phase 0: Baseline and Scope Checks
 
-- [ ] Confirm the working tree is clean or intentionally contains only review planning files.
+- [x] Confirm the working tree is clean or intentionally contains only review planning files.
   - Command: `git status --short --branch`
-- [ ] Re-read `planning/review_2.planning.md` before starting implementation.
-- [ ] Identify current package-level test commands for each touched package.
+  - Baseline: clean on `master...origin/master` before implementation.
+- [x] Re-read `planning/review_2.planning.md` before starting implementation.
+- [x] Identify current package-level test commands for each touched package.
   - Root validation commands are listed in `CLAUDE.md`.
-- [ ] Record baseline validation status before changes.
-  - [ ] `pnpm typecheck`
-  - [ ] `pnpm test`
-  - [ ] `opa test packages/policy/src -v` if local OPA is installed.
+  - Guardrail service focused tests: `pnpm vitest run packages/guardrail-service/src/opa-transform.test.ts packages/guardrail-service/src/service.test.ts`.
+- [x] Record baseline validation status before changes.
+  - [x] `pnpm typecheck` — passed.
+  - [x] `pnpm test` — failed before changes in `packages/red-team/src/red-team.test.ts` (`signer unavailable → broker rejects`, `global kill switch blocks broker execution`).
+  - [x] `opa test packages/policy/src -v` if local OPA is installed — OPA installed and 51/51 tests passed.
 - [ ] If schema shapes change, plan to regenerate JSON schema files.
   - Command: `pnpm --filter @guardrails/schemas generate:json-schema`
 
@@ -145,36 +147,36 @@ Relevant files:
 
 ### Implementation Checklist
 
-- [ ] Replace permissive defaults in `transformOpaOutput` with strict validation.
-  - [ ] Require explicit `decision`.
-  - [ ] Require explicit `requires_human_approval` or `requiresHumanApproval`.
-  - [ ] Require explicit matched allow and deny rule arrays.
-  - [ ] Require explicit reasons array or explicitly mapped OPA reason arrays.
-  - [ ] Require `evaluatedAt` from OPA or deliberately set it only after validating the rest of the output.
-- [ ] Add allow-specific validation.
-  - [ ] If `decision === "allow"`, require at least one matched allow rule or allow reason.
-  - [ ] If `decision === "allow"`, require `requiresHumanApproval === false`.
-- [ ] Add deny/needs-human consistency validation.
-  - [ ] If `decision === "deny"`, require at least one deny/default-deny reason.
-  - [ ] If `decision === "needs_human"`, require `requiresHumanApproval === true`.
-- [ ] Ensure thrown transform errors remain fail-closed in `GuardrailService.evaluate`.
+- [x] Replace permissive defaults in `transformOpaOutput` with strict validation.
+  - [x] Require explicit `decision`.
+  - [x] Require explicit `requires_human_approval` or `requiresHumanApproval`.
+  - [x] Require explicit matched allow and deny rule arrays.
+  - [x] Require explicit reasons array or explicitly mapped OPA reason arrays.
+  - [x] Require `evaluatedAt` from OPA or deliberately set it only after validating the rest of the output.
+- [x] Add allow-specific validation.
+  - [x] If `decision === "allow"`, require at least one matched allow rule or allow reason.
+  - [x] If `decision === "allow"`, require `requiresHumanApproval === false`.
+- [x] Add deny/needs-human consistency validation.
+  - [x] If `decision === "deny"`, require at least one deny/default-deny reason.
+  - [x] If `decision === "needs_human"`, require `requiresHumanApproval === true`.
+- [x] Ensure thrown transform errors remain fail-closed in `GuardrailService.evaluate`.
   - Expected result: service returns deny with `policy_evaluation_failed`.
   - No decision token should be created for this deny.
 
 ### Regression Tests
 
-- [ ] `transformOpaOutput({ decision: "allow" })` throws.
-- [ ] Missing `requires_human_approval` throws.
-- [ ] Missing matched rule arrays throws.
-- [ ] `allow` with empty matched allow rules throws.
-- [ ] `needs_human` with `requires_human_approval: false` throws.
-- [ ] Service test verifies malformed policy output produces deny/fail-closed behavior.
-- [ ] Service test verifies no decision token is issued for malformed OPA output.
+- [x] `transformOpaOutput({ decision: "allow" })` throws.
+- [x] Missing `requires_human_approval` throws.
+- [x] Missing matched rule arrays throws.
+- [x] `allow` with empty matched allow rules throws.
+- [x] `needs_human` with `requires_human_approval: false` throws.
+- [x] Service test verifies malformed policy output produces deny/fail-closed behavior.
+- [x] Service test verifies no decision token is issued for malformed OPA output.
 
 ### Acceptance Criteria
 
-- [ ] No malformed or partial OPA response can normalize into `allow`.
-- [ ] OPA response-shape regressions become fail-closed denials.
+- [x] No malformed or partial OPA response can normalize into `allow`.
+- [x] OPA response-shape regressions become fail-closed denials.
 
 ## Phase 3: Critical Issue 3 — File-Backed Broker Idempotency State Reset
 

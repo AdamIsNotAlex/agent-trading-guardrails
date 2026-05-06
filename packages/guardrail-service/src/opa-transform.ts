@@ -5,41 +5,98 @@ interface RawReason {
   message?: unknown;
 }
 
-function normalizeReasons(value: unknown): PolicyOutput["reasons"] {
-  if (!Array.isArray(value)) return [];
+function normalizeReasons(value: unknown, field: string): PolicyOutput["reasons"] {
+  if (!Array.isArray(value)) throw new Error(`${field} must be an array.`);
 
   return value.map((reason): PolicyOutput["reasons"][number] => {
     if (typeof reason === "string") {
       return { rule: reason, message: reason };
     }
+    if (!reason || typeof reason !== "object") {
+      throw new Error(`${field} entries must be strings or reason objects.`);
+    }
 
     const rawReason = reason as RawReason;
+    if (typeof rawReason.rule !== "string" || typeof rawReason.message !== "string") {
+      throw new Error(`${field} reason objects must include string rule and message.`);
+    }
     return {
-      rule: typeof rawReason.rule === "string" ? rawReason.rule : "policy",
-      message: typeof rawReason.message === "string" ? rawReason.message : String(reason),
+      rule: rawReason.rule,
+      message: rawReason.message,
     };
   });
 }
 
-function normalizeStringArray(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string")
-    : [];
+function normalizeOptionalReasons(value: unknown, field: string): PolicyOutput["reasons"] {
+  return value === undefined ? [] : normalizeReasons(value, field);
+}
+
+function normalizeStringArray(value: unknown, field: string): string[] {
+  if (!Array.isArray(value) || !value.every((item): item is string => typeof item === "string")) {
+    throw new Error(`${field} must be an array of strings.`);
+  }
+  return value;
+}
+
+function requiredField(raw: Record<string, unknown>, camel: string, snake: string): unknown {
+  if (camel in raw) return raw[camel];
+  if (snake in raw) return raw[snake];
+  throw new Error(`OPA output missing ${snake}.`);
 }
 
 export function transformOpaOutput(raw: Record<string, unknown>): PolicyOutput {
-  const directReasons = normalizeReasons(raw.reasons);
-  const reasons =
-    directReasons.length > 0
-      ? directReasons
-      : [...normalizeReasons(raw.hard_deny_reasons), ...normalizeReasons(raw.escalation_reasons)];
+  if (!("decision" in raw)) throw new Error("OPA output missing decision.");
 
-  return PolicyOutputValidator.parse({
+  const hasDirectReasons = "reasons" in raw;
+  const hasMappedReasons = "hard_deny_reasons" in raw || "escalation_reasons" in raw;
+  if (!hasDirectReasons && !hasMappedReasons) {
+    throw new Error("OPA output missing reasons.");
+  }
+
+  const directReasons = hasDirectReasons ? normalizeReasons(raw.reasons, "reasons") : [];
+  const reasons = hasDirectReasons
+    ? directReasons
+    : [
+        ...normalizeOptionalReasons(raw.hard_deny_reasons, "hard_deny_reasons"),
+        ...normalizeOptionalReasons(raw.escalation_reasons, "escalation_reasons"),
+      ];
+  const requiresHumanApproval = requiredField(
+    raw,
+    "requiresHumanApproval",
+    "requires_human_approval",
+  );
+  const matchedAllowRules = normalizeStringArray(
+    requiredField(raw, "matchedAllowRules", "matched_allow_rules"),
+    "matched_allow_rules",
+  );
+  const matchedDenyRules = normalizeStringArray(
+    requiredField(raw, "matchedDenyRules", "matched_deny_rules"),
+    "matched_deny_rules",
+  );
+
+  const policyOutput = PolicyOutputValidator.parse({
     decision: raw.decision,
     reasons,
-    requiresHumanApproval: raw.requiresHumanApproval ?? raw.requires_human_approval ?? false,
-    matchedAllowRules: raw.matchedAllowRules ?? normalizeStringArray(raw.matched_allow_rules),
-    matchedDenyRules: raw.matchedDenyRules ?? normalizeStringArray(raw.matched_deny_rules),
+    requiresHumanApproval,
+    matchedAllowRules,
+    matchedDenyRules,
     evaluatedAt: raw.evaluatedAt ?? new Date().toISOString(),
   });
+
+  if (policyOutput.decision === "allow") {
+    if (policyOutput.requiresHumanApproval) {
+      throw new Error("allow decision cannot require human approval.");
+    }
+    if (policyOutput.matchedAllowRules.length === 0) {
+      throw new Error("allow decision requires matched allow rule evidence.");
+    }
+  }
+  if (policyOutput.decision === "deny" && policyOutput.reasons.length === 0) {
+    throw new Error("deny decision requires at least one deny reason.");
+  }
+  if (policyOutput.decision === "needs_human" && !policyOutput.requiresHumanApproval) {
+    throw new Error("needs_human decision must require human approval.");
+  }
+
+  return policyOutput;
 }

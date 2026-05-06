@@ -913,6 +913,31 @@ describe("GuardrailService", () => {
       expect(result.outcome).toBe("deny");
       expect(result.reasons[0].rule).toBe("policy_evaluation_failed");
     });
+
+    it("denies malformed policy output without issuing a decision token", async () => {
+      const malformedPolicy: PolicyEvaluator = {
+        async evaluate() {
+          return { decision: "allow" };
+        },
+        async isHealthy() {
+          return true;
+        },
+      };
+      const svc = new GuardrailService(
+        config,
+        makeReviewer(),
+        malformedPolicy,
+        makeRisk(),
+        nullAuditWriter,
+      );
+
+      const result = await svc.evaluate(binanceSpotOrder);
+
+      expect(result.outcome).toBe("deny");
+      expect(result.reasons[0].rule).toBe("policy_evaluation_failed");
+      expect(result.policyOutput).toBeNull();
+      expect(result.decisionToken).toBeUndefined();
+    });
   });
 
   describe("idempotency", () => {
