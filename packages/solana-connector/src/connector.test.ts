@@ -21,6 +21,7 @@ const signingIntent: OnchainSigningIntent = {
   ...solanaDevnetSimulation,
   action: "onchain.request_signature",
   chain: "solana",
+  chainEnvironment: "devnet",
   programId: TOKEN_PROGRAM,
   simulationId: "550e8400-e29b-41d4-a716-446655440005",
   intentId: "550e8400-e29b-41d4-a716-446655440007",

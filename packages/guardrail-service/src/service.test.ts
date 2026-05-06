@@ -186,6 +186,23 @@ describe("GuardrailService", () => {
       const result = await svc.evaluate({ ...binanceSpotOrder, extraField: "hacked" });
       expect(result.outcome).toBe("deny");
     });
+
+    it("rejects invalid onchain chain/environment pairs before policy evaluation", async () => {
+      const evaluatePolicy = vi.fn<PolicyEvaluator["evaluate"]>();
+      const svc = new GuardrailService(
+        { ...config, environment: "testnet" },
+        makeReviewer(),
+        { evaluate: evaluatePolicy, isHealthy: vi.fn().mockResolvedValue(true) },
+        makeRisk(),
+        nullAuditWriter,
+      );
+
+      const result = await svc.evaluate({ ...ethereumSepoliaSigning, chainEnvironment: "devnet" });
+
+      expect(result.outcome).toBe("deny");
+      expect(result.reasons[0].rule).toBe("schema_validation");
+      expect(evaluatePolicy).not.toHaveBeenCalled();
+    });
   });
 
   describe("unsafe content detection", () => {

@@ -497,6 +497,19 @@ describe("Hard-Deny Actions", () => {
     expect(result.reasons[0].rule).toBe("unlimited_approval_denied");
   });
 
+  it("invalid chain/environment pair is denied through service validation", async () => {
+    const svc = new GuardrailService(
+      { ...config, environment: "testnet" },
+      makeReviewer(),
+      makeOnchainHardDenyPolicy(),
+      makeRisk(),
+      nullAuditWriter,
+    );
+    const result = await svc.evaluate({ ...ethereumSepoliaSigning, chainEnvironment: "devnet" });
+    expect(result.outcome).toBe("deny");
+    expect(result.reasons[0].rule).toBe("schema_validation");
+  });
+
   it("approval calldata without explicit metadata is denied", async () => {
     const svc = new GuardrailService(
       { ...config, environment: "testnet" },

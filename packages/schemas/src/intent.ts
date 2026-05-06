@@ -1,13 +1,5 @@
 import { z } from "zod";
-import {
-  AccountMode,
-  Action,
-  ChainEnvironment,
-  Environment,
-  MarginType,
-  OrderSide,
-  OrderType,
-} from "./common.js";
+import { AccountMode, Action, Environment, MarginType, OrderSide, OrderType } from "./common.js";
 
 export const IntentEnvelope = z
   .object({
@@ -81,9 +73,11 @@ export const SolanaExpectedBalanceDelta = z
   .strict();
 export type SolanaExpectedBalanceDelta = z.infer<typeof SolanaExpectedBalanceDelta>;
 
+const EvmChainEnvironment = z.enum(["sepolia", "mainnet"]);
+const SolanaChainEnvironment = z.enum(["devnet", "mainnet"]);
+
 const OnchainSimulationBase = {
   action: z.literal("onchain.simulate_transaction"),
-  chainEnvironment: ChainEnvironment,
   to: z.string().min(1),
   data: z.string().optional(),
   value: z.string().optional(),
@@ -94,12 +88,14 @@ const OnchainSimulationBase = {
 const EvmOnchainSimulationIntent = IntentEnvelope.extend({
   ...OnchainSimulationBase,
   chain: z.literal("ethereum"),
+  chainEnvironment: EvmChainEnvironment,
   expectedDeltas: z.array(EvmExpectedBalanceDelta).optional(),
 }).strict();
 
 const SolanaOnchainSimulationIntent = IntentEnvelope.extend({
   ...OnchainSimulationBase,
   chain: z.literal("solana"),
+  chainEnvironment: SolanaChainEnvironment,
   expectedDeltas: z.array(SolanaExpectedBalanceDelta).optional(),
 }).strict();
 
@@ -113,7 +109,6 @@ const TokenApprovalAmount = z.string().regex(/^(0|[1-9]\d*)$/);
 
 const OnchainSigningBase = {
   action: z.literal("onchain.request_signature"),
-  chainEnvironment: ChainEnvironment,
   to: z.string().min(1),
   data: z.string().optional(),
   value: z.string().optional(),
@@ -126,12 +121,14 @@ const OnchainSigningBase = {
 const EvmOnchainSigningIntent = IntentEnvelope.extend({
   ...OnchainSigningBase,
   chain: z.literal("ethereum"),
+  chainEnvironment: EvmChainEnvironment,
   expectedDeltas: z.array(EvmExpectedBalanceDelta).nonempty(),
 }).strict();
 
 const SolanaOnchainSigningIntent = IntentEnvelope.extend({
   ...OnchainSigningBase,
   chain: z.literal("solana"),
+  chainEnvironment: SolanaChainEnvironment,
   programId: z.string().min(1),
   expectedDeltas: z.array(SolanaExpectedBalanceDelta).nonempty(),
 }).strict();

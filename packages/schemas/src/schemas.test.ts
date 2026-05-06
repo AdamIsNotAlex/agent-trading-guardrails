@@ -90,6 +90,18 @@ describe("OnchainSimulationIntent", () => {
     expect(OnchainSimulationIntent.parse(solanaDevnetSimulation)).toEqual(solanaDevnetSimulation);
   });
 
+  it("rejects Ethereum devnet simulation intents", () => {
+    expect(() =>
+      OnchainSimulationIntent.parse({ ...ethereumSepoliaSimulation, chainEnvironment: "devnet" }),
+    ).toThrow();
+  });
+
+  it("rejects Solana sepolia simulation intents", () => {
+    expect(() =>
+      OnchainSimulationIntent.parse({ ...solanaDevnetSimulation, chainEnvironment: "sepolia" }),
+    ).toThrow();
+  });
+
   it("rejects unknown fields", () => {
     expect(() =>
       OnchainSimulationIntent.parse({ ...ethereumSepoliaSimulation, malicious: "payload" }),
@@ -105,6 +117,34 @@ describe("OnchainSigningIntent", () => {
   it("requires simulationId", () => {
     const { simulationId: _, ...noSim } = ethereumSepoliaSigning;
     expect(() => OnchainSigningIntent.parse(noSim)).toThrow();
+  });
+
+  it("rejects Ethereum devnet signing intents", () => {
+    expect(() =>
+      OnchainSigningIntent.parse({ ...ethereumSepoliaSigning, chainEnvironment: "devnet" }),
+    ).toThrow();
+  });
+
+  it("rejects Solana sepolia signing intents", () => {
+    expect(() =>
+      OnchainSigningIntent.parse({
+        ...solanaDevnetSimulation,
+        action: "onchain.request_signature",
+        intentId: "550e8400-e29b-41d4-a716-446655440011",
+        idempotencyKey: "sign-sol-invalid-pair",
+        chainEnvironment: "sepolia",
+        simulationId: "550e8400-e29b-41d4-a716-446655440005",
+        instructions: [{ type: "transfer" }],
+        expectedDeltas: [
+          {
+            account: "recipient111111111111111111111111111111111",
+            asset: "SOL",
+            minDelta: "-100",
+            maxDelta: "-99",
+          },
+        ],
+      }),
+    ).toThrow();
   });
 
   it("accepts finite decimal token approval metadata", () => {

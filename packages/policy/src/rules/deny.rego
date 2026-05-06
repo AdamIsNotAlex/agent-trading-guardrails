@@ -64,6 +64,11 @@ hard_deny_reasons contains {"rule": "token_approval_cap_exceeded", "message": "E
 	decimal_string_exceeds(input.tokenApprovalAmount, data.policy.limits[input.environment].max_token_approval_amount)
 }
 
+hard_deny_reasons contains {"rule": "unsupported_chain_environment_pair", "message": "Unsupported onchain chain/environment pair."} if {
+	input.action in {"onchain.request_signature", "onchain.simulate_transaction"}
+	not supported_chain_environment_pair
+}
+
 hard_deny_reasons contains {"rule": "mainnet_onchain_denied", "message": "Mainnet onchain signing is not permitted."} if {
 	input.action == "onchain.request_signature"
 	input.chainEnvironment == "mainnet"
@@ -95,6 +100,16 @@ hard_deny_reasons contains {"rule": "solana_instruction_type_unknown", "message"
 
 supported_solana_instruction_type if {
 	input.instructionType in {"transfer", "setAuthority", "SetAuthority", "authority_change"}
+}
+
+supported_chain_environment_pair if {
+	input.chain == "ethereum"
+	input.chainEnvironment in {"sepolia", "mainnet"}
+}
+
+supported_chain_environment_pair if {
+	input.chain == "solana"
+	input.chainEnvironment in {"devnet", "mainnet"}
 }
 
 approval_facts_complete if {

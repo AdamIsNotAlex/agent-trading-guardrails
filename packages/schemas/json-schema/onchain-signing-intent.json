@@ -46,10 +46,6 @@
               },
               "minItems": 1
             },
-            "chainEnvironment": {
-              "type": "string",
-              "enum": ["sepolia", "devnet", "mainnet"]
-            },
             "to": {
               "type": "string",
               "minLength": 1
@@ -81,6 +77,10 @@
             "chain": {
               "type": "string",
               "const": "ethereum"
+            },
+            "chainEnvironment": {
+              "type": "string",
+              "enum": ["sepolia", "mainnet"]
             },
             "expectedDeltas": {
               "type": "array",
@@ -119,10 +119,10 @@
             "idempotencyKey",
             "rationale",
             "evidence",
-            "chainEnvironment",
             "to",
             "simulationId",
             "chain",
+            "chainEnvironment",
             "expectedDeltas"
           ],
           "additionalProperties": false
@@ -157,9 +157,6 @@
             "evidence": {
               "$ref": "#/definitions/onchain-signing-intent/anyOf/0/properties/evidence"
             },
-            "chainEnvironment": {
-              "$ref": "#/definitions/onchain-signing-intent/anyOf/0/properties/chainEnvironment"
-            },
             "to": {
               "$ref": "#/definitions/onchain-signing-intent/anyOf/0/properties/to"
             },
@@ -185,6 +182,10 @@
             "chain": {
               "type": "string",
               "const": "solana"
+            },
+            "chainEnvironment": {
+              "type": "string",
+              "enum": ["devnet", "mainnet"]
             },
             "expectedDeltas": {
               "type": "array",
@@ -222,11 +223,11 @@
             "idempotencyKey",
             "rationale",
             "evidence",
-            "chainEnvironment",
             "to",
             "programId",
             "simulationId",
             "chain",
+            "chainEnvironment",
             "expectedDeltas"
           ],
           "additionalProperties": false

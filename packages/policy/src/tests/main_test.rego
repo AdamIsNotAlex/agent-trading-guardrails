@@ -287,6 +287,104 @@ test_hard_deny_mainnet_onchain_signing if {
 	reason.rule == "mainnet_onchain_denied"
 }
 
+# Hard deny: invalid ethereum/devnet pair
+test_hard_deny_ethereum_devnet_pair if {
+	inp := object.union(base_input, {
+		"action": "onchain.request_signature",
+		"chain": "ethereum",
+		"chainEnvironment": "devnet",
+		"resource": "onchain:ethereum:devnet:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+		"contractAddress": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+	})
+	guardrail.decision == "deny" with input as inp
+	some reason in guardrail.hard_deny_reasons with input as inp
+	reason.rule == "unsupported_chain_environment_pair"
+}
+
+# Hard deny: invalid solana/sepolia pair
+test_hard_deny_solana_sepolia_pair if {
+	inp := object.union(base_input, {
+		"action": "onchain.request_signature",
+		"chain": "solana",
+		"chainEnvironment": "sepolia",
+		"resource": "onchain:solana:sepolia:TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+		"programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+		"instructionType": "transfer",
+	})
+	guardrail.decision == "deny" with input as inp
+	some reason in guardrail.hard_deny_reasons with input as inp
+	reason.rule == "unsupported_chain_environment_pair"
+}
+
+# Hard deny: unsupported ethereum environment value
+test_hard_deny_ethereum_unsupported_environment if {
+	inp := object.union(base_input, {
+		"action": "onchain.request_signature",
+		"chain": "ethereum",
+		"chainEnvironment": "goerli",
+		"resource": "onchain:ethereum:goerli:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+		"contractAddress": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+	})
+	guardrail.decision == "deny" with input as inp
+	some reason in guardrail.hard_deny_reasons with input as inp
+	reason.rule == "unsupported_chain_environment_pair"
+}
+
+# Hard deny: unsupported solana environment value
+test_hard_deny_solana_unsupported_environment if {
+	inp := object.union(base_input, {
+		"action": "onchain.request_signature",
+		"chain": "solana",
+		"chainEnvironment": "testnet",
+		"resource": "onchain:solana:testnet:TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+		"programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+		"instructionType": "transfer",
+	})
+	guardrail.decision == "deny" with input as inp
+	some reason in guardrail.hard_deny_reasons with input as inp
+	reason.rule == "unsupported_chain_environment_pair"
+}
+
+# Hard deny: missing onchain chain
+test_hard_deny_missing_onchain_chain if {
+	inp := object.union(base_input, {
+		"action": "onchain.request_signature",
+		"chainEnvironment": "sepolia",
+		"resource": "onchain:ethereum:sepolia:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+		"contractAddress": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+	})
+	guardrail.decision == "deny" with input as inp
+	some reason in guardrail.hard_deny_reasons with input as inp
+	reason.rule == "unsupported_chain_environment_pair"
+}
+
+# Hard deny: missing onchain chain environment
+test_hard_deny_missing_onchain_chain_environment if {
+	inp := object.union(base_input, {
+		"action": "onchain.request_signature",
+		"chain": "ethereum",
+		"resource": "onchain:ethereum:sepolia:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+		"contractAddress": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+	})
+	guardrail.decision == "deny" with input as inp
+	some reason in guardrail.hard_deny_reasons with input as inp
+	reason.rule == "unsupported_chain_environment_pair"
+}
+
+# Hard deny: unknown onchain chain value
+test_hard_deny_unknown_onchain_chain if {
+	inp := object.union(base_input, {
+		"action": "onchain.request_signature",
+		"chain": "polygon",
+		"chainEnvironment": "mainnet",
+		"resource": "onchain:polygon:mainnet:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+		"contractAddress": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+	})
+	guardrail.decision == "deny" with input as inp
+	some reason in guardrail.hard_deny_reasons with input as inp
+	reason.rule == "unsupported_chain_environment_pair"
+}
+
 # Hard deny: unknown ethereum contract
 test_hard_deny_unknown_contract if {
 	inp := object.union(base_input, {
@@ -415,6 +513,7 @@ test_ethereum_sepolia_sign_known_contract if {
 		"resource": "onchain:ethereum:sepolia:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
 		"environment": "testnet",
 		"chain": "ethereum",
+		"chainEnvironment": "sepolia",
 		"contractAddress": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
 		"reviewerVerdict": "approve",
 		"reviewerRiskLevel": "low",
@@ -431,6 +530,7 @@ test_solana_devnet_sign_known_program if {
 		"resource": "onchain:solana:devnet:TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
 		"environment": "testnet",
 		"chain": "solana",
+		"chainEnvironment": "devnet",
 		"programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
 		"instructionType": "transfer",
 		"reviewerVerdict": "approve",

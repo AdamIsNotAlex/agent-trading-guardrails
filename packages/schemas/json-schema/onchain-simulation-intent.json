@@ -46,10 +46,6 @@
               },
               "minItems": 1
             },
-            "chainEnvironment": {
-              "type": "string",
-              "enum": ["sepolia", "devnet", "mainnet"]
-            },
             "to": {
               "type": "string",
               "minLength": 1
@@ -73,6 +69,10 @@
             "chain": {
               "type": "string",
               "const": "ethereum"
+            },
+            "chainEnvironment": {
+              "type": "string",
+              "enum": ["sepolia", "mainnet"]
             },
             "expectedDeltas": {
               "type": "array",
@@ -110,9 +110,9 @@
             "idempotencyKey",
             "rationale",
             "evidence",
-            "chainEnvironment",
             "to",
-            "chain"
+            "chain",
+            "chainEnvironment"
           ],
           "additionalProperties": false
         },
@@ -146,9 +146,6 @@
             "evidence": {
               "$ref": "#/definitions/onchain-simulation-intent/anyOf/0/properties/evidence"
             },
-            "chainEnvironment": {
-              "$ref": "#/definitions/onchain-simulation-intent/anyOf/0/properties/chainEnvironment"
-            },
             "to": {
               "$ref": "#/definitions/onchain-simulation-intent/anyOf/0/properties/to"
             },
@@ -167,6 +164,10 @@
             "chain": {
               "type": "string",
               "const": "solana"
+            },
+            "chainEnvironment": {
+              "type": "string",
+              "enum": ["devnet", "mainnet"]
             },
             "expectedDeltas": {
               "type": "array",
@@ -203,9 +204,9 @@
             "idempotencyKey",
             "rationale",
             "evidence",
-            "chainEnvironment",
             "to",
-            "chain"
+            "chain",
+            "chainEnvironment"
           ],
           "additionalProperties": false
         }

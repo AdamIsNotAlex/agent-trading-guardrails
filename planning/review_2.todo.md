@@ -241,28 +241,28 @@ Relevant files:
 
 ### Implementation Checklist
 
-- [ ] Encode valid pairs at the schema boundary.
-  - [ ] Ethereum intents allow only `sepolia` and `mainnet` if mainnet is represented for hard-deny paths.
-  - [ ] Solana intents allow only `devnet` and `mainnet` if mainnet is represented for hard-deny paths.
-  - [ ] First-scope signing should still deny mainnet execution per policy/broker invariants.
-- [ ] Add policy defense-in-depth.
-  - [ ] Hard-deny `ethereum/devnet`.
-  - [ ] Hard-deny `solana/sepolia`.
-  - [ ] Hard-deny unsupported onchain `mainnet` signing unless explicitly supported in future work.
-- [ ] Update fixtures and generated JSON schemas.
-- [ ] Ensure service canonical resource generation cannot produce allowable resources for invalid pairs.
+- [x] Encode valid pairs at the schema boundary.
+  - [x] Ethereum intents allow only `sepolia` and `mainnet` if mainnet is represented for hard-deny paths.
+  - [x] Solana intents allow only `devnet` and `mainnet` if mainnet is represented for hard-deny paths.
+  - [x] First-scope signing should still deny mainnet execution per policy/broker invariants.
+- [x] Add policy defense-in-depth.
+  - [x] Hard-deny `ethereum/devnet`.
+  - [x] Hard-deny `solana/sepolia`.
+  - [x] Hard-deny unsupported onchain `mainnet` signing unless explicitly supported in future work.
+- [x] Update fixtures and generated JSON schemas.
+- [x] Ensure service canonical resource generation cannot produce allowable resources for invalid pairs.
 
 ### Regression Tests
 
-- [ ] Schema rejects Ethereum `devnet` signing and simulation intents.
-- [ ] Schema rejects Solana `sepolia` signing and simulation intents.
-- [ ] Policy denies invalid pair if malformed input reaches OPA.
-- [ ] Red-team test covers invalid chain/environment pair through service path.
+- [x] Schema rejects Ethereum `devnet` signing and simulation intents.
+- [x] Schema rejects Solana `sepolia` signing and simulation intents.
+- [x] Policy denies invalid pair if malformed input reaches OPA.
+- [x] Red-team test covers invalid chain/environment pair through service path.
 
 ### Acceptance Criteria
 
-- [ ] Invalid chain/environment pairs fail closed before broker execution.
-- [ ] Wildcard testnet allowlist cannot allow unsupported onchain combinations.
+- [x] Invalid chain/environment pairs fail closed before broker execution.
+- [x] Wildcard testnet allowlist cannot allow unsupported onchain combinations.
 
 ## Phase 5: Solana Authority-Change Detection
 
