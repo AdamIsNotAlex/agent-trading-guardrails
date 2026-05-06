@@ -127,6 +127,46 @@ function makeIdempotency(): BrokerIdempotencyStore {
   return new InMemoryBrokerIdempotencyStore();
 }
 
+function makeBrokerWithSpiedConnector() {
+  const execute = vi.fn(async () => ({ orderId: "order-1" }));
+  const revalidate = vi.fn(async () => ({ passed: true }));
+  const audit = makeAudit();
+  const broker = new ExecutionBroker(
+    config,
+    { execute, revalidate },
+    new InMemoryKillSwitch(),
+    audit,
+    makeIdempotency(),
+  );
+  return { broker, execute, revalidate, audit };
+}
+
+function tokenForApproval(
+  approval: GuardrailApproval,
+  overrides: Partial<{
+    intent: TradingIntent;
+    outcome: "allow" | "needs_human";
+    correlationId: string;
+    decidedAt: string;
+    approvalId: string;
+  }> = {},
+): string {
+  return createGuardrailDecisionToken({
+    secret: config.decisionVerificationSecret,
+    intent: overrides.intent ?? approval.intent,
+    outcome: overrides.outcome ?? approval.outcome,
+    correlationId: overrides.correlationId ?? approval.correlationId,
+    decidedAt: overrides.decidedAt ?? approval.decidedAt,
+    approvalId:
+      overrides.approvalId ?? ("approvalId" in approval ? approval.approvalId : undefined),
+  });
+}
+
+function mutateToken(token: string): string {
+  const replacement = token.endsWith("0") ? "1" : "0";
+  return `${token.slice(0, -1)}${replacement}`;
+}
+
 function makeDeferred<T>(): { promise: Promise<T>; resolve(value: T): void } {
   let resolve: (value: T) => void = () => {};
   const promise = new Promise<T>((innerResolve) => {
@@ -164,6 +204,134 @@ describe("ExecutionBroker", () => {
       "does not execute cex.get_order_status",
     );
   });
+
+  const rejectedApprovalScenarios: Array<{
+    name: string;
+    makeApproval(): GuardrailApproval;
+    rejectionReason: string;
+    expectedRule: "decision_token_invalid" | "decision_stale";
+  }> = [
+    {
+      name: "mutated decision token",
+      makeApproval() {
+        const approval = makeApproval();
+        return { ...approval, decisionToken: mutateToken(approval.decisionToken) };
+      },
+      rejectionReason: "Guardrail decision token is invalid.",
+      expectedRule: "decision_token_invalid",
+    },
+    {
+      name: "malformed non-hex decision token",
+      makeApproval() {
+        return { ...makeApproval(), decisionToken: `${"a".repeat(63)}g` };
+      },
+      rejectionReason: "Guardrail decision token is invalid.",
+      expectedRule: "decision_token_invalid",
+    },
+    {
+      name: "wrong-length decision token",
+      makeApproval() {
+        return { ...makeApproval(), decisionToken: "a".repeat(62) };
+      },
+      rejectionReason: "Guardrail decision token is invalid.",
+      expectedRule: "decision_token_invalid",
+    },
+    {
+      name: "token generated for a different intent",
+      makeApproval() {
+        const approval = makeApproval();
+        const otherIntent: TradingIntent = {
+          ...binanceSpotOrder,
+          intentId: "11111111-1111-4111-8111-111111111111",
+          idempotencyKey: "token-other-intent",
+        };
+        return { ...approval, decisionToken: tokenForApproval(approval, { intent: otherIntent }) };
+      },
+      rejectionReason: "Guardrail decision token is invalid.",
+      expectedRule: "decision_token_invalid",
+    },
+    {
+      name: "token generated for a different correlation id",
+      makeApproval() {
+        const approval = makeApproval();
+        return {
+          ...approval,
+          decisionToken: tokenForApproval(approval, { correlationId: "corr-other" }),
+        };
+      },
+      rejectionReason: "Guardrail decision token is invalid.",
+      expectedRule: "decision_token_invalid",
+    },
+    {
+      name: "token generated for a different outcome",
+      makeApproval() {
+        const approval = makeApproval();
+        return {
+          ...approval,
+          decisionToken: tokenForApproval(approval, { outcome: "needs_human" }),
+        };
+      },
+      rejectionReason: "Guardrail decision token is invalid.",
+      expectedRule: "decision_token_invalid",
+    },
+    {
+      name: "token generated with wrong approval id",
+      makeApproval() {
+        const approval = makeNeedsHumanApproval("approval-right");
+        return {
+          ...approval,
+          decisionToken: tokenForApproval(approval, { approvalId: "approval-wrong" }),
+        };
+      },
+      rejectionReason: "Guardrail decision token is invalid.",
+      expectedRule: "decision_token_invalid",
+    },
+    {
+      name: "stale decidedAt",
+      makeApproval() {
+        const approval = makeApproval();
+        const decidedAt = new Date(Date.now() - 49 * 60 * 60 * 1_000).toISOString();
+        return { ...approval, decidedAt, decisionToken: tokenForApproval(approval, { decidedAt }) };
+      },
+      rejectionReason: "Guardrail decision is stale.",
+      expectedRule: "decision_stale",
+    },
+    {
+      name: "future decidedAt beyond skew",
+      makeApproval() {
+        const approval = makeApproval();
+        const decidedAt = new Date(Date.now() + 2 * 60 * 1_000).toISOString();
+        return { ...approval, decidedAt, decisionToken: tokenForApproval(approval, { decidedAt }) };
+      },
+      rejectionReason: "Guardrail decision is stale.",
+      expectedRule: "decision_stale",
+    },
+    {
+      name: "invalid decidedAt date",
+      makeApproval() {
+        const approval = makeApproval();
+        const decidedAt = "not-a-date";
+        return { ...approval, decidedAt, decisionToken: tokenForApproval(approval, { decidedAt }) };
+      },
+      rejectionReason: "Guardrail decision is stale.",
+      expectedRule: "decision_stale",
+    },
+  ];
+
+  for (const scenario of rejectedApprovalScenarios) {
+    it(`rejects ${scenario.name} before connector revalidation`, async () => {
+      const { broker, execute, revalidate, audit } = makeBrokerWithSpiedConnector();
+
+      const result = await broker.execute(scenario.makeApproval());
+      const failure = audit.events.find((event) => event.eventType === "broker.failed");
+
+      expect(result.status).toBe("rejected");
+      expect(result.rejectionReason).toBe(scenario.rejectionReason);
+      expect(failure?.data).toMatchObject({ rule: scenario.expectedRule });
+      expect(revalidate).not.toHaveBeenCalled();
+      expect(execute).not.toHaveBeenCalled();
+    });
+  }
 
   it("retries pending execution audit without retrying execution", async () => {
     const execute = vi.fn().mockResolvedValue({ orderId: "order-1" });

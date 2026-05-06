@@ -510,22 +510,22 @@ Relevant files:
 
 ### Test Checklist
 
-- [ ] Mutated `decisionToken` is rejected with `decision_token_invalid`.
-- [ ] Malformed non-hex token is rejected with `decision_token_invalid`.
-- [ ] Wrong token length is rejected with `decision_token_invalid`.
-- [ ] Token generated for a different intent is rejected.
-- [ ] Token generated for a different `correlationId` is rejected.
-- [ ] Token generated for a different `outcome` is rejected.
-- [ ] Token generated with wrong `approvalId` is rejected for needs-human approvals.
-- [ ] Stale `decidedAt` is rejected with `decision_stale`.
-- [ ] Future `decidedAt` beyond the allowed skew is rejected with `decision_stale`.
-- [ ] Invalid date string is rejected with `decision_stale`.
-- [ ] Rejection paths do not call `connector.revalidate`.
-- [ ] Rejection paths do not call `connector.execute`.
+- [x] Mutated `decisionToken` is rejected with `decision_token_invalid`.
+- [x] Malformed non-hex token is rejected with `decision_token_invalid`.
+- [x] Wrong token length is rejected with `decision_token_invalid`.
+- [x] Token generated for a different intent is rejected.
+- [x] Token generated for a different `correlationId` is rejected.
+- [x] Token generated for a different `outcome` is rejected.
+- [x] Token generated with wrong `approvalId` is rejected for needs-human approvals.
+- [x] Stale `decidedAt` is rejected with `decision_stale`.
+- [x] Future `decidedAt` beyond the allowed skew is rejected with `decision_stale`.
+- [x] Invalid date string is rejected with `decision_stale`.
+- [x] Rejection paths do not call `connector.revalidate`.
+- [x] Rejection paths do not call `connector.execute`.
 
 ### Acceptance Criteria
 
-- [ ] Forged, tampered, malformed, stale, or future-dated approvals cannot reach connector revalidation/execution.
+- [x] Forged, tampered, malformed, stale, or future-dated approvals cannot reach connector revalidation/execution.
 
 ## Phase 12: Decision Token Audit Masking Tests
 
