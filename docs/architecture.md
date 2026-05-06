@@ -42,11 +42,11 @@ CEX API keys live only in the broker or secret manager (Vault). Wallet private k
 
 ### Network Proxy and Firewall
 
-Constrains agent egress. Allowlists LLM providers and guardrail API. Blocks CEX APIs, RPC endpoints, metadata services, and internal network ranges from agent containers.
+Constrains agent egress when deployed with the required runtime or container controls. Production-like deployments must allowlist LLM providers and the guardrail API while blocking CEX APIs, RPC endpoints, metadata services, and internal network ranges from agent containers.
 
 ### Audit Log
 
-Append-only SQLite with hash-chain tamper evidence. Records every decision point: intent receipt, validation, reviewer verdict, policy evaluation, risk checks, broker revalidation, execution result, and human approval details.
+Hash-chained SQLite audit records. Tamper evidence depends on protecting `AUDIT_HASH_SECRET` and, outside dev/test, the configured external hash anchor. Records decision points such as intent receipt, reviewer verdicts, policy evaluation, risk checks, final decisions, broker revalidation, execution results, and human approval details.
 
 ## Data Flow
 
@@ -68,5 +68,5 @@ Agent proposes structured intent
 | `dev` | Mock connectors, no real execution |
 | `paper` | Simulated execution against live market data |
 | `testnet` | Real testnet transactions (Sepolia, Solana devnet) |
-| `canary_live` | Real execution with tight canary limits |
-| `production` | Full production trading |
+| `canary_live` | Real execution with tight canary limits when explicitly enabled |
+| `production` | Reserved/planned profile; broker execution currently rejects production |

@@ -650,24 +650,24 @@ Relevant files:
 
 ### Documentation Checklist
 
-- [ ] Production profile wording.
-  - [ ] Replace present-tense “full production trading” wording with “reserved/planned profile.”
-  - [ ] State broker currently rejects production execution.
-  - [ ] Keep canary-live wording aligned with broker gates.
-- [ ] Security boundary wording.
-  - [ ] Clarify that agent network/filesystem restrictions are required deployment controls.
-  - [ ] Do not imply current local Docker Compose enforces all sandbox boundaries.
-  - [ ] State live use requires runtime/container/orchestrator enforcement.
-- [ ] Audit wording.
-  - [ ] Replace “SQLite append-only” with “hash-chained SQLite audit records.”
-  - [ ] State tamper evidence depends on protecting `AUDIT_HASH_SECRET` and any external hash anchor.
-  - [ ] Align listed audit event taxonomy with events actually emitted.
-- [ ] Keep docs concise and operationally accurate.
+- [x] Production profile wording.
+  - [x] Replace present-tense “full production trading” wording with “reserved/planned profile.”
+  - [x] State broker currently rejects production execution.
+  - [x] Keep canary-live wording aligned with broker gates.
+- [x] Security boundary wording.
+  - [x] Clarify that agent network/filesystem restrictions are required deployment controls.
+  - [x] Do not imply current local Docker Compose enforces all sandbox boundaries.
+  - [x] State live use requires runtime/container/orchestrator enforcement.
+- [x] Audit wording.
+  - [x] Replace “SQLite append-only” with “hash-chained SQLite audit records.”
+  - [x] State tamper evidence depends on protecting `AUDIT_HASH_SECRET` and any external hash anchor.
+  - [x] Align listed audit event taxonomy with events actually emitted.
+- [x] Keep docs concise and operationally accurate.
 
 ### Acceptance Criteria
 
-- [ ] Operators are not led to believe production execution or sandbox isolation is already fully implemented by provided artifacts.
-- [ ] Audit guarantees are described accurately.
+- [x] Operators are not led to believe production execution or sandbox isolation is already fully implemented by provided artifacts.
+- [x] Audit guarantees are described accurately.
 
 ## Phase 17: Validation and Final Review
 

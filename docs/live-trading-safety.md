@@ -8,7 +8,7 @@ Live trading is only enabled after progressive validation:
 dev → paper → testnet → canary_live → production
 ```
 
-Each stage must pass before advancing to the next.
+Each stage must pass before advancing to the next. `production` is a reserved/planned profile today: the broker currently rejects production execution, while `canary_live` can execute only when explicitly enabled and kept within tight limits.
 
 ## Canary-Live Default Limits
 
@@ -23,7 +23,7 @@ All limits are configuration defaults, not hardcoded constants.
 
 ## Prerequisites for Live Mode
 
-Before any live execution is permitted:
+Before any canary-live execution is permitted:
 
 - [ ] Explicit configuration enables live mode (not enabled by default).
 - [ ] Binance API key has no-withdrawal permission.

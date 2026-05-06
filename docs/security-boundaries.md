@@ -2,7 +2,7 @@
 
 ## Core Principle
 
-The agent runtime is untrusted. It may be compromised, manipulated by prompt injection, or produce hallucinated outputs. Every security-critical operation must be enforced outside the agent runtime by deterministic systems.
+The agent runtime is untrusted. It may be compromised, manipulated by prompt injection, or produce hallucinated outputs. Every security-critical operation must be enforced outside the agent runtime by deterministic systems. The boundary assumes deployment-time runtime, container, or orchestrator controls; the local Docker Compose development stack does not by itself enforce every sandbox restriction below.
 
 ## Boundary Map
 
@@ -59,6 +59,8 @@ The agent runtime is untrusted. It may be compromised, manipulated by prompt inj
 
 ## What the Agent Cannot Do
 
+When the required sandbox, network, and filesystem controls are deployed, the agent must not be able to:
+
 - Access CEX API keys or wallet private keys
 - Call exchange APIs directly
 - Call RPC endpoints directly
@@ -85,6 +87,8 @@ The agent runtime is untrusted. It may be compromised, manipulated by prompt inj
 | Reviewer API keys | Secret manager | Guardrail service reads at review time |
 
 ## Network Controls
+
+These controls must be enforced by the runtime, container network, service mesh, firewall, or orchestrator in live deployments. They are deployment requirements, not guarantees provided by the repository's local development Compose stack.
 
 | Direction | Agent Runtime | Broker/Signer |
 |-----------|--------------|---------------|

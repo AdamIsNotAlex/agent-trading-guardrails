@@ -9,8 +9,8 @@ A TypeScript-based guardrails framework that lets AI trading agents (OpenClaw, H
 - **Onchain:** Ethereum Sepolia (testnet), Solana devnet
 - **Policy engine:** OPA/Rego for deterministic authorization
 - **Reviewer:** LLM-based semantic review (advisory, not authoritative)
-- **Secrets:** Vault (production), local provider (development)
-- **Audit:** SQLite append-only with hash-chain tamper evidence
+- **Secrets:** Vault or a production-grade secret manager for live profiles, local provider for development
+- **Audit:** Hash-chained SQLite audit records; tamper evidence depends on protecting `AUDIT_HASH_SECRET` and any configured external hash anchor
 
 ## Non-Goals
 
