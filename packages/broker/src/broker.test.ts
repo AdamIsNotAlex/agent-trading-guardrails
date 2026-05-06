@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ApprovalStore } from "@guardrails/approval";
@@ -1149,6 +1149,115 @@ describe("ExecutionBroker", () => {
       expect(result).toMatchObject({ status: "executed", orderId: "order-1" });
       expect(firstExecute).toHaveBeenCalledOnce();
       expect(secondExecute).not.toHaveBeenCalled();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("initializes an empty file idempotency store when the state file is missing", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "broker-idempotency-"));
+    try {
+      const path = join(dir, "store.json");
+      const execute = vi.fn().mockResolvedValue({ orderId: "order-1" });
+      const broker = new ExecutionBroker(
+        config,
+        {
+          execute,
+          async revalidate() {
+            return { passed: true };
+          },
+        },
+        new InMemoryKillSwitch(),
+        makeAudit(),
+        new FileBrokerIdempotencyStore(path),
+      );
+
+      const result = await broker.execute(makeApproval());
+
+      expect(result).toMatchObject({ status: "executed", orderId: "order-1" });
+      expect(execute).toHaveBeenCalledOnce();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects file idempotency state missing entries", () => {
+    const dir = mkdtempSync(join(tmpdir(), "broker-idempotency-"));
+    try {
+      const path = join(dir, "store.json");
+      writeFileSync(path, "{}\n");
+
+      expect(() =>
+        new FileBrokerIdempotencyStore(path).begin(
+          binanceSpotOrder.idempotencyKey,
+          binanceSpotOrder,
+        ),
+      ).toThrow("entries is required");
+      expect(existsSync(`${path}.lock`)).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects file idempotency state with null entries", () => {
+    const dir = mkdtempSync(join(tmpdir(), "broker-idempotency-"));
+    try {
+      const path = join(dir, "store.json");
+      writeFileSync(path, `${JSON.stringify({ entries: null })}\n`);
+
+      expect(() =>
+        new FileBrokerIdempotencyStore(path).begin(
+          binanceSpotOrder.idempotencyKey,
+          binanceSpotOrder,
+        ),
+      ).toThrow("entries must be an object");
+      expect(existsSync(`${path}.lock`)).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects malformed file idempotency entries", () => {
+    const dir = mkdtempSync(join(tmpdir(), "broker-idempotency-"));
+    try {
+      const path = join(dir, "store.json");
+      writeFileSync(
+        path,
+        `${JSON.stringify({ entries: { malformed: { status: "cached", payloadHash: "bad" } } })}\n`,
+      );
+
+      expect(() =>
+        new FileBrokerIdempotencyStore(path).begin(
+          binanceSpotOrder.idempotencyKey,
+          binanceSpotOrder,
+        ),
+      ).toThrow("payloadHash is invalid");
+      expect(existsSync(`${path}.lock`)).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not revalidate or execute when file idempotency state is malformed", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "broker-idempotency-"));
+    try {
+      const path = join(dir, "store.json");
+      writeFileSync(path, `${JSON.stringify({ entries: null })}\n`);
+      const revalidate = vi.fn().mockResolvedValue({ passed: true });
+      const execute = vi.fn().mockResolvedValue({ orderId: "order-1" });
+      const broker = new ExecutionBroker(
+        config,
+        { execute, revalidate },
+        new InMemoryKillSwitch(),
+        makeAudit(),
+        new FileBrokerIdempotencyStore(path),
+      );
+
+      await expect(broker.execute(makeApproval())).rejects.toThrow("entries must be an object");
+
+      expect(revalidate).not.toHaveBeenCalled();
+      expect(execute).not.toHaveBeenCalled();
+      expect(existsSync(`${path}.lock`)).toBe(false);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

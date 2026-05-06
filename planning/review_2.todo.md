@@ -191,37 +191,37 @@ Relevant files:
 
 ### Implementation Checklist
 
-- [ ] Add strict runtime validation for persisted file state.
-  - [ ] File root must be an object.
-  - [ ] `entries` must exist and be a plain object.
-  - [ ] Every entry key must map to a valid idempotency record.
-  - [ ] Entry status must be one of the known statuses.
-  - [ ] Entry payload hash must be present and valid.
-  - [ ] Completed entries must contain a valid result payload.
-  - [ ] In-progress entries must contain required in-progress metadata.
-- [ ] Make malformed state fail closed.
-  - [ ] Do not return `{ entries: {} }` for malformed state.
-  - [ ] Throw a clear error that blocks execution before connector calls.
-- [ ] Preserve behavior for a missing file.
-  - [ ] Missing file can still initialize as `{ entries: {} }`.
-- [ ] Decide whether to quarantine malformed files.
+- [x] Add strict runtime validation for persisted file state.
+  - [x] File root must be an object.
+  - [x] `entries` must exist and be a plain object.
+  - [x] Every entry key must map to a valid idempotency record.
+  - [x] Entry status must be one of the known statuses.
+  - [x] Entry payload hash must be present and valid.
+  - [x] Completed entries must contain a valid result payload.
+  - [x] In-progress entries must contain required in-progress metadata.
+- [x] Make malformed state fail closed.
+  - [x] Do not return `{ entries: {} }` for malformed state.
+  - [x] Throw a clear error that blocks execution before connector calls.
+- [x] Preserve behavior for a missing file.
+  - [x] Missing file can still initialize as `{ entries: {} }`.
+- [x] Decide whether to quarantine malformed files.
   - Preferred for this remediation: do not mutate or auto-repair malformed state unless explicitly requested by an operator.
-- [ ] Ensure lock handling still releases locks when validation throws.
+- [x] Ensure lock handling still releases locks when validation throws.
 
 ### Regression Tests
 
-- [ ] Missing idempotency file initializes empty.
-- [ ] Valid idempotency file loads existing completed entry.
-- [ ] Valid JSON missing `entries` throws.
-- [ ] `entries: null` throws.
-- [ ] Malformed entry throws.
-- [ ] Broker execution with malformed idempotency state does not call `connector.revalidate`.
-- [ ] Broker execution with malformed idempotency state does not call `connector.execute`.
+- [x] Missing idempotency file initializes empty.
+- [x] Valid idempotency file loads existing completed entry.
+- [x] Valid JSON missing `entries` throws.
+- [x] `entries: null` throws.
+- [x] Malformed entry throws.
+- [x] Broker execution with malformed idempotency state does not call `connector.revalidate`.
+- [x] Broker execution with malformed idempotency state does not call `connector.execute`.
 
 ### Acceptance Criteria
 
-- [ ] Corrupt or schema-drifted idempotency state cannot silently permit duplicate execution.
-- [ ] Missing state remains supported for first startup.
+- [x] Corrupt or schema-drifted idempotency state cannot silently permit duplicate execution.
+- [x] Missing state remains supported for first startup.
 
 ## Phase 4: Unsupported Chain/Environment Pair Validation
 

@@ -13,7 +13,11 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname } from "node:path";
-import type { BrokerExecutionResult, TradingIntent } from "@guardrails/schemas";
+import {
+  BrokerExecutionResult as BrokerExecutionResultSchema,
+  type BrokerExecutionResult,
+  type TradingIntent,
+} from "@guardrails/schemas";
 import {
   type BrokerAuditEvent,
   type BrokerIdempotencyReservation,
@@ -315,8 +319,7 @@ export class FileBrokerIdempotencyStore implements BrokerIdempotencyStore {
 
   private readState(): FileState {
     if (!existsSync(this.path)) return { entries: {} };
-    const parsed = JSON.parse(readFileSync(this.path, "utf8")) as FileState;
-    return { entries: parsed.entries ?? {} };
+    return parseFileState(JSON.parse(readFileSync(this.path, "utf8")));
   }
 
   private withLockedState<T>(update: (state: FileState) => T): T {
@@ -458,6 +461,76 @@ function isFileExistsError(err: unknown): boolean {
 
 function isFileMissingError(err: unknown): boolean {
   return err instanceof Error && "code" in err && err.code === "ENOENT";
+}
+
+function parseFileState(value: unknown): FileState {
+  if (!isPlainObject(value)) {
+    throw new Error("Invalid idempotency store state: root must be an object.");
+  }
+  if (!Object.hasOwn(value, "entries")) {
+    throw new Error("Invalid idempotency store state: entries is required.");
+  }
+  if (!isPlainObject(value.entries)) {
+    throw new Error("Invalid idempotency store state: entries must be an object.");
+  }
+
+  return {
+    entries: Object.fromEntries(
+      Object.entries(value.entries).map(([key, entry]) => [key, parseFileEntry(key, entry)]),
+    ),
+  };
+}
+
+function parseFileEntry(key: string, value: unknown): FileEntry {
+  if (!isPlainObject(value)) {
+    throw new Error(`Invalid idempotency store entry ${key}: entry must be an object.`);
+  }
+  if (value.status !== "cached" && value.status !== "in_progress") {
+    throw new Error(`Invalid idempotency store entry ${key}: status is invalid.`);
+  }
+  if (typeof value.payloadHash !== "string" || !/^[0-9a-f]{64}$/.test(value.payloadHash)) {
+    throw new Error(`Invalid idempotency store entry ${key}: payloadHash is invalid.`);
+  }
+  if (value.status === "in_progress") {
+    return { status: "in_progress", payloadHash: value.payloadHash };
+  }
+
+  const result = BrokerExecutionResultSchema.safeParse(value.result);
+  if (!result.success) {
+    throw new Error(`Invalid idempotency store entry ${key}: cached result is invalid.`);
+  }
+  const pendingAudit = value.pendingAudit;
+  if (pendingAudit !== undefined && !isBrokerAuditEvent(pendingAudit)) {
+    throw new Error(`Invalid idempotency store entry ${key}: pendingAudit is invalid.`);
+  }
+
+  return {
+    status: "cached",
+    payloadHash: value.payloadHash,
+    result: result.data,
+    pendingAudit,
+  };
+}
+
+function isBrokerAuditEvent(value: unknown): value is BrokerAuditEvent {
+  return (
+    isPlainObject(value) &&
+    typeof value.eventType === "string" &&
+    typeof value.environment === "string" &&
+    typeof value.correlationId === "string" &&
+    isPlainObject(value.data) &&
+    optionalString(value.eventId) &&
+    optionalString(value.intentId) &&
+    optionalString(value.principal)
+  );
+}
+
+function optionalString(value: unknown): boolean {
+  return value === undefined || typeof value === "string";
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function stableStringify(value: unknown): string {
