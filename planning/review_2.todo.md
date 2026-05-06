@@ -478,26 +478,26 @@ Relevant files:
 
 ### Implementation Checklist
 
-- [ ] Update exported `reasons` in `main.rego`.
-  - [ ] For `decision == "deny"`, include `all_deny_reasons`.
-  - [ ] Preserve hard-deny reasons.
-  - [ ] Preserve escalation reasons for `needs_human`.
-  - [ ] Avoid duplicating reasons.
-- [ ] Ensure matched deny rules remain accurate.
-  - [ ] Decide whether `default_deny` should appear in `matched_deny_rules`.
-  - [ ] If yes, update `matched_deny_rules`; if no, ensure reasons still include it.
+- [x] Update exported `reasons` in `main.rego`.
+  - [x] For `decision == "deny"`, include `all_deny_reasons`.
+  - [x] Preserve hard-deny reasons.
+  - [x] Preserve escalation reasons for `needs_human`.
+  - [x] Avoid duplicating reasons.
+- [x] Ensure matched deny rules remain accurate.
+  - [x] Decide whether `default_deny` should appear in `matched_deny_rules`.
+  - [x] If yes, update `matched_deny_rules`; if no, ensure reasons still include it.
 
 ### Regression Tests
 
-- [ ] Default deny returns `default_deny` reason.
-- [ ] Hard deny still returns the hard-deny reason.
-- [ ] Needs-human still returns escalation reason.
-- [ ] Allow still returns allow reason and matched allow rule.
+- [x] Default deny returns `default_deny` reason.
+- [x] Hard deny still returns the hard-deny reason.
+- [x] Needs-human still returns escalation reason.
+- [x] Allow still returns allow reason and matched allow rule.
 
 ### Acceptance Criteria
 
-- [ ] Operators receive actionable denial reason for normal default-deny cases.
-- [ ] Audit records include default-deny context.
+- [x] Operators receive actionable denial reason for normal default-deny cases.
+- [x] Audit records include default-deny context.
 
 ## Phase 11: Broker Decision Token and Replay Tests
 

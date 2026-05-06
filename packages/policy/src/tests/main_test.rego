@@ -18,6 +18,11 @@ base_input := {
 	"reviewerRiskLevel": "low",
 }
 
+empty_reasons := {reason |
+	reason := {"rule": "unused", "message": "unused"}
+	false
+}
+
 # Auto-allow: reviewer approved, low notional, matching allowlist
 test_auto_allow if {
 	guardrail.decision == "allow" with input as base_input
@@ -27,10 +32,30 @@ test_auto_allow_no_human_approval if {
 	guardrail.requires_human_approval == false with input as base_input
 }
 
+test_auto_allow_exports_allow_reason if {
+	some reason in guardrail.reasons with input as base_input
+	reason.rule == "binance-spot-low-notional"
+	guardrail.matched_allow_rules[_] == "binance-spot-low-notional" with input as base_input
+}
+
 # No matching allowlist for unknown action → needs_human (not allow)
 test_no_allowlist_unknown_action if {
 	inp := object.union(base_input, {"action": "cex.unknown_action"})
 	guardrail.decision == "needs_human" with input as inp
+}
+
+test_needs_human_exports_escalation_reason if {
+	inp := object.union(base_input, {"action": "cex.unknown_action"})
+	some reason in guardrail.reasons with input as inp
+	reason.rule == "no_matching_allowlist"
+}
+
+test_default_deny_exports_default_reason if {
+	inp := object.union(base_input, {"resource": "cex:kraken:subaccount-1:ETH-USDC"})
+	guardrail.decision == "deny" with input as inp with data.guardrail.rules.escalation.escalation_reasons as empty_reasons
+	some reason in guardrail.reasons with input as inp with data.guardrail.rules.escalation.escalation_reasons as empty_reasons
+	reason.rule == "default_deny"
+	guardrail.matched_deny_rules[_] == "default_deny" with input as inp with data.guardrail.rules.escalation.escalation_reasons as empty_reasons
 }
 
 # Missing notional on capped rule → no allowlist match → needs_human
@@ -93,6 +118,13 @@ test_allow_reviewer_low_risk if {
 test_hard_deny_withdrawal if {
 	inp := object.union(base_input, {"action": "cex.withdraw"})
 	guardrail.decision == "deny" with input as inp
+}
+
+test_hard_deny_exports_hard_deny_reason if {
+	inp := object.union(base_input, {"action": "cex.withdraw"})
+	some reason in guardrail.reasons with input as inp
+	reason.rule == "withdrawal_denied"
+	guardrail.matched_deny_rules[_] == "withdrawal_denied" with input as inp
 }
 
 # Hard deny: account transfer

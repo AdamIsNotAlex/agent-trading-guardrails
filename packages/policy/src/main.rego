@@ -59,7 +59,7 @@ matched_allow_rules contains rule if {
 }
 
 matched_deny_rules contains rule if {
-	some reason in hard_deny_reasons
+	some reason in all_deny_reasons
 	rule := reason.rule
 }
 
@@ -71,7 +71,19 @@ reviewer_low_risk if {
 	input.reviewerRiskLevel == "low"
 }
 
-reasons := array.concat(
-	[reason | some reason in hard_deny_reasons],
-	[reason | some reason in escalation_reasons],
-)
+exported_reasons contains reason if {
+	decision == "deny"
+	some reason in all_deny_reasons
+}
+
+exported_reasons contains reason if {
+	decision == "needs_human"
+	some reason in escalation_reasons
+}
+
+exported_reasons contains reason if {
+	decision == "allow"
+	some reason in allow_reasons
+}
+
+reasons := [reason | some reason in exported_reasons]

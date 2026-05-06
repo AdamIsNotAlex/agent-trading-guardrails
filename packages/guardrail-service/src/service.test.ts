@@ -932,6 +932,42 @@ describe("GuardrailService", () => {
       expect(audit.events.at(-1)?.data).toMatchObject({ outcome: "deny" });
     });
 
+    it("audits default-deny policy reasons", async () => {
+      const audit = makeAuditSpy();
+      const policy: PolicyEvaluator = {
+        async evaluate(): Promise<PolicyOutput> {
+          return {
+            decision: "deny",
+            reasons: [{ rule: "default_deny", message: "No matching allow rule found." }],
+            requiresHumanApproval: false,
+            matchedAllowRules: [],
+            matchedDenyRules: ["default_deny"],
+            evaluatedAt: now,
+          };
+        },
+        async isHealthy() {
+          return true;
+        },
+      };
+      const svc = new GuardrailService(config, makeReviewer(), policy, makeRisk(), audit.writer);
+
+      const result = await svc.evaluate(binanceSpotOrder);
+
+      expect(result.outcome).toBe("deny");
+      expect(
+        audit.events.find((event) => event.eventType === "policy.evaluated")?.data,
+      ).toMatchObject({
+        policyOutput: {
+          reasons: [{ rule: "default_deny", message: "No matching allow rule found." }],
+          matchedDenyRules: ["default_deny"],
+        },
+      });
+      expect(audit.events.at(-1)?.data).toMatchObject({
+        outcome: "deny",
+        reasons: [{ rule: "default_deny", message: "No matching allow rule found." }],
+      });
+    });
+
     it("emits final decision audit event for needs-human flow", async () => {
       const audit = makeAuditSpy();
       const svc = new GuardrailService(
