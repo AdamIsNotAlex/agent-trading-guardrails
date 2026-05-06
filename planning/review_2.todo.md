@@ -539,16 +539,16 @@ Relevant files:
 
 ### Test Checklist
 
-- [ ] Allow decision returns raw `decisionToken` to caller.
-- [ ] `decision.final` audit event does not contain raw token.
-- [ ] `decision.final` audit event contains `[sha256:<fingerprint>]` token marker.
-- [ ] `JSON.stringify(audit.events)` does not contain raw token.
-- [ ] Needs-human decision follows the same masking behavior.
-- [ ] Deny decision has no execution decision token.
+- [x] Allow decision returns raw `decisionToken` to caller.
+- [x] `decision.final` audit event does not contain raw token.
+- [x] `decision.final` audit event contains `[sha256:<fingerprint>]` token marker.
+- [x] `JSON.stringify(audit.events)` does not contain raw token.
+- [x] Needs-human decision follows the same masking behavior.
+- [x] Deny decision has no execution decision token.
 
 ### Acceptance Criteria
 
-- [ ] Execution credentials are never written raw into audit events.
+- [x] Execution credentials are never written raw into audit events.
 
 ## Phase 13: Binance Live Revalidation Negative Tests
 

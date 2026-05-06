@@ -893,6 +893,72 @@ describe("GuardrailService", () => {
       expect(audit.events[4].data.decision).toMatchObject({ outcome: "allow" });
     });
 
+    it("returns raw allow decision token while masking it in audit events", async () => {
+      const audit = makeAuditSpy();
+      const svc = new GuardrailService(
+        config,
+        makeReviewer(),
+        makePolicy(),
+        makeRisk(),
+        audit.writer,
+      );
+
+      const result = await svc.evaluate(binanceSpotOrder);
+      if (!result.decisionToken) throw new Error("decision token missing");
+      const finalDecision = audit.events.at(-1)?.data.decision;
+
+      expect(result.decisionToken).toMatch(/^[0-9a-f]{64}$/);
+      expect(finalDecision).toMatchObject({
+        outcome: "allow",
+        decisionToken: expect.stringMatching(/^\[sha256:[0-9a-f]{64}\]$/),
+      });
+      expect(JSON.stringify(audit.events)).not.toContain(result.decisionToken);
+    });
+
+    it("returns raw needs-human decision token while masking it in audit events", async () => {
+      const audit = makeAuditSpy();
+      const svc = new GuardrailService(
+        config,
+        makeReviewer(),
+        makePolicy("needs_human"),
+        makeRisk(),
+        audit.writer,
+      );
+
+      const result = await svc.evaluate(binanceSpotOrder);
+      if (!result.decisionToken) throw new Error("decision token missing");
+      const finalDecision = audit.events.at(-1)?.data.decision;
+
+      expect(result.outcome).toBe("needs_human");
+      expect(result.approvalId).toBeTruthy();
+      expect(result.decisionToken).toMatch(/^[0-9a-f]{64}$/);
+      expect(finalDecision).toMatchObject({
+        outcome: "needs_human",
+        approvalId: result.approvalId,
+        decisionToken: expect.stringMatching(/^\[sha256:[0-9a-f]{64}\]$/),
+      });
+      expect(JSON.stringify(audit.events)).not.toContain(result.decisionToken);
+    });
+
+    it("does not issue a decision token for deny decisions", async () => {
+      const audit = makeAuditSpy();
+      const svc = new GuardrailService(
+        config,
+        makeReviewer(),
+        makePolicy("deny"),
+        makeRisk(),
+        audit.writer,
+      );
+
+      const result = await svc.evaluate(binanceSpotOrder);
+      const finalDecision = audit.events.at(-1)?.data.decision;
+
+      expect(result.outcome).toBe("deny");
+      expect(result.decisionToken).toBeUndefined();
+      expect(finalDecision).toMatchObject({ outcome: "deny", decisionToken: undefined });
+      expect(JSON.stringify(audit.events)).not.toContain("decisionToken");
+    });
+
     it("does not convert audit failures into dependency failures", async () => {
       const events: AuditEventInput[] = [];
       const svc = new GuardrailService(config, makeReviewer(), makePolicy(), makeRisk(), {
