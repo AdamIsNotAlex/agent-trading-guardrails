@@ -14,8 +14,8 @@ import {
 } from "node:fs";
 import { dirname } from "node:path";
 import {
-  BrokerExecutionResult as BrokerExecutionResultSchema,
   type BrokerExecutionResult,
+  BrokerExecutionResult as BrokerExecutionResultSchema,
   type TradingIntent,
 } from "@guardrails/schemas";
 import {

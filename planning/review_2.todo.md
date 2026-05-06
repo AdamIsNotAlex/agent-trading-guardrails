@@ -673,52 +673,52 @@ Relevant files:
 
 ### Package-Level Validation
 
-- [ ] Schemas:
-  - [ ] `pnpm --filter @guardrails/schemas build`
-  - [ ] `pnpm --filter @guardrails/schemas generate:json-schema`
-  - [ ] Relevant schema tests.
-- [ ] Guardrail service:
-  - [ ] Relevant service tests.
-  - [ ] OPA transform tests.
-- [ ] Policy:
-  - [ ] `opa test packages/policy/src -v`
-- [ ] Broker:
-  - [ ] Relevant broker tests.
-- [ ] Solana connector:
-  - [ ] Relevant connector tests.
-- [ ] Binance connector:
-  - [ ] Relevant connector tests.
-- [ ] Secrets:
-  - [ ] Relevant Vault provider tests.
-- [ ] Approval:
-  - [ ] Relevant approval tests.
-- [ ] Audit:
-  - [ ] Relevant audit tests.
-- [ ] Red-team:
-  - [ ] Relevant red-team tests.
+- [x] Schemas:
+  - [x] `pnpm --filter @guardrails/schemas build`
+  - [x] `pnpm --filter @guardrails/schemas generate:json-schema`
+  - [x] Relevant schema tests.
+- [x] Guardrail service:
+  - [x] Relevant service tests.
+  - [x] OPA transform tests.
+- [x] Policy:
+  - [x] `opa test packages/policy/src -v`
+- [x] Broker:
+  - [x] Relevant broker tests.
+- [x] Solana connector:
+  - [x] Relevant connector tests.
+- [x] Binance connector:
+  - [x] Relevant connector tests.
+- [x] Secrets:
+  - [x] Relevant Vault provider tests.
+- [x] Approval:
+  - [x] Relevant approval tests.
+- [x] Audit:
+  - [x] Relevant audit tests.
+- [x] Red-team:
+  - [x] Relevant red-team tests.
 
 ### Root Validation
 
-- [ ] `pnpm typecheck`
-- [ ] `pnpm lint`
-- [ ] `pnpm build`
-- [ ] `pnpm test`
-- [ ] `pnpm test:integration` if integration dependencies are available.
-- [ ] `pnpm ci` if local environment can support the full quick CI script.
+- [x] `pnpm typecheck`
+- [x] `pnpm lint`
+- [x] `pnpm build`
+- [x] `pnpm test`
+- [x] `pnpm test:integration` if integration dependencies are available.
+- [x] `pnpm run ci` completed successfully; bare `pnpm ci` is not implemented by pnpm 10.33.2.
 
 ### Review Checklist
 
-- [ ] Re-run a focused security review after fixes.
-- [ ] Re-run a focused test coverage review after tests are added.
-- [ ] Confirm no raw secrets/tokens are introduced into fixtures, docs, or test snapshots.
-- [ ] Confirm generated JSON schemas are formatted and committed if schema changes occur.
-- [ ] Confirm no feature flags or compatibility shims were added unnecessarily.
-- [ ] Confirm no docs claim stronger guarantees than the implementation provides.
+- [x] Re-run a focused security review after fixes.
+- [x] Re-run a focused test coverage review after tests are added.
+- [x] Confirm no raw secrets/tokens are introduced into fixtures, docs, or test snapshots.
+- [x] Confirm generated JSON schemas are formatted and committed if schema changes occur.
+- [x] Confirm no feature flags or compatibility shims were added unnecessarily.
+- [x] Confirm no docs claim stronger guarantees than the implementation provides.
 
 ## Done Criteria
 
-- [ ] All three critical findings are fixed and covered by regression tests.
-- [ ] All important security/invariant findings are fixed or explicitly deferred with a documented reason.
-- [ ] All listed test coverage gaps are covered or explicitly deferred with a documented reason.
-- [ ] Documentation accurately reflects production support, deployment requirements, and audit guarantees.
-- [ ] Root validation passes, or any unavailable external dependency is clearly documented.
+- [x] All three critical findings are fixed and covered by regression tests.
+- [x] All important security/invariant findings are fixed or explicitly deferred with a documented reason.
+- [x] All listed test coverage gaps are covered or explicitly deferred with a documented reason.
+- [x] Documentation accurately reflects production support, deployment requirements, and audit guarantees.
+- [x] Root validation passes, or any unavailable external dependency is clearly documented.
