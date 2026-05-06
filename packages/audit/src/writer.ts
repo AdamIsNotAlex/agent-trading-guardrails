@@ -460,6 +460,7 @@ function isSecretKey(key: string): boolean {
     ["vaulttoken", "accesstoken", "refreshtoken", "authtoken", "bearertoken"].some((suffix) =>
       normalized.endsWith(suffix),
     ) ||
+    normalized === "authorization" ||
     normalized.endsWith("apikey") ||
     normalized.endsWith("apisecret")
   );

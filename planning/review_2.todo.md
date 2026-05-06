@@ -620,21 +620,21 @@ Relevant files:
 
 ### Test Checklist
 
-- [ ] Write an audit event containing nested sensitive fields.
-  - [ ] `apiSecret`
-  - [ ] `privateKey`
-  - [ ] `vaultToken`
-  - [ ] `authorization` header
-  - [ ] PEM-like private key string
-  - [ ] 64-byte hex private key-like value
-- [ ] Query SQLite stored `data` JSON directly.
-- [ ] Assert raw secret values do not appear in stored JSON.
-- [ ] Assert redaction markers do appear where expected.
-- [ ] Assert non-sensitive fields are preserved.
+- [x] Write an audit event containing nested sensitive fields.
+  - [x] `apiSecret`
+  - [x] `privateKey`
+  - [x] `vaultToken`
+  - [x] `authorization` header
+  - [x] PEM-like private key string
+  - [x] 64-byte hex private key-like value
+- [x] Query SQLite stored `data` JSON directly.
+- [x] Assert raw secret values do not appear in stored JSON.
+- [x] Assert redaction markers do appear where expected.
+- [x] Assert non-sensitive fields are preserved.
 
 ### Acceptance Criteria
 
-- [ ] Audit persistence cannot leak common secret shapes even if callers pass them in event data.
+- [x] Audit persistence cannot leak common secret shapes even if callers pass them in event data.
 
 ## Phase 16: Documentation Corrections
 

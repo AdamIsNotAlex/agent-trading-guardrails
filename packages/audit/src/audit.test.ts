@@ -234,6 +234,58 @@ describe("AuditWriter", () => {
     expect(parsed.orderId).toBe("order-456");
   });
 
+  it("redacts nested sensitive fields before SQLite persistence", () => {
+    const db = createTestDb();
+    const writer = new AuditWriter(db, { environment: "dev" });
+    const apiSecret = "audit-api-secret-value";
+    const privateKey = "audit-private-key-value";
+    const vaultToken = "audit-vault-token-value";
+    const authorization = "Bearer audit-authorization-token";
+    const pemPrivateKey =
+      "-----BEGIN PRIVATE KEY-----\naudit-pem-secret\n-----END PRIVATE KEY-----";
+    const hexPrivateKey = `${"a".repeat(64)}`;
+
+    writer.write({
+      eventType: "intent.received",
+      environment: "dev",
+      correlationId: "corr-redact-001",
+      data: {
+        action: "cex.place_order",
+        nested: {
+          apiSecret,
+          privateKey,
+          vaultToken,
+          headers: { authorization },
+          notes: [pemPrivateKey, `private key is 0x${hexPrivateKey}`],
+          nonSensitive: "keep-me",
+        },
+      },
+    });
+
+    const row = db.prepare("SELECT data FROM audit_events").get() as Record<string, unknown>;
+    const storedJson = row.data as string;
+    const parsed = JSON.parse(storedJson);
+
+    for (const rawSecret of [
+      apiSecret,
+      privateKey,
+      vaultToken,
+      authorization,
+      "audit-pem-secret",
+      hexPrivateKey,
+    ]) {
+      expect(storedJson).not.toContain(rawSecret);
+    }
+    expect(parsed.nested).toMatchObject({
+      apiSecret: "[REDACTED]",
+      privateKey: "[REDACTED]",
+      vaultToken: "[REDACTED]",
+      headers: { authorization: "[REDACTED]" },
+      nonSensitive: "keep-me",
+    });
+    expect(parsed.nested.notes).toEqual(["[REDACTED]", "private key is [REDACTED]"]);
+  });
+
   it("maintains hash chain across events", () => {
     const db = createTestDb();
     const writer = new AuditWriter(db, { environment: "dev" });
