@@ -170,6 +170,10 @@ export class GuardrailService {
     let hasTransfer = false;
     let hasUnknown = false;
     for (const instruction of intent.instructions) {
+      if (instruction.data != null) {
+        hasUnknown = true;
+        continue;
+      }
       if (typeof instruction.type !== "string" || instruction.type.length === 0) {
         hasUnknown = true;
         continue;

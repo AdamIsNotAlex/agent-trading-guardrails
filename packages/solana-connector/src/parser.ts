@@ -5,6 +5,9 @@ export function parseInstructions(raw: Array<Record<string, unknown>>): ParsedIn
     if (ix.data != null && ix.type != null) {
       throw new Error("Solana raw instruction data cannot rely on caller-supplied type.");
     }
+    if (ix.data != null) {
+      throw new Error("Solana raw instruction data is unsupported without trusted decoding.");
+    }
     return {
       programId: String(ix.programId ?? ""),
       type: ix.type != null ? String(ix.type) : null,

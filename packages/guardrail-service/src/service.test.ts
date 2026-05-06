@@ -719,6 +719,16 @@ describe("GuardrailService", () => {
         ],
         expected: "unknown",
       },
+      {
+        instructions: [
+          {
+            programId: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+            type: "transfer",
+            data: "encoded-authority-change",
+          },
+        ],
+        expected: "unknown",
+      },
     ])("fails closed for Solana signing instruction type %s", async ({
       instructions,
       expected,

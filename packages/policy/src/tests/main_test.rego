@@ -418,6 +418,22 @@ test_hard_deny_solana_authority_change if {
 	reason.rule == "solana_authority_change_denied"
 }
 
+# Hard deny: service-classified raw Solana instruction data
+_test_hard_deny_solana_raw_instruction_type_input := object.union(base_input, {
+	"action": "onchain.request_signature",
+	"chain": "solana",
+	"chainEnvironment": "devnet",
+	"resource": "onchain:solana:devnet:TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+	"programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+	"instructionType": "unknown",
+})
+
+test_hard_deny_solana_raw_instruction_type if {
+	guardrail.decision == "deny" with input as _test_hard_deny_solana_raw_instruction_type_input
+	some reason in guardrail.hard_deny_reasons with input as _test_hard_deny_solana_raw_instruction_type_input
+	reason.rule == "solana_instruction_type_unknown"
+}
+
 # Hard deny: missing Solana instruction type
 _test_hard_deny_solana_missing_instruction_type_input := object.union(base_input, {
 	"action": "onchain.request_signature",

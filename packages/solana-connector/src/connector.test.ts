@@ -7,6 +7,7 @@ import type { SolanaConfig, SolanaRpcProvider, SolanaSimulationResult } from "./
 import { hasAuthorityChange, parseInstructions } from "./parser.js";
 
 const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+const TOKEN_2022_PROGRAM = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBHN4VPgY6M";
 const SYSTEM_PROGRAM = "11111111111111111111111111111111";
 
 const config: SolanaConfig = {
@@ -78,6 +79,12 @@ describe("Instruction parsing", () => {
     ).toThrow("caller-supplied type");
   });
 
+  it("rejects opaque raw instruction data", () => {
+    expect(() =>
+      parseInstructions([{ programId: TOKEN_PROGRAM, data: "encoded-transfer" }]),
+    ).toThrow("unsupported without trusted decoding");
+  });
+
   it("no authority change in normal transfer", () => {
     const instructions = parseInstructions([{ programId: TOKEN_PROGRAM, type: "transfer" }]);
     expect(hasAuthorityChange(instructions)).toBe(false);
@@ -112,6 +119,59 @@ describe("SolanaConnector revalidation", () => {
     const result = await connector.revalidate(intent);
     expect(result.passed).toBe(false);
     expect(result.reason).toContain("Authority");
+  });
+
+  it("rejects raw SPL Token SetAuthority instruction data", async () => {
+    const connector = new SolanaConnector(config, makeMockProvider(), null);
+    const intent = {
+      ...solanaDevnetSimulation,
+      instructions: [{ programId: TOKEN_PROGRAM, data: "Bg==" }],
+    };
+
+    const result = await connector.revalidate(intent);
+
+    expect(result.passed).toBe(false);
+    expect(result.reason).toContain("unsupported without trusted decoding");
+  });
+
+  it("rejects raw Token-2022 SetAuthority instruction data", async () => {
+    const connector = new SolanaConnector(
+      { ...config, allowedPrograms: [...config.allowedPrograms, TOKEN_2022_PROGRAM] },
+      makeMockProvider(),
+      null,
+    );
+    const intent = {
+      ...solanaDevnetSimulation,
+      programId: TOKEN_2022_PROGRAM,
+      to: TOKEN_2022_PROGRAM,
+      instructions: [{ programId: TOKEN_2022_PROGRAM, data: "Bg==" }],
+    };
+
+    const result = await connector.revalidate(intent);
+
+    expect(result.passed).toBe(false);
+    expect(result.reason).toContain("unsupported without trusted decoding");
+  });
+
+  it("rejects opaque raw instruction data", async () => {
+    const connector = new SolanaConnector(config, makeMockProvider(), null);
+    const result = await connector.revalidate({
+      ...solanaDevnetSimulation,
+      instructions: [{ programId: TOKEN_PROGRAM, data: "opaque" }],
+    });
+
+    expect(result.passed).toBe(false);
+    expect(result.reason).toContain("unsupported without trusted decoding");
+  });
+
+  it("accepts trusted parsed transfer instruction", async () => {
+    const connector = new SolanaConnector(config, makeMockProvider(), null);
+    const result = await connector.revalidate({
+      ...solanaDevnetSimulation,
+      instructions: [{ programId: TOKEN_PROGRAM, type: "transfer" }],
+    });
+
+    expect(result.passed).toBe(true);
   });
 });
 

@@ -281,36 +281,36 @@ Relevant files:
 
 ### Design Checklist
 
-- [ ] Choose the narrowest safe implementation:
+- [x] Choose the narrowest safe implementation:
   - Option A: decode SPL Token and Token-2022 instruction data for allowlisted token programs and reject `SetAuthority` variants.
   - Option B: fail closed for opaque raw instruction data until decoding is implemented.
-- [ ] Prefer fail-closed behavior if decoding coverage is incomplete.
-- [ ] Do not trust caller-provided `type` for raw instruction bytes.
-- [ ] Decide whether parsed instruction `type` can still be accepted for non-raw fixtures/tests.
+- [x] Prefer fail-closed behavior if decoding coverage is incomplete.
+- [x] Do not trust caller-provided `type` for raw instruction bytes.
+- [x] Decide whether parsed instruction `type` can still be accepted for non-raw fixtures/tests.
   - If retained, only use it when no raw `data` field exists and it comes from trusted internal parsing.
 
 ### Implementation Checklist
 
-- [ ] Update parser to distinguish trusted parsed instructions from opaque raw instructions.
-- [ ] For raw instructions:
-  - [ ] Decode known token-program instruction variants, or
-  - [ ] Return a validation failure such as `Solana raw instruction data is unsupported without trusted decoding.`
-- [ ] Update `validateAuthorityChange` so `SetAuthority` cannot pass when encoded in raw instruction data.
-- [ ] Update guardrail-service instruction-type extraction if needed so policy and connector agree.
-- [ ] Keep OPA hard-deny for `setAuthority` as defense-in-depth.
+- [x] Update parser to distinguish trusted parsed instructions from opaque raw instructions.
+- [x] For raw instructions:
+  - [x] Decode known token-program instruction variants, or
+  - [x] Return a validation failure such as `Solana raw instruction data is unsupported without trusted decoding.`
+- [x] Update `validateAuthorityChange` so `SetAuthority` cannot pass when encoded in raw instruction data.
+- [x] Update guardrail-service instruction-type extraction if needed so policy and connector agree.
+- [x] Keep OPA hard-deny for `setAuthority` as defense-in-depth.
 
 ### Regression Tests
 
-- [ ] Raw SPL Token `SetAuthority` instruction is rejected even when program/account allowlists pass.
-- [ ] Raw Token-2022 `SetAuthority` instruction is rejected if Token-2022 is in scope.
-- [ ] Opaque raw instruction data is rejected if decoding is not implemented.
-- [ ] Safe transfer instruction remains accepted when fully decoded/trusted.
-- [ ] Service/policy path still denies `setAuthority` when instruction type is known.
+- [x] Raw SPL Token `SetAuthority` instruction is rejected even when program/account allowlists pass.
+- [x] Raw Token-2022 `SetAuthority` instruction is rejected if Token-2022 is in scope.
+- [x] Opaque raw instruction data is rejected if decoding is not implemented.
+- [x] Safe transfer instruction remains accepted when fully decoded/trusted.
+- [x] Service/policy path still denies `setAuthority` when instruction type is known.
 
 ### Acceptance Criteria
 
-- [ ] Authority-changing Solana instructions cannot be smuggled through raw instruction data.
-- [ ] Balance-delta checks are not the only protection against authority changes.
+- [x] Authority-changing Solana instructions cannot be smuggled through raw instruction data.
+- [x] Balance-delta checks are not the only protection against authority changes.
 
 ## Phase 6: Kill-Switch Audit Failure Surfacing
 
