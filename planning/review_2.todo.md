@@ -561,20 +561,20 @@ Relevant files:
 
 ### Test Checklist
 
-- [ ] Live revalidation rejects stale market timestamp.
-- [ ] Live revalidation rejects future market timestamp.
-- [ ] Live revalidation rejects `NaN` timestamp.
-- [ ] Live revalidation rejects zero price.
-- [ ] Live revalidation rejects negative price.
-- [ ] Live revalidation rejects `NaN` price.
-- [ ] Live revalidation rejects price deviation above `maxSlippageBps`.
-- [ ] Live revalidation rejects executable notional above `maxNotionalUsd`.
-- [ ] Live revalidation rejects thrown `getPrice()` as fail-closed.
-- [ ] Order-status revalidation still does not fetch market price.
+- [x] Live revalidation rejects stale market timestamp.
+- [x] Live revalidation rejects future market timestamp.
+- [x] Live revalidation rejects `NaN` timestamp.
+- [x] Live revalidation rejects zero price.
+- [x] Live revalidation rejects negative price.
+- [x] Live revalidation rejects `NaN` price.
+- [x] Live revalidation rejects price deviation above `maxSlippageBps`.
+- [x] Live revalidation rejects executable notional above `maxNotionalUsd`.
+- [x] Live revalidation rejects thrown `getPrice()` as fail-closed.
+- [x] Order-status revalidation still does not fetch market price.
 
 ### Acceptance Criteria
 
-- [ ] Broker-side live market checks cannot regress into a pass-through.
+- [x] Broker-side live market checks cannot regress into a pass-through.
 
 ## Phase 14: Red-Team Hard-Deny Payload Realism
 

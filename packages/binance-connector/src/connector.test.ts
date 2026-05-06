@@ -246,16 +246,119 @@ describe("BinanceConnector (live mode with mock)", () => {
     expect(result.passed).toBe(true);
   });
 
-  it("does not fetch live market data when revalidating order status", async () => {
+  const rejectedMarketDataCases: Array<{
+    name: string;
+    price: number;
+    timestampMs: () => number;
+    reason: string;
+  }> = [
+    {
+      name: "stale market timestamp",
+      price: binanceSpotOrder.price,
+      timestampMs: () => Date.now() - 11_000,
+      reason: "Market data is",
+    },
+    {
+      name: "future market timestamp",
+      price: binanceSpotOrder.price,
+      timestampMs: () => Date.now() + 1_000,
+      reason: "Market data timestamp is invalid.",
+    },
+    {
+      name: "NaN timestamp",
+      price: binanceSpotOrder.price,
+      timestampMs: () => Number.NaN,
+      reason: "Market data timestamp is invalid.",
+    },
+    {
+      name: "zero price",
+      price: 0,
+      timestampMs: () => Date.now(),
+      reason: "Market data price is invalid.",
+    },
+    {
+      name: "negative price",
+      price: -1,
+      timestampMs: () => Date.now(),
+      reason: "Market data price is invalid.",
+    },
+    {
+      name: "NaN price",
+      price: Number.NaN,
+      timestampMs: () => Date.now(),
+      reason: "Market data price is invalid.",
+    },
+  ];
+
+  for (const testCase of rejectedMarketDataCases) {
+    it(`rejects live revalidation with ${testCase.name}`, async () => {
+      const client: BinanceApiClient = {
+        ...makeMockClient(),
+        async getPrice(symbol) {
+          return { symbol, price: testCase.price, timestampMs: testCase.timestampMs() };
+        },
+      };
+      const connector = new BinanceConnector(config, client, "live");
+
+      const result = await connector.revalidate(binanceSpotOrder);
+
+      expect(result.passed).toBe(false);
+      expect(result.reason).toContain(testCase.reason);
+    });
+  }
+
+  it("rejects live revalidation when price deviation exceeds approved slippage", async () => {
+    const client: BinanceApiClient = {
+      ...makeMockClient(),
+      async getPrice(symbol) {
+        return { symbol, price: binanceSpotOrder.price * 2, timestampMs: Date.now() };
+      },
+    };
+    const connector = new BinanceConnector(config, client, "live");
+
+    const result = await connector.revalidate(binanceSpotOrder);
+
+    expect(result.passed).toBe(false);
+    expect(result.reason).toContain("exceeds approved slippage");
+  });
+
+  it("rejects live revalidation when executable notional exceeds approved max", async () => {
+    const connector = new BinanceConnector(config, makeMockClient(), "live");
+
+    const result = await connector.revalidate({ ...binanceSpotOrder, maxNotionalUsd: 1 });
+
+    expect(result.passed).toBe(false);
+    expect(result.reason).toBe("Executable order notional exceeds approved maxNotionalUsd.");
+  });
+
+  it("rejects live revalidation when market data fetch fails", async () => {
     const client: BinanceApiClient = {
       ...makeMockClient(),
       async getPrice() {
-        throw new Error("getPrice should not be called");
+        throw new Error("price feed unavailable");
+      },
+    };
+    const connector = new BinanceConnector(config, client, "live");
+
+    const result = await connector.revalidate(binanceSpotOrder);
+
+    expect(result.passed).toBe(false);
+    expect(result.reason).toBe("Failed to fetch market data for revalidation.");
+  });
+
+  it("does not fetch live market data when revalidating order status", async () => {
+    let getPriceCalls = 0;
+    const client: BinanceApiClient = {
+      ...makeMockClient(),
+      async getPrice(symbol) {
+        getPriceCalls += 1;
+        return makeMockClient().getPrice(symbol);
       },
     };
     const connector = new BinanceConnector(config, client, "live");
     const result = await connector.revalidate(binanceOrderStatus);
     expect(result.passed).toBe(true);
+    expect(getPriceCalls).toBe(0);
   });
 
   it("fails order status revalidation when client is missing in live mode", async () => {
