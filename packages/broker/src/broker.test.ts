@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ApprovalStore } from "@guardrails/approval";
-import type { TradingIntent } from "@guardrails/schemas";
+import { BrokerExecutionResult, type TradingIntent } from "@guardrails/schemas";
 import {
   binanceOrderStatus,
   binanceSpotOrder,
@@ -147,8 +147,10 @@ describe("ExecutionBroker", () => {
     );
     const result = await broker.execute(makeApproval());
     expect(result.status).toBe("executed");
+    expect(result.executionKind).toBe("cex_order");
     expect(result.orderId).toBeTruthy();
     expect(result.revalidationPassed).toBe(true);
+    expect(() => BrokerExecutionResult.parse(result)).not.toThrow();
     expect(audit.events.some((e) => e.eventType === "broker.executed")).toBe(true);
   });
 
@@ -227,8 +229,40 @@ describe("ExecutionBroker", () => {
     const result = await broker.execute(makeApproval(binanceOrderStatus));
     const execution = audit.events.find((event) => event.eventType === "broker.executed");
 
+    expect(result.executionKind).toBe("cex_order_status");
     expect(result.orderStatus).toEqual(orderStatus);
+    expect(() => BrokerExecutionResult.parse(result)).not.toThrow();
     expect(execution?.data).toMatchObject({ orderStatus });
+  });
+
+  it("stores terminal failure when connector returns no execution evidence", async () => {
+    const execute = vi.fn(async () => ({}) as never);
+    const audit = makeAudit();
+    const connector: ExecutionConnector = {
+      execute,
+      async revalidate() {
+        return { passed: true };
+      },
+    };
+    const broker = new ExecutionBroker(
+      config,
+      connector,
+      new InMemoryKillSwitch(),
+      audit,
+      makeIdempotency(),
+    );
+    const approval = makeApproval();
+
+    const result = await broker.execute(approval);
+    const cached = await broker.execute(approval);
+
+    expect(result).toMatchObject({
+      status: "failed",
+      rejectionReason: "Execution evidence validation failed.",
+    });
+    expect(cached).toEqual(result);
+    expect(execute).toHaveBeenCalledOnce();
+    expect(audit.events.some((event) => event.eventType === "broker.failed")).toBe(true);
   });
 
   it("rejects escalated execution when approval is missing", async () => {
@@ -854,6 +888,30 @@ describe("ExecutionBroker", () => {
     expect(result.rejectionReason).toContain("Stale market data");
   });
 
+  it("uses fallback reason when revalidation failure reason is blank", async () => {
+    const connector: ExecutionConnector = {
+      async execute() {
+        return { orderId: "test" };
+      },
+      async revalidate() {
+        return { passed: false, reason: "" };
+      },
+    };
+    const broker = new ExecutionBroker(
+      config,
+      connector,
+      new InMemoryKillSwitch(),
+      makeAudit(),
+      makeIdempotency(),
+    );
+
+    const result = await broker.execute(makeApproval());
+
+    expect(result.status).toBe("rejected");
+    expect(result.rejectionReason).toBe("Broker-side revalidation failed.");
+    expect(() => BrokerExecutionResult.parse(result)).not.toThrow();
+  });
+
   it("redacts secrets from revalidation failure reasons", async () => {
     const privateKey = `0x${"a".repeat(64)}`;
     const connector: ExecutionConnector = {
@@ -1290,6 +1348,7 @@ describe("ExecutionBroker", () => {
         intentId: binanceSpotOrder.intentId,
         idempotencyKey: binanceSpotOrder.idempotencyKey,
         status: "executed",
+        executionKind: "cex_order",
         orderId: "order-1",
         revalidationPassed: true,
         executedAt: "2026-05-04T12:00:04.000Z",

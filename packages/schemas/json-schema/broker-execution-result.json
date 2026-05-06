@@ -2,70 +2,404 @@
   "$ref": "#/definitions/broker-execution-result",
   "definitions": {
     "broker-execution-result": {
-      "type": "object",
-      "properties": {
-        "intentId": {
-          "type": "string",
-          "format": "uuid"
-        },
-        "idempotencyKey": {
-          "type": "string",
-          "minLength": 1
-        },
-        "status": {
-          "type": "string",
-          "enum": ["executed", "rejected", "failed"]
-        },
-        "orderId": {
-          "type": "string"
-        },
-        "transactionHash": {
-          "type": "string"
-        },
-        "orderStatus": {
+      "anyOf": [
+        {
           "type": "object",
           "properties": {
+            "intentId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "idempotencyKey": {
+              "type": "string",
+              "minLength": 1
+            },
+            "revalidationPassed": {
+              "type": "boolean",
+              "const": true
+            },
+            "executedAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "status": {
+              "type": "string",
+              "const": "executed"
+            },
+            "executionKind": {
+              "type": "string",
+              "const": "cex_order"
+            },
+            "orderId": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "intentId",
+            "idempotencyKey",
+            "revalidationPassed",
+            "executedAt",
+            "status",
+            "executionKind",
+            "orderId"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "intentId": {
+              "$ref": "#/definitions/broker-execution-result/anyOf/0/properties/intentId"
+            },
+            "idempotencyKey": {
+              "$ref": "#/definitions/broker-execution-result/anyOf/0/properties/idempotencyKey"
+            },
+            "revalidationPassed": {
+              "type": "boolean",
+              "const": true
+            },
+            "executedAt": {
+              "$ref": "#/definitions/broker-execution-result/anyOf/0/properties/executedAt"
+            },
+            "status": {
+              "type": "string",
+              "const": "executed"
+            },
+            "executionKind": {
+              "type": "string",
+              "const": "cex_order"
+            },
+            "orderStatus": {
+              "type": "object",
+              "properties": {
+                "orderId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "symbol": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "side": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "status": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "executedQty": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "avgPrice": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              },
+              "required": ["orderId", "symbol", "side", "status", "executedQty", "avgPrice"],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "intentId",
+            "idempotencyKey",
+            "revalidationPassed",
+            "executedAt",
+            "status",
+            "executionKind",
+            "orderStatus"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "intentId": {
+              "$ref": "#/definitions/broker-execution-result/anyOf/0/properties/intentId"
+            },
+            "idempotencyKey": {
+              "$ref": "#/definitions/broker-execution-result/anyOf/0/properties/idempotencyKey"
+            },
+            "revalidationPassed": {
+              "type": "boolean",
+              "const": true
+            },
+            "executedAt": {
+              "$ref": "#/definitions/broker-execution-result/anyOf/0/properties/executedAt"
+            },
+            "status": {
+              "type": "string",
+              "const": "executed"
+            },
+            "executionKind": {
+              "type": "string",
+              "const": "cex_order"
+            },
             "orderId": {
               "type": "string",
               "minLength": 1
             },
-            "symbol": {
-              "type": "string",
-              "minLength": 1
+            "orderStatus": {
+              "$ref": "#/definitions/broker-execution-result/anyOf/1/properties/orderStatus"
+            }
+          },
+          "required": [
+            "intentId",
+            "idempotencyKey",
+            "revalidationPassed",
+            "executedAt",
+            "status",
+            "executionKind",
+            "orderId",
+            "orderStatus"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "intentId": {
+              "$ref": "#/definitions/broker-execution-result/anyOf/0/properties/intentId"
             },
-            "side": {
-              "type": "string",
-              "minLength": 1
+            "idempotencyKey": {
+              "$ref": "#/definitions/broker-execution-result/anyOf/0/properties/idempotencyKey"
+            },
+            "revalidationPassed": {
+              "type": "boolean",
+              "const": true
+            },
+            "executedAt": {
+              "$ref": "#/definitions/broker-execution-result/anyOf/0/properties/executedAt"
             },
             "status": {
               "type": "string",
+              "const": "executed"
+            },
+            "executionKind": {
+              "type": "string",
+              "const": "cex_cancel"
+            },
+            "orderId": {
+              "type": "string",
               "minLength": 1
-            },
-            "executedQty": {
-              "type": "number",
-              "minimum": 0
-            },
-            "avgPrice": {
-              "type": "number",
-              "minimum": 0
             }
           },
-          "required": ["orderId", "symbol", "side", "status", "executedQty", "avgPrice"],
+          "required": [
+            "intentId",
+            "idempotencyKey",
+            "revalidationPassed",
+            "executedAt",
+            "status",
+            "executionKind",
+            "orderId"
+          ],
           "additionalProperties": false
         },
-        "revalidationPassed": {
-          "type": "boolean"
+        {
+          "type": "object",
+          "properties": {
+            "intentId": {
+              "$ref": "#/definitions/broker-execution-result/anyOf/0/properties/intentId"
+            },
+            "idempotencyKey": {
+              "$ref": "#/definitions/broker-execution-result/anyOf/0/properties/idempotencyKey"
+            },
+            "revalidationPassed": {
+              "type": "boolean",
+              "const": true
+            },
+            "executedAt": {
+              "$ref": "#/definitions/broker-execution-result/anyOf/0/properties/executedAt"
+            },
+            "status": {
+              "type": "string",
+              "const": "executed"
+            },
+            "executionKind": {
+              "type": "string",
+              "const": "cex_order_status"
+            },
+            "orderId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "orderStatus": {
+              "$ref": "#/definitions/broker-execution-result/anyOf/1/properties/orderStatus"
+            }
+          },
+          "required": [
+            "intentId",
+            "idempotencyKey",
+            "revalidationPassed",
+            "executedAt",
+            "status",
+            "executionKind",
+            "orderStatus"
+          ],
+          "additionalProperties": false
         },
-        "rejectionReason": {
-          "type": "string"
+        {
+          "type": "object",
+          "properties": {
+            "intentId": {
+              "$ref": "#/definitions/broker-execution-result/anyOf/0/properties/intentId"
+            },
+            "idempotencyKey": {
+              "$ref": "#/definitions/broker-execution-result/anyOf/0/properties/idempotencyKey"
+            },
+            "revalidationPassed": {
+              "type": "boolean",
+              "const": true
+            },
+            "executedAt": {
+              "$ref": "#/definitions/broker-execution-result/anyOf/0/properties/executedAt"
+            },
+            "status": {
+              "type": "string",
+              "const": "executed"
+            },
+            "executionKind": {
+              "type": "string",
+              "const": "onchain_signature"
+            },
+            "transactionHash": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "intentId",
+            "idempotencyKey",
+            "revalidationPassed",
+            "executedAt",
+            "status",
+            "executionKind",
+            "transactionHash"
+          ],
+          "additionalProperties": false
         },
-        "executedAt": {
-          "type": "string",
-          "format": "date-time"
+        {
+          "type": "object",
+          "properties": {
+            "intentId": {
+              "$ref": "#/definitions/broker-execution-result/anyOf/0/properties/intentId"
+            },
+            "idempotencyKey": {
+              "$ref": "#/definitions/broker-execution-result/anyOf/0/properties/idempotencyKey"
+            },
+            "revalidationPassed": {
+              "type": "boolean",
+              "const": true
+            },
+            "executedAt": {
+              "$ref": "#/definitions/broker-execution-result/anyOf/0/properties/executedAt"
+            },
+            "status": {
+              "type": "string",
+              "const": "executed"
+            },
+            "executionKind": {
+              "type": "string",
+              "const": "onchain_simulation"
+            },
+            "simulationEvidence": {
+              "type": "object",
+              "properties": {
+                "simulationId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "provider": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": ["provider"],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "intentId",
+            "idempotencyKey",
+            "revalidationPassed",
+            "executedAt",
+            "status",
+            "executionKind",
+            "simulationEvidence"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "intentId": {
+              "$ref": "#/definitions/broker-execution-result/anyOf/0/properties/intentId"
+            },
+            "idempotencyKey": {
+              "$ref": "#/definitions/broker-execution-result/anyOf/0/properties/idempotencyKey"
+            },
+            "revalidationPassed": {
+              "type": "boolean"
+            },
+            "executedAt": {
+              "$ref": "#/definitions/broker-execution-result/anyOf/0/properties/executedAt"
+            },
+            "status": {
+              "type": "string",
+              "const": "rejected"
+            },
+            "rejectionReason": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "intentId",
+            "idempotencyKey",
+            "revalidationPassed",
+            "executedAt",
+            "status",
+            "rejectionReason"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "intentId": {
+              "$ref": "#/definitions/broker-execution-result/anyOf/0/properties/intentId"
+            },
+            "idempotencyKey": {
+              "$ref": "#/definitions/broker-execution-result/anyOf/0/properties/idempotencyKey"
+            },
+            "revalidationPassed": {
+              "$ref": "#/definitions/broker-execution-result/anyOf/7/properties/revalidationPassed"
+            },
+            "executedAt": {
+              "$ref": "#/definitions/broker-execution-result/anyOf/0/properties/executedAt"
+            },
+            "status": {
+              "type": "string",
+              "const": "failed"
+            },
+            "rejectionReason": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "intentId",
+            "idempotencyKey",
+            "revalidationPassed",
+            "executedAt",
+            "status",
+            "rejectionReason"
+          ],
+          "additionalProperties": false
         }
-      },
-      "required": ["intentId", "idempotencyKey", "status", "revalidationPassed", "executedAt"],
-      "additionalProperties": false
+      ]
     }
   },
   "$schema": "http://json-schema.org/draft-07/schema#"

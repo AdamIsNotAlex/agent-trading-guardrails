@@ -98,7 +98,7 @@ export class SolanaConnector implements ExecutionConnector {
   async execute(
     intent: TradingIntent,
     beforeSideEffect?: BeforeConnectorSideEffect,
-  ): Promise<{ orderId?: string; transactionHash?: string }> {
+  ): ReturnType<ExecutionConnector["execute"]> {
     const validation = await this.revalidate(intent);
     if (!validation.passed) {
       throw new ConnectorRevalidationError(
@@ -106,7 +106,9 @@ export class SolanaConnector implements ExecutionConnector {
       );
     }
 
-    if (!("to" in intent)) return {};
+    if (!("to" in intent)) {
+      throw new Error("Solana connector does not execute this action.");
+    }
     if (
       "instructions" in intent &&
       Array.isArray(intent.instructions) &&
@@ -128,7 +130,7 @@ export class SolanaConnector implements ExecutionConnector {
         throw new Error(`Simulation failed: ${result.error}`);
       }
       this.assertExpectedDeltas(result, intent);
-      return {};
+      return { simulationEvidence: { provider: `solana:${this.config.chainEnvironment}` } };
     }
 
     if (intent.action === "onchain.request_signature") {
@@ -148,7 +150,7 @@ export class SolanaConnector implements ExecutionConnector {
       return { transactionHash: txHash };
     }
 
-    return {};
+    throw new Error("Solana connector does not execute this action.");
   }
 
   private assertExpectedDeltas(result: SolanaSimulationResult, intent: TradingIntent): void {

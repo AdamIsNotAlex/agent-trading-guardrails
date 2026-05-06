@@ -185,7 +185,7 @@ export class BinanceConnector implements ExecutionConnector {
   private async executeSpotOrder(
     intent: TradingIntent,
     beforeSideEffect?: BeforeConnectorSideEffect,
-  ): Promise<{ orderId?: string }> {
+  ): ReturnType<ExecutionConnector["execute"]> {
     if (!("symbol" in intent) || !("side" in intent) || !("orderType" in intent)) {
       throw new Error("Invalid spot order intent.");
     }
@@ -215,7 +215,7 @@ export class BinanceConnector implements ExecutionConnector {
   private async executeFuturesOrder(
     intent: TradingIntent,
     beforeSideEffect?: BeforeConnectorSideEffect,
-  ): Promise<{ orderId?: string }> {
+  ): ReturnType<ExecutionConnector["execute"]> {
     if (!("symbol" in intent) || !("side" in intent) || !("orderType" in intent)) {
       throw new Error("Invalid futures order intent.");
     }
@@ -253,7 +253,7 @@ export class BinanceConnector implements ExecutionConnector {
   private async executeCancelOrder(
     intent: TradingIntent,
     beforeSideEffect?: BeforeConnectorSideEffect,
-  ): Promise<{ orderId?: string }> {
+  ): ReturnType<ExecutionConnector["execute"]> {
     if (!("orderId" in intent) || !("symbol" in intent) || !("account" in intent)) {
       throw new Error("Invalid cancel order intent.");
     }

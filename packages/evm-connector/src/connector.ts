@@ -95,7 +95,7 @@ export class EvmConnector implements ExecutionConnector {
   async execute(
     intent: TradingIntent,
     beforeSideEffect?: BeforeConnectorSideEffect,
-  ): Promise<{ orderId?: string; transactionHash?: string }> {
+  ): ReturnType<ExecutionConnector["execute"]> {
     const validation = await this.revalidate(intent);
     if (!validation.passed) {
       throw new ConnectorRevalidationError(
@@ -114,7 +114,7 @@ export class EvmConnector implements ExecutionConnector {
         throw new Error(`Simulation failed: ${result.error}`);
       }
       this.assertExpectedDeltas(result, intent);
-      return {};
+      return { simulationEvidence: { provider: `ethereum:${this.config.chainEnvironment}` } };
     }
 
     if (intent.action === "onchain.request_signature" && "to" in intent) {
@@ -142,7 +142,7 @@ export class EvmConnector implements ExecutionConnector {
       return { transactionHash: txHash };
     }
 
-    return {};
+    throw new Error(`Ethereum connector does not execute ${intent.action}.`);
   }
 
   private validateRecipient(

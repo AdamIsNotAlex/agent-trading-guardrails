@@ -402,34 +402,34 @@ Relevant files:
 
 ### Design Checklist
 
-- [ ] Define evidence requirements by executed action type.
-  - [ ] CEX place order: require `orderId` or `orderStatus`.
-  - [ ] CEX cancel: require `orderId` or cancellation-specific status evidence.
-  - [ ] CEX order status: require `orderStatus`.
-  - [ ] Onchain signing: require `transactionHash`.
-  - [ ] Onchain simulation: require simulation evidence, or do not represent it as executed broker-side if no execution occurred.
-- [ ] Decide whether to add an `executionKind` discriminator or infer from intent action outside the result schema.
+- [x] Define evidence requirements by executed action type.
+  - [x] CEX place order: require `orderId` or `orderStatus`.
+  - [x] CEX cancel: require `orderId` or cancellation-specific status evidence.
+  - [x] CEX order status: require `orderStatus`.
+  - [x] Onchain signing: require `transactionHash`.
+  - [x] Onchain simulation: require simulation evidence, or do not represent it as executed broker-side if no execution occurred.
+- [x] Decide whether to add an `executionKind` discriminator or infer from intent action outside the result schema.
   - Preferred: use an explicit discriminator if result validity depends on action class.
-- [ ] Require failed/rejected results to include `rejectionReason`.
+- [x] Require failed/rejected results to include `rejectionReason`.
 
 ### Implementation Checklist
 
-- [ ] Convert `BrokerExecutionResult` to a discriminated union or add strict refinements.
-- [ ] Update broker and connector interfaces to require the relevant evidence fields.
-- [ ] Update paper connector and tests to return valid evidence.
-- [ ] Regenerate JSON schema.
+- [x] Convert `BrokerExecutionResult` to a discriminated union or add strict refinements.
+- [x] Update broker and connector interfaces to require the relevant evidence fields.
+- [x] Update paper connector and tests to return valid evidence.
+- [x] Regenerate JSON schema.
 
 ### Regression Tests
 
-- [ ] Executed result with no `orderId`, `orderStatus`, `transactionHash`, or simulation evidence is rejected by schema.
-- [ ] Rejected result without `rejectionReason` is rejected by schema.
-- [ ] Failed result without `rejectionReason` is rejected by schema.
-- [ ] Existing broker happy paths produce schema-valid execution results.
+- [x] Executed result with no `orderId`, `orderStatus`, `transactionHash`, or simulation evidence is rejected by schema.
+- [x] Rejected result without `rejectionReason` is rejected by schema.
+- [x] Failed result without `rejectionReason` is rejected by schema.
+- [x] Existing broker happy paths produce schema-valid execution results.
 
 ### Acceptance Criteria
 
-- [ ] Every `executed` broker result contains enough durable evidence for audit/reconciliation.
-- [ ] Connectors cannot satisfy the interface with empty execution handles.
+- [x] Every `executed` broker result contains enough durable evidence for audit/reconciliation.
+- [x] Connectors cannot satisfy the interface with empty execution handles.
 
 ## Phase 9: Approval Timeout Terminal State
 

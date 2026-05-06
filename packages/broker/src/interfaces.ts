@@ -1,6 +1,7 @@
 import type {
   AuditEventType,
   BrokerExecutionResult,
+  BrokerSimulationEvidence,
   Environment,
   TradingIntent,
 } from "@guardrails/schemas";
@@ -16,15 +17,28 @@ export interface ConnectorOrderStatus {
 
 export type BeforeConnectorSideEffect = () => void;
 
+interface ConnectorExecutionEvidence {
+  orderId?: string;
+  transactionHash?: string;
+  orderStatus?: ConnectorOrderStatus;
+  simulationEvidence?: BrokerSimulationEvidence;
+}
+
+type RequireExecutionEvidence<T, K extends keyof T> = T &
+  {
+    [P in K]-?: Required<Pick<T, P>> & Partial<Pick<T, Exclude<K, P>>>;
+  }[K];
+
+export type ConnectorExecutionResult = RequireExecutionEvidence<
+  ConnectorExecutionEvidence,
+  "orderId" | "transactionHash" | "orderStatus" | "simulationEvidence"
+>;
+
 export interface ExecutionConnector {
   execute(
     intent: TradingIntent,
     beforeSideEffect?: BeforeConnectorSideEffect,
-  ): Promise<{
-    orderId?: string;
-    transactionHash?: string;
-    orderStatus?: ConnectorOrderStatus;
-  }>;
+  ): Promise<ConnectorExecutionResult>;
   revalidate(intent: TradingIntent): Promise<{ passed: boolean; reason?: string }>;
 }
 

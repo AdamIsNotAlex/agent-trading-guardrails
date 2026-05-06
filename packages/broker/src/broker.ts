@@ -1,6 +1,12 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { type ApprovalRequest, ApprovalStore } from "@guardrails/approval";
-import { type BrokerExecutionResult, type Environment, TradingIntent } from "@guardrails/schemas";
+import {
+  BrokerExecutionResult as BrokerExecutionResultSchema,
+  type BrokerExecutionKind,
+  type BrokerExecutionResult,
+  type Environment,
+  TradingIntent,
+} from "@guardrails/schemas";
 import { assertNotVaultDevInProduction, redactSecrets } from "@guardrails/secrets";
 import {
   type AuditWriter,
@@ -325,7 +331,7 @@ export class ExecutionBroker {
         },
       });
       if (!revalidation.passed) {
-        const reason = redactSecrets(revalidation.reason ?? "Broker-side revalidation failed.");
+        const reason = this.nonEmptyReason(revalidation.reason, "Broker-side revalidation failed.");
         this.audit.write({
           eventType: "broker.failed",
           environment: this.config.environment,
@@ -406,16 +412,33 @@ export class ExecutionBroker {
         });
       }
 
-      const result: BrokerExecutionResult = {
-        intentId: intent.intentId,
-        idempotencyKey: intent.idempotencyKey,
-        status: "executed",
-        orderId: executionResult.orderId,
-        transactionHash: executionResult.transactionHash,
-        orderStatus: executionResult.orderStatus,
-        revalidationPassed: true,
-        executedAt: now,
-      };
+      let result: BrokerExecutionResult;
+      try {
+        result = this.executedResult(intent, executionResult, now);
+      } catch (err) {
+        const reason = "Execution evidence validation failed.";
+        const failedResult: BrokerExecutionResult = {
+          intentId: intent.intentId,
+          idempotencyKey: intent.idempotencyKey,
+          status: "failed",
+          revalidationPassed: true,
+          rejectionReason: reason,
+          executedAt: now,
+        };
+        const auditEvent = {
+          eventId: this.terminalAuditEventId(intent, approval.correlationId, "broker.failed"),
+          eventType: "broker.failed" as const,
+          environment: this.config.environment,
+          intentId: intent.intentId,
+          principal: intent.principal,
+          correlationId: approval.correlationId,
+          data: { reason, error: redactSecrets(String(err)) },
+        };
+        terminalPersistenceStarted = true;
+        return this.finishExecutionWithAudit(reservation, failedResult, auditEvent, () => {
+          reservationCompleted = true;
+        });
+      }
 
       const auditEvent = {
         eventId: this.terminalAuditEventId(intent, approval.correlationId, "broker.executed"),
@@ -428,6 +451,7 @@ export class ExecutionBroker {
           orderId: executionResult.orderId,
           transactionHash: executionResult.transactionHash,
           orderStatus: executionResult.orderStatus,
+          simulationEvidence: executionResult.simulationEvidence,
         },
       };
 
@@ -440,6 +464,42 @@ export class ExecutionBroker {
         reservation.abort(err);
       }
       throw err;
+    }
+  }
+
+  private executedResult(
+    intent: TradingIntent,
+    executionResult: Awaited<ReturnType<ExecutionConnector["execute"]>>,
+    now: string,
+  ): BrokerExecutionResult {
+    return BrokerExecutionResultSchema.parse(
+      omitUndefined({
+        intentId: intent.intentId,
+        idempotencyKey: intent.idempotencyKey,
+        status: "executed",
+        executionKind: this.executionKindForIntent(intent),
+        orderId: executionResult.orderId,
+        transactionHash: executionResult.transactionHash,
+        orderStatus: executionResult.orderStatus,
+        simulationEvidence: executionResult.simulationEvidence,
+        revalidationPassed: true,
+        executedAt: now,
+      }),
+    );
+  }
+
+  private executionKindForIntent(intent: TradingIntent): BrokerExecutionKind {
+    switch (intent.action) {
+      case "cex.place_order":
+        return "cex_order";
+      case "cex.cancel_order":
+        return "cex_cancel";
+      case "cex.get_order_status":
+        return "cex_order_status";
+      case "onchain.request_signature":
+        return "onchain_signature";
+      case "onchain.simulate_transaction":
+        return "onchain_simulation";
     }
   }
 
@@ -507,6 +567,11 @@ export class ExecutionBroker {
     return stableJson(value);
   }
 
+  private nonEmptyReason(value: string | undefined, fallback: string): string {
+    const reason = value?.trim();
+    return redactSecrets(reason && reason.length > 0 ? reason : fallback);
+  }
+
   private reject(
     intent: TradingIntent,
     now: string,
@@ -514,12 +579,13 @@ export class ExecutionBroker {
     rule: string,
     message: string,
   ): BrokerExecutionResult {
+    const rejectionReason = this.nonEmptyReason(message, "Broker rejected execution.");
     const result: BrokerExecutionResult = {
       intentId: intent.intentId,
       idempotencyKey: intent.idempotencyKey,
       status: "rejected",
       revalidationPassed: false,
-      rejectionReason: message,
+      rejectionReason,
       executedAt: now,
     };
     this.audit.write({
@@ -528,7 +594,7 @@ export class ExecutionBroker {
       intentId: intent.intentId,
       principal: intent.principal,
       correlationId,
-      data: { rule, message },
+      data: { rule, message: rejectionReason },
     });
     return result;
   }
@@ -610,6 +676,10 @@ function assertDecisionSecret(environment: Environment, secret: string): void {
       "Guardrail decision verification secret must be at least 32 characters outside dev.",
     );
   }
+}
+
+function omitUndefined(value: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined));
 }
 
 function stableJson(value: unknown): string {

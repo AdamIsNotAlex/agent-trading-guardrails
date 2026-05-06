@@ -1,12 +1,16 @@
 import { randomUUID } from "node:crypto";
 import type { TradingIntent } from "@guardrails/schemas";
-import type { BeforeConnectorSideEffect, ExecutionConnector } from "./interfaces.js";
+import type {
+  BeforeConnectorSideEffect,
+  ConnectorExecutionResult,
+  ExecutionConnector,
+} from "./interfaces.js";
 
 export class PaperExecutionConnector implements ExecutionConnector {
   async execute(
     intent: TradingIntent,
     beforeSideEffect?: BeforeConnectorSideEffect,
-  ): Promise<{ orderId?: string; transactionHash?: string }> {
+  ): Promise<ConnectorExecutionResult> {
     if (intent.action === "cex.place_order" || intent.action === "cex.cancel_order") {
       beforeSideEffect?.();
       return { orderId: `paper-${randomUUID().slice(0, 8)}` };

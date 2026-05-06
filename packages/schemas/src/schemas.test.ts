@@ -508,58 +508,134 @@ describe("DynamicRiskResult", () => {
 });
 
 describe("BrokerExecutionResult", () => {
-  it("accepts valid execution result", () => {
+  const baseResult = {
+    intentId: "550e8400-e29b-41d4-a716-446655440001",
+    idempotencyKey: "spot-order-001",
+    revalidationPassed: true,
+    executedAt: "2026-05-04T12:00:04.000Z",
+  };
+  const orderStatus = {
+    orderId: "87654321",
+    symbol: "ETH-USDC",
+    side: "BUY",
+    status: "FILLED",
+    executedQty: 0.002,
+    avgPrice: 3500,
+  };
+
+  it("accepts valid CEX order execution result", () => {
     const result = {
-      intentId: "550e8400-e29b-41d4-a716-446655440001",
-      idempotencyKey: "spot-order-001",
+      ...baseResult,
       status: "executed" as const,
+      executionKind: "cex_order" as const,
       orderId: "87654321",
-      revalidationPassed: true,
-      executedAt: "2026-05-04T12:00:04.000Z",
+    };
+    expect(BrokerExecutionResult.parse(result)).toEqual(result);
+  });
+
+  it("accepts execution result with order id and order status details", () => {
+    const result = {
+      ...baseResult,
+      idempotencyKey: "order-with-status-001",
+      status: "executed" as const,
+      executionKind: "cex_order" as const,
+      orderId: orderStatus.orderId,
+      orderStatus,
     };
     expect(BrokerExecutionResult.parse(result)).toEqual(result);
   });
 
   it("accepts execution result with order status details", () => {
     const result = {
-      intentId: "550e8400-e29b-41d4-a716-446655440001",
+      ...baseResult,
       idempotencyKey: "order-status-001",
       status: "executed" as const,
-      orderId: "87654321",
-      orderStatus: {
-        orderId: "87654321",
-        symbol: "ETH-USDC",
-        side: "BUY",
-        status: "FILLED",
-        executedQty: 0.002,
-        avgPrice: 3500,
-      },
-      revalidationPassed: true,
-      executedAt: "2026-05-04T12:00:04.000Z",
+      executionKind: "cex_order_status" as const,
+      orderStatus,
+    };
+    expect(BrokerExecutionResult.parse(result)).toEqual(result);
+  });
+
+  it("accepts valid onchain signing execution result", () => {
+    const result = {
+      ...baseResult,
+      idempotencyKey: "signing-001",
+      status: "executed" as const,
+      executionKind: "onchain_signature" as const,
+      transactionHash: "0xtxhash",
+    };
+    expect(BrokerExecutionResult.parse(result)).toEqual(result);
+  });
+
+  it("accepts valid onchain simulation execution result", () => {
+    const result = {
+      ...baseResult,
+      idempotencyKey: "simulation-001",
+      status: "executed" as const,
+      executionKind: "onchain_simulation" as const,
+      simulationEvidence: { provider: "devnet-rpc" },
     };
     expect(BrokerExecutionResult.parse(result)).toEqual(result);
   });
 
   it("accepts valid rejected result", () => {
     const result = {
-      intentId: "550e8400-e29b-41d4-a716-446655440001",
-      idempotencyKey: "spot-order-001",
+      ...baseResult,
       status: "rejected" as const,
       revalidationPassed: false,
       rejectionReason: "Stale market data.",
-      executedAt: "2026-05-04T12:00:04.000Z",
     };
     expect(BrokerExecutionResult.parse(result)).toEqual(result);
+  });
+
+  it("accepts valid failed result", () => {
+    const result = {
+      ...baseResult,
+      status: "failed" as const,
+      revalidationPassed: false,
+      rejectionReason: "Execution failed.",
+    };
+    expect(BrokerExecutionResult.parse(result)).toEqual(result);
+  });
+
+  it("rejects executed result without execution evidence", () => {
+    expect(() =>
+      BrokerExecutionResult.parse({
+        ...baseResult,
+        status: "executed",
+        executionKind: "cex_order",
+      }),
+    ).toThrow();
   });
 
   it("rejects executed with revalidationPassed:false", () => {
     expect(() =>
       BrokerExecutionResult.parse({
-        intentId: "550e8400-e29b-41d4-a716-446655440001",
-        idempotencyKey: "spot-order-001",
+        ...baseResult,
         status: "executed",
+        executionKind: "cex_order",
+        orderId: "87654321",
         revalidationPassed: false,
-        executedAt: "2026-05-04T12:00:04.000Z",
+      }),
+    ).toThrow();
+  });
+
+  it("rejects rejected result without rejection reason", () => {
+    expect(() =>
+      BrokerExecutionResult.parse({
+        ...baseResult,
+        status: "rejected",
+        revalidationPassed: false,
+      }),
+    ).toThrow();
+  });
+
+  it("rejects failed result without rejection reason", () => {
+    expect(() =>
+      BrokerExecutionResult.parse({
+        ...baseResult,
+        status: "failed",
+        revalidationPassed: false,
       }),
     ).toThrow();
   });
