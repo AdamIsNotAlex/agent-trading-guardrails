@@ -22,15 +22,16 @@ import {
   type RiskEngine,
 } from "@guardrails/service";
 import { describe, expect, it } from "vitest";
-import { hallucinatedClaims, promptInjectionPayloads } from "./fixtures.js";
+import {
+  ethereumApprovalWithoutMetadataIntent,
+  hallucinatedClaims,
+  promptInjectionPayloads,
+  solanaAuthorityChangeSigningIntent,
+  unknownEthereumContractSigningIntent,
+  unlimitedEthereumApprovalSigningIntent,
+} from "./fixtures.js";
 
 const now = "2026-05-04T12:00:00.000Z";
-const UINT256_MAX =
-  "115792089237316195423570985008687907853269984665640564039457584007913129639935";
-const APPROVAL_SPENDER = "0000000000000000000000007265636970696e74000000000000000000000000";
-const APPROVAL_AMOUNT_100 = "0000000000000000000000000000000000000000000000000000000000000064";
-const ERC20_APPROVAL_100 = `0x095ea7b3${APPROVAL_SPENDER}${APPROVAL_AMOUNT_100}`;
-const ERC20_APPROVAL_MAX = `0x095ea7b3${APPROVAL_SPENDER}${"f".repeat(64)}`;
 const nullAuditWriter = { write() {} };
 const brokerConfig = {
   environment: "canary_live" as const,
@@ -48,11 +49,11 @@ function decisionToken(params: {
   intent: TradingIntent;
   outcome: "allow" | "needs_human";
   correlationId: string;
+  decidedAt: string;
   approvalId?: string;
 }): string {
   return createGuardrailDecisionToken({
     secret: brokerConfig.decisionVerificationSecret,
-    decidedAt: now,
     ...params,
   });
 }
@@ -93,24 +94,6 @@ function makeAllowPolicy(): PolicyEvaluator {
   };
 }
 
-function makeDenyPolicy(rule: string, msg: string): PolicyEvaluator {
-  return {
-    async evaluate(): Promise<PolicyOutput> {
-      return {
-        decision: "deny",
-        reasons: [{ rule, message: msg }],
-        requiresHumanApproval: false,
-        matchedAllowRules: [],
-        matchedDenyRules: [rule],
-        evaluatedAt: now,
-      };
-    },
-    async isHealthy() {
-      return true;
-    },
-  };
-}
-
 function makeOnchainHardDenyPolicy(): PolicyEvaluator {
   return {
     async evaluate(input: PolicyInput): Promise<PolicyOutput> {
@@ -141,6 +124,16 @@ function makeOnchainHardDenyPolicy(): PolicyEvaluator {
           requiresHumanApproval: false,
           matchedAllowRules: [],
           matchedDenyRules: ["token_approval_amount_missing"],
+          evaluatedAt: now,
+        };
+      }
+      if (input.chain === "solana" && input.instructionType === "setAuthority") {
+        return {
+          decision: "deny",
+          reasons: [{ rule: "solana_authority_change_denied", message: "Authority change." }],
+          requiresHumanApproval: false,
+          matchedAllowRules: [],
+          matchedDenyRules: ["solana_authority_change_denied"],
           evaluatedAt: now,
         };
       }
@@ -420,48 +413,43 @@ describe("Auto-Execution Rules", () => {
 });
 
 describe("Hard-Deny Actions", () => {
-  it("hard-deny never becomes human approval for withdrawal", async () => {
+  it("CEX withdrawal-shaped payload is denied by schema validation", async () => {
     const svc = new GuardrailService(
       config,
       makeReviewer("approve"),
-      makeDenyPolicy("withdrawal", "Denied"),
-      makeRisk(),
-      nullAuditWriter,
-    );
-    const intent = { ...binanceSpotOrder, action: "cex.withdraw" as "cex.place_order" };
-    const result = await svc.evaluate(intent);
-    expect(result.outcome).toBe("deny");
-    expect(result.requiresHumanApproval).toBe(false);
-  });
-
-  it("hard-deny never becomes human approval for transfer", async () => {
-    const svc = new GuardrailService(
-      config,
-      makeReviewer("approve"),
-      makeDenyPolicy("transfer", "Denied"),
+      makeAllowPolicy(),
       makeRisk(),
       nullAuditWriter,
     );
     const result = await svc.evaluate({
       ...binanceSpotOrder,
-      action: "cex.account_transfer" as "cex.place_order",
+      action: "cex.withdraw",
+      idempotencyKey: "redteam-cex-withdrawal",
     });
     expect(result.outcome).toBe("deny");
+    expect(result.requiresHumanApproval).toBe(false);
+    expect(result.reasons[0].rule).toBe("schema_validation");
   });
 
-  it("unauthorized withdrawal is denied", async () => {
+  it("CEX account-transfer-shaped payload is denied by schema validation", async () => {
     const svc = new GuardrailService(
       config,
-      makeReviewer(),
-      makeDenyPolicy("withdrawal_denied", "Not permitted"),
+      makeReviewer("approve"),
+      makeAllowPolicy(),
       makeRisk(),
       nullAuditWriter,
     );
-    const result = await svc.evaluate(binanceSpotOrder);
+    const result = await svc.evaluate({
+      ...binanceSpotOrder,
+      action: "cex.account_transfer",
+      idempotencyKey: "redteam-cex-account-transfer",
+    });
     expect(result.outcome).toBe("deny");
+    expect(result.requiresHumanApproval).toBe(false);
+    expect(result.reasons[0].rule).toBe("schema_validation");
   });
 
-  it("unknown onchain contract is denied", async () => {
+  it("unknown Ethereum contract is denied through service path", async () => {
     const svc = new GuardrailService(
       { ...config, environment: "testnet" },
       makeReviewer(),
@@ -469,18 +457,12 @@ describe("Hard-Deny Actions", () => {
       makeRisk(),
       nullAuditWriter,
     );
-    const result = await svc.evaluate({
-      ...ethereumSepoliaSigning,
-      to: "0x1111111111111111111111111111111111111111",
-      resource: "onchain:ethereum:sepolia:0x1111111111111111111111111111111111111111",
-      data: ERC20_APPROVAL_100,
-      maxTokenApprovalAmount: "100",
-    });
+    const result = await svc.evaluate(unknownEthereumContractSigningIntent);
     expect(result.outcome).toBe("deny");
     expect(result.reasons[0].rule).toBe("unknown_contract_denied");
   });
 
-  it("allowlisted contract with max approval is denied", async () => {
+  it("Ethereum unlimited token approval is denied through service path", async () => {
     const svc = new GuardrailService(
       { ...config, environment: "testnet" },
       makeReviewer(),
@@ -488,11 +470,7 @@ describe("Hard-Deny Actions", () => {
       makeRisk(),
       nullAuditWriter,
     );
-    const result = await svc.evaluate({
-      ...ethereumSepoliaSigning,
-      data: ERC20_APPROVAL_MAX,
-      maxTokenApprovalAmount: UINT256_MAX,
-    });
+    const result = await svc.evaluate(unlimitedEthereumApprovalSigningIntent);
     expect(result.outcome).toBe("deny");
     expect(result.reasons[0].rule).toBe("unlimited_approval_denied");
   });
@@ -510,7 +488,7 @@ describe("Hard-Deny Actions", () => {
     expect(result.reasons[0].rule).toBe("schema_validation");
   });
 
-  it("approval calldata without explicit metadata is denied", async () => {
+  it("approval calldata without explicit metadata is denied through service path", async () => {
     const svc = new GuardrailService(
       { ...config, environment: "testnet" },
       makeReviewer(),
@@ -518,9 +496,22 @@ describe("Hard-Deny Actions", () => {
       makeRisk(),
       nullAuditWriter,
     );
-    const result = await svc.evaluate({ ...ethereumSepoliaSigning, data: ERC20_APPROVAL_100 });
+    const result = await svc.evaluate(ethereumApprovalWithoutMetadataIntent);
     expect(result.outcome).toBe("deny");
     expect(result.reasons[0].rule).toBe("token_approval_amount_missing");
+  });
+
+  it("Solana authority change is denied through service path", async () => {
+    const svc = new GuardrailService(
+      { ...config, environment: "testnet" },
+      makeReviewer(),
+      makeOnchainHardDenyPolicy(),
+      makeRisk(),
+      nullAuditWriter,
+    );
+    const result = await svc.evaluate(solanaAuthorityChangeSigningIntent);
+    expect(result.outcome).toBe("deny");
+    expect(result.reasons[0].rule).toBe("solana_authority_change_denied");
   });
 });
 
@@ -559,16 +550,18 @@ describe("Fail-Closed Behavior", () => {
       { write() {} },
       new InMemoryBrokerIdempotencyStore(),
     );
+    const decidedAt = new Date().toISOString();
     const result = await broker.execute({
       intentId: binanceSpotOrder.intentId,
       correlationId: "c",
       outcome: "allow",
       intent: binanceSpotOrder,
-      decidedAt: now,
+      decidedAt,
       decisionToken: decisionToken({
         intent: binanceSpotOrder,
         outcome: "allow",
         correlationId: "c",
+        decidedAt,
       }),
     });
     expect(result.status).toBe("failed");
@@ -610,16 +603,18 @@ describe("Kill Switch", () => {
       { write() {} },
       new InMemoryBrokerIdempotencyStore(),
     );
+    const decidedAt = new Date().toISOString();
     const result = await broker.execute({
       intentId: binanceSpotOrder.intentId,
       correlationId: "c",
       outcome: "allow",
       intent: binanceSpotOrder,
-      decidedAt: now,
+      decidedAt,
       decisionToken: decisionToken({
         intent: binanceSpotOrder,
         outcome: "allow",
         correlationId: "c",
+        decidedAt,
       }),
     });
     expect(result.status).toBe("rejected");
@@ -636,16 +631,18 @@ describe("Kill Switch", () => {
       { write() {} },
       new InMemoryBrokerIdempotencyStore(),
     );
+    const decidedAt = new Date().toISOString();
     const result = await broker.execute({
       intentId: binanceSpotOrder.intentId,
       correlationId: "c",
       outcome: "allow",
       intent: binanceSpotOrder,
-      decidedAt: now,
+      decidedAt,
       decisionToken: decisionToken({
         intent: binanceSpotOrder,
         outcome: "allow",
         correlationId: "c",
+        decidedAt,
       }),
     });
     expect(result.status).toBe("rejected");

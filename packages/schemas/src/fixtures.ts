@@ -152,3 +152,29 @@ export const ethereumSepoliaSigning: OnchainSigningIntent = {
     },
   ],
 };
+
+export const solanaDevnetSigning: OnchainSigningIntent = {
+  intentId: "550e8400-e29b-41d4-a716-446655440007",
+  principal: "agent.hermes.strategy-beta",
+  action: "onchain.request_signature",
+  resource: "onchain:solana:devnet:TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+  environment: "testnet",
+  requestedAt: now,
+  idempotencyKey: "sign-sol-001",
+  rationale: "Signing SPL token transfer after successful simulation.",
+  evidence: ["simulation_result_stu234"],
+  chain: "solana",
+  chainEnvironment: "devnet",
+  to: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+  programId: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+  simulationId: "550e8400-e29b-41d4-a716-446655440005",
+  instructions: [{ programId: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", type: "transfer" }],
+  expectedDeltas: [
+    {
+      account: "recipient-token-account",
+      asset: "USDC",
+      minDelta: "99",
+      maxDelta: "101",
+    },
+  ],
+};

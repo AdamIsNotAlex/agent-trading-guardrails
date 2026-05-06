@@ -588,26 +588,26 @@ Relevant files:
 
 ### Implementation Checklist
 
-- [ ] Add realistic onchain red-team fixtures.
-  - [ ] Ethereum unknown contract signing intent.
-  - [ ] Ethereum token approval intent with max uint256 amount.
-  - [ ] Ethereum approval calldata without explicit approval metadata.
-  - [ ] Solana authority-change signing intent.
-  - [ ] Invalid chain/environment pair intent if schema allows constructing malformed payloads for service rejection tests.
-- [ ] Replace misleading tests that evaluate `binanceSpotOrder` for onchain cases.
-- [ ] For unsupported CEX actions like withdrawal/transfer, explicitly assert whether denial comes from schema rejection or policy hard-deny.
+- [x] Add realistic onchain red-team fixtures.
+  - [x] Ethereum unknown contract signing intent.
+  - [x] Ethereum token approval intent with max uint256 amount.
+  - [x] Ethereum approval calldata without explicit approval metadata.
+  - [x] Solana authority-change signing intent.
+  - [x] Invalid chain/environment pair intent if schema allows constructing malformed payloads for service rejection tests.
+- [x] Replace misleading tests that evaluate `binanceSpotOrder` for onchain cases.
+- [x] For unsupported CEX actions like withdrawal/transfer, explicitly assert whether denial comes from schema rejection or policy hard-deny.
 
 ### Regression Tests
 
-- [ ] Unknown Ethereum contract is denied through service path.
-- [ ] Unlimited approval is denied through service path by the intended hard-deny reason.
-- [ ] Approval calldata without metadata is denied through service path.
-- [ ] Solana authority change is denied through service path.
-- [ ] Test names match the payload being evaluated.
+- [x] Unknown Ethereum contract is denied through service path.
+- [x] Unlimited approval is denied through service path by the intended hard-deny reason.
+- [x] Approval calldata without metadata is denied through service path.
+- [x] Solana authority change is denied through service path.
+- [x] Test names match the payload being evaluated.
 
 ### Acceptance Criteria
 
-- [ ] Red-team tests exercise realistic bypass attempts, not unrelated deny stubs.
+- [x] Red-team tests exercise realistic bypass attempts, not unrelated deny stubs.
 
 ## Phase 15: AuditWriter Persistence-Level Redaction Test
 
