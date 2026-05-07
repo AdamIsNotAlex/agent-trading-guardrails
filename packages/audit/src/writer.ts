@@ -437,16 +437,30 @@ function redactObject(obj: unknown): unknown {
 }
 
 function redactSecrets(text: string): string {
-  return text
+  const bearerRedactions: string[] = [];
+  let result = text.replace(
+    /\b(authorization\s*[:=]\s*bearer\s+)[^\s,}]+/gi,
+    (_match, prefix: string) => {
+      const placeholder = `__BEARER_REDACTION_${bearerRedactions.length}__`;
+      bearerRedactions.push(`${prefix}[REDACTED]`);
+      return placeholder;
+    },
+  );
+  result = result.replace(/\b(bearer\s+)[^\s,}]+/gi, "$1[REDACTED]");
+  result = result
     .replace(
       /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/gi,
       "[REDACTED]",
     )
     .replace(/\b((?:key|private key|secret key)\s+is\s+)0x[0-9a-f]{64}\b/gi, "$1[REDACTED]")
     .replace(
-      /((?:api[_-]?key|api[_-]?secret|private[_-]?key|secret[_-]?key|mnemonic|seed[_-]?phrase|vault[_-]?token)\s*[:=]\s*)([^\r\n,}]+)/gi,
+      /((?:authorization|api[_-]?key|api[_-]?secret|private[_-]?key|secret[_-]?key|mnemonic|seed[_-]?phrase|vault[_-]?token)\s*[:=]\s*)([^\r\n,}]+)/gi,
       "$1[REDACTED]",
     );
+  for (const [index, redaction] of bearerRedactions.entries()) {
+    result = result.replace(`__BEARER_REDACTION_${index}__`, redaction);
+  }
+  return result;
 }
 
 function isSecretKey(key: string): boolean {

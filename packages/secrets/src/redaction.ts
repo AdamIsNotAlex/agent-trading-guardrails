@@ -1,5 +1,5 @@
 const SECRET_KEY_PATTERN =
-  "api[_-]?key|api[_-]?secret|private[_-]?key|secret[_-]?key|mnemonic|seed[_-]?phrase|vault[_-]?token";
+  "authorization|api[_-]?key|api[_-]?secret|private[_-]?key|secret[_-]?key|mnemonic|seed[_-]?phrase|vault[_-]?token";
 
 const SECRET_PATTERNS = [
   /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/gi,
@@ -22,8 +22,18 @@ const UNQUOTED_SECRET_ASSIGNMENT_PATTERN = new RegExp(
 
 const LABELED_HEX_SECRET_PATTERN = /\b((?:key|private key|secret key)\s+is\s+)0x[0-9a-f]{64}\b/gi;
 
+const AUTHORIZATION_BEARER_TOKEN_PATTERN = /\b(authorization\s*[:=]\s*bearer\s+)[^\s,}]+/gi;
+
+const BEARER_TOKEN_PATTERN = /\b(bearer\s+)[^\s,}]+/gi;
+
 export function redactSecrets(text: string): string {
-  let result = text;
+  const bearerRedactions: string[] = [];
+  let result = text.replace(AUTHORIZATION_BEARER_TOKEN_PATTERN, (_match, prefix: string) => {
+    const placeholder = `__BEARER_REDACTION_${bearerRedactions.length}__`;
+    bearerRedactions.push(`${prefix}[REDACTED]`);
+    return placeholder;
+  });
+  result = result.replace(BEARER_TOKEN_PATTERN, "$1[REDACTED]");
   for (const pattern of SECRET_PATTERNS) {
     result = result.replace(pattern, "[REDACTED]");
   }
@@ -31,6 +41,9 @@ export function redactSecrets(text: string): string {
   result = result.replace(SINGLE_QUOTED_SECRET_ASSIGNMENT_PATTERN, "$1[REDACTED]$3");
   result = result.replace(UNQUOTED_SECRET_ASSIGNMENT_PATTERN, "$1[REDACTED]");
   result = result.replace(LABELED_HEX_SECRET_PATTERN, "$1[REDACTED]");
+  for (const [index, redaction] of bearerRedactions.entries()) {
+    result = result.replace(`__BEARER_REDACTION_${index}__`, redaction);
+  }
   return result;
 }
 

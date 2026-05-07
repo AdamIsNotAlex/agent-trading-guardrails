@@ -112,7 +112,7 @@ function makePolicy(
             ? [{ rule: "test-deny", message: "Test denial." }]
             : decision === "needs_human"
               ? [{ rule: "test-escalation", message: "Needs human review." }]
-              : [],
+              : [{ rule: "test-allow", message: "Allowed." }],
         requiresHumanApproval: opts?.requiresHuman ?? decision === "needs_human",
         matchedAllowRules: decision === "allow" ? ["test-allow"] : [],
         matchedDenyRules: decision === "deny" ? ["test-deny"] : [],
@@ -287,7 +287,7 @@ describe("GuardrailService", () => {
         async evaluate() {
           return {
             decision: "allow",
-            reasons: [],
+            reasons: [{ rule: "test-allow", message: "Allowed." }],
             requires_human_approval: false,
             matched_allow_rules: ["test-allow"],
             matched_deny_rules: [],
@@ -312,7 +312,7 @@ describe("GuardrailService", () => {
           policyInput = input;
           return {
             decision: "allow",
-            reasons: [],
+            reasons: [{ rule: "test-allow", message: "Allowed." }],
             requiresHumanApproval: false,
             matchedAllowRules: ["test-allow"],
             matchedDenyRules: [],
@@ -432,7 +432,7 @@ describe("GuardrailService", () => {
             decision: malformedApproval ? "deny" : "allow",
             reasons: malformedApproval
               ? [{ rule: "token_approval_amount_missing", message: "metadata required" }]
-              : [],
+              : [{ rule: "test-allow", message: "Allowed." }],
             requiresHumanApproval: false,
             matchedAllowRules: malformedApproval ? [] : ["test-allow"],
             matchedDenyRules: malformedApproval ? ["token_approval_amount_missing"] : [],
@@ -470,7 +470,7 @@ describe("GuardrailService", () => {
             decision: input.tokenApprovalUnlimited ? "deny" : "allow",
             reasons: input.tokenApprovalUnlimited
               ? [{ rule: "unlimited_approval_denied", message: "Unlimited approval." }]
-              : [],
+              : [{ rule: "test-allow", message: "Allowed." }],
             requiresHumanApproval: false,
             matchedAllowRules: input.tokenApprovalUnlimited ? [] : ["test-allow"],
             matchedDenyRules: input.tokenApprovalUnlimited ? ["unlimited_approval_denied"] : [],
@@ -512,7 +512,7 @@ describe("GuardrailService", () => {
             decision: input.tokenApprovalAmountExceedsCap ? "deny" : "allow",
             reasons: input.tokenApprovalAmountExceedsCap
               ? [{ rule: "token_approval_cap_exceeded", message: "Above cap." }]
-              : [],
+              : [{ rule: "test-allow", message: "Allowed." }],
             requiresHumanApproval: false,
             matchedAllowRules: input.tokenApprovalAmountExceedsCap ? [] : ["test-allow"],
             matchedDenyRules: input.tokenApprovalAmountExceedsCap
@@ -556,7 +556,7 @@ describe("GuardrailService", () => {
             decision: missingMetadata ? "deny" : "allow",
             reasons: missingMetadata
               ? [{ rule: "token_approval_amount_missing", message: "metadata required" }]
-              : [],
+              : [{ rule: "test-allow", message: "Allowed." }],
             requiresHumanApproval: false,
             matchedAllowRules: missingMetadata ? [] : ["test-allow"],
             matchedDenyRules: missingMetadata ? ["token_approval_amount_missing"] : [],
@@ -588,7 +588,7 @@ describe("GuardrailService", () => {
           policyInput = input;
           return {
             decision: "allow",
-            reasons: [],
+            reasons: [{ rule: "test-allow", message: "Allowed." }],
             requiresHumanApproval: false,
             matchedAllowRules: ["test-allow"],
             matchedDenyRules: [],
@@ -747,7 +747,7 @@ describe("GuardrailService", () => {
                     message: "Solana instruction type is unavailable or unsupported.",
                   },
                 ]
-              : [],
+              : [{ rule: "test-allow", message: "Allowed." }],
             requiresHumanApproval: false,
             matchedAllowRules: unknownInstruction ? [] : ["test-allow"],
             matchedDenyRules: unknownInstruction ? ["solana_instruction_type_unknown"] : [],
@@ -797,7 +797,7 @@ describe("GuardrailService", () => {
             decision: needsHuman ? "needs_human" : "allow",
             reasons: needsHuman
               ? [{ rule: "daily_notional_above_threshold", message: "Daily notional exceeded." }]
-              : [],
+              : [{ rule: "test-allow", message: "Allowed." }],
             requiresHumanApproval: needsHuman,
             matchedAllowRules: needsHuman ? [] : ["test-allow"],
             matchedDenyRules: [],
@@ -1319,7 +1319,7 @@ describe("GuardrailService", () => {
           policyEvaluations += 1;
           return {
             decision: "allow",
-            reasons: [],
+            reasons: [{ rule: "test-allow", message: "Allowed." }],
             requiresHumanApproval: false,
             matchedAllowRules: ["test-allow"],
             matchedDenyRules: [],

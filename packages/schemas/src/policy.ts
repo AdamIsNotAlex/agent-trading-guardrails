@@ -57,10 +57,16 @@ export const PolicyOutput = z
   .refine((data) => !(data.decision === "allow" && data.requiresHumanApproval), {
     message: "allow decision cannot require human approval",
   })
+  .refine((data) => data.decision !== "allow" || data.reasons.length > 0, {
+    message: "allow decision requires at least one allow reason",
+  })
   .refine((data) => !(data.decision === "deny" && data.requiresHumanApproval), {
     message: "deny decision cannot require human approval; use needs_human instead",
   })
   .refine((data) => data.decision !== "needs_human" || data.requiresHumanApproval, {
     message: "needs_human decision must require human approval",
+  })
+  .refine((data) => data.decision !== "needs_human" || data.reasons.length > 0, {
+    message: "needs_human decision requires at least one reason",
   });
 export type PolicyOutput = z.infer<typeof PolicyOutput>;

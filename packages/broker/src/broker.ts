@@ -482,6 +482,7 @@ export class ExecutionBroker {
     executionResult: Awaited<ReturnType<ExecutionConnector["execute"]>>,
     now: string,
   ): BrokerExecutionResult {
+    this.assertExecutionEvidenceMatchesIntent(intent, executionResult);
     return BrokerExecutionResultSchema.parse(
       omitUndefined({
         intentId: intent.intentId,
@@ -496,6 +497,43 @@ export class ExecutionBroker {
         executedAt: now,
       }),
     );
+  }
+
+  private assertExecutionEvidenceMatchesIntent(
+    intent: TradingIntent,
+    executionResult: Awaited<ReturnType<ExecutionConnector["execute"]>>,
+  ): void {
+    if (intent.action === "cex.cancel_order" && executionResult.orderId !== intent.orderId) {
+      throw new Error("Connector execution evidence orderId does not match intent.");
+    }
+    if (intent.action === "cex.get_order_status") {
+      if (executionResult.orderId && executionResult.orderId !== intent.orderId) {
+        throw new Error("Connector execution evidence orderId does not match intent.");
+      }
+      if (!executionResult.orderStatus) {
+        throw new Error("Connector order status evidence is missing.");
+      }
+      if (executionResult.orderStatus.orderId !== intent.orderId) {
+        throw new Error("Connector order status orderId does not match intent.");
+      }
+      if (executionResult.orderStatus.symbol !== intent.symbol) {
+        throw new Error("Connector order status symbol does not match intent.");
+      }
+    }
+    if (intent.action === "cex.place_order" && executionResult.orderStatus) {
+      if (executionResult.orderStatus.symbol !== intent.symbol) {
+        throw new Error("Connector order status symbol does not match intent.");
+      }
+      if (executionResult.orderStatus.side.toLowerCase() !== intent.side) {
+        throw new Error("Connector order status side does not match intent.");
+      }
+      if (
+        executionResult.orderId &&
+        executionResult.orderStatus.orderId !== executionResult.orderId
+      ) {
+        throw new Error("Connector order status orderId does not match execution evidence.");
+      }
+    }
   }
 
   private executionKindForIntent(intent: TradingIntent): BrokerExecutionKind {

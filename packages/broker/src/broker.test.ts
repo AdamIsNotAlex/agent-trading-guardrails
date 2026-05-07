@@ -1,9 +1,11 @@
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ApprovalStore } from "@guardrails/approval";
 import { BrokerExecutionResult, type TradingIntent } from "@guardrails/schemas";
 import {
+  binanceCancelOrder,
   binanceOrderStatus,
   binanceSpotOrder,
   ethereumSepoliaSigning,
@@ -26,6 +28,19 @@ const config: BrokerConfig = {
   canaryLiveEnabled: true,
   decisionVerificationSecret: "test-decision-secret-with-32-bytes",
 };
+
+function terminalAuditEventId(
+  intent: TradingIntent,
+  correlationId: string,
+  eventType: "broker.executed" | "broker.failed",
+): string {
+  const hash = createHash("sha256")
+    .update(
+      `${eventType}:${intent.intentId}:${intent.idempotencyKey}:${intent.principal}:${intent.action}:${intent.resource}:${correlationId}`,
+    )
+    .digest("hex");
+  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-8${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
+}
 
 function makeApproval(intent: TradingIntent = binanceSpotOrder): GuardrailApproval {
   const correlationId = "corr-001";
@@ -401,6 +416,158 @@ describe("ExecutionBroker", () => {
     expect(result.orderStatus).toEqual(orderStatus);
     expect(() => BrokerExecutionResult.parse(result)).not.toThrow();
     expect(execution?.data).toMatchObject({ orderStatus });
+  });
+
+  it("executes paper cancel intents with matching order evidence", async () => {
+    const audit = makeAudit();
+    const broker = new ExecutionBroker(
+      config,
+      new PaperExecutionConnector(),
+      new InMemoryKillSwitch(),
+      audit,
+      makeIdempotency(),
+    );
+
+    const result = await broker.execute(makeApproval(binanceCancelOrder));
+
+    expect(result).toMatchObject({
+      status: "executed",
+      executionKind: "cex_cancel",
+      orderId: binanceCancelOrder.orderId,
+    });
+    expect(audit.events.some((event) => event.eventType === "broker.executed")).toBe(true);
+  });
+
+  it("stores terminal failure when cancel evidence order ID mismatches intent", async () => {
+    const execute = vi.fn(async () => ({ orderId: "other-order" }));
+    const audit = makeAudit();
+    const connector: ExecutionConnector = {
+      execute,
+      async revalidate() {
+        return { passed: true };
+      },
+    };
+    const broker = new ExecutionBroker(
+      config,
+      connector,
+      new InMemoryKillSwitch(),
+      audit,
+      makeIdempotency(),
+    );
+
+    const result = await broker.execute(makeApproval(binanceCancelOrder));
+
+    expect(result).toMatchObject({
+      status: "failed",
+      rejectionReason: "Execution evidence validation failed.",
+    });
+    expect(audit.events.some((event) => event.eventType === "broker.failed")).toBe(true);
+  });
+
+  it("stores terminal failure when order status evidence mismatches intent", async () => {
+    const execute = vi.fn(async () => ({
+      orderStatus: {
+        orderId: "other-order",
+        symbol: binanceOrderStatus.symbol,
+        side: "BUY",
+        status: "FILLED",
+        executedQty: 0.002,
+        avgPrice: 3500,
+      },
+    }));
+    const audit = makeAudit();
+    const connector: ExecutionConnector = {
+      execute,
+      async revalidate() {
+        return { passed: true };
+      },
+    };
+    const broker = new ExecutionBroker(
+      config,
+      connector,
+      new InMemoryKillSwitch(),
+      audit,
+      makeIdempotency(),
+    );
+
+    const result = await broker.execute(makeApproval(binanceOrderStatus));
+
+    expect(result).toMatchObject({
+      status: "failed",
+      rejectionReason: "Execution evidence validation failed.",
+    });
+    expect(audit.events.some((event) => event.eventType === "broker.failed")).toBe(true);
+  });
+
+  it("stores terminal failure when place-order status evidence mismatches execution order ID", async () => {
+    const execute = vi.fn(async () => ({
+      orderId: "order-1",
+      orderStatus: {
+        orderId: "order-2",
+        symbol: binanceSpotOrder.symbol,
+        side: binanceSpotOrder.side.toUpperCase(),
+        status: "FILLED",
+        executedQty: 0.002,
+        avgPrice: 3500,
+      },
+    }));
+    const audit = makeAudit();
+    const connector: ExecutionConnector = {
+      execute,
+      async revalidate() {
+        return { passed: true };
+      },
+    };
+    const broker = new ExecutionBroker(
+      config,
+      connector,
+      new InMemoryKillSwitch(),
+      audit,
+      makeIdempotency(),
+    );
+
+    const result = await broker.execute(makeApproval(binanceSpotOrder));
+
+    expect(result).toMatchObject({
+      status: "failed",
+      rejectionReason: "Execution evidence validation failed.",
+    });
+    expect(audit.events.some((event) => event.eventType === "broker.failed")).toBe(true);
+  });
+
+  it("stores terminal failure when place-order status side mismatches intent", async () => {
+    const execute = vi.fn(async () => ({
+      orderStatus: {
+        orderId: "order-1",
+        symbol: binanceSpotOrder.symbol,
+        side: binanceSpotOrder.side === "buy" ? "SELL" : "BUY",
+        status: "FILLED",
+        executedQty: 0.002,
+        avgPrice: 3500,
+      },
+    }));
+    const audit = makeAudit();
+    const connector: ExecutionConnector = {
+      execute,
+      async revalidate() {
+        return { passed: true };
+      },
+    };
+    const broker = new ExecutionBroker(
+      config,
+      connector,
+      new InMemoryKillSwitch(),
+      audit,
+      makeIdempotency(),
+    );
+
+    const result = await broker.execute(makeApproval(binanceSpotOrder));
+
+    expect(result).toMatchObject({
+      status: "failed",
+      rejectionReason: "Execution evidence validation failed.",
+    });
+    expect(audit.events.some((event) => event.eventType === "broker.failed")).toBe(true);
   });
 
   it("stores terminal failure when connector returns no execution evidence", async () => {
@@ -1412,7 +1579,7 @@ describe("ExecutionBroker", () => {
           executedAt: "2026-05-04T12:00:04.000Z",
         },
         {
-          eventId: "11111111-1111-4111-8111-111111111111",
+          eventId: terminalAuditEventId(binanceSpotOrder, "corr-001", "broker.executed"),
           eventType: "broker.forged",
           environment: "canary_live",
           intentId: binanceSpotOrder.intentId,
@@ -1453,7 +1620,7 @@ describe("ExecutionBroker", () => {
           executedAt: "2026-05-04T12:00:04.000Z",
         },
         {
-          eventId: "11111111-1111-4111-8111-111111111111",
+          eventId: terminalAuditEventId(binanceSpotOrder, "corr-001", "broker.executed"),
           eventType: "broker.failed",
           environment: "canary_live",
           intentId: binanceSpotOrder.intentId,
@@ -1494,7 +1661,7 @@ describe("ExecutionBroker", () => {
           executedAt: "2026-05-04T12:00:04.000Z",
         },
         {
-          eventId: "11111111-1111-4111-8111-111111111111",
+          eventId: terminalAuditEventId(binanceSpotOrder, "corr-001", "broker.executed"),
           eventType: "broker.executed",
           environment: "canary_live",
           intentId: binanceSpotOrder.intentId,
@@ -1534,7 +1701,7 @@ describe("ExecutionBroker", () => {
           executedAt: "2026-05-04T12:00:04.000Z",
         },
         {
-          eventId: "11111111-1111-4111-8111-111111111111",
+          eventId: terminalAuditEventId(binanceSpotOrder, "corr-001", "broker.executed"),
           eventType: "broker.failed",
           environment: "canary_live",
           intentId: binanceSpotOrder.intentId,
@@ -1579,7 +1746,7 @@ describe("ExecutionBroker", () => {
           executedAt: "2026-05-04T12:00:04.000Z",
         },
         {
-          eventId: "11111111-1111-4111-8111-111111111111",
+          eventId: terminalAuditEventId(binanceSpotOrder, "corr-001", "broker.executed"),
           eventType: "broker.executed",
           environment: "production",
           intentId: binanceSpotOrder.intentId,
@@ -1595,6 +1762,175 @@ describe("ExecutionBroker", () => {
           binanceSpotOrder,
         ),
       ).toThrow("pendingAudit environment mismatches intent");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects cached file results with mismatched execution kinds", () => {
+    const dir = mkdtempSync(join(tmpdir(), "broker-idempotency-"));
+    try {
+      const path = join(dir, "store.json");
+      const firstStore = new FileBrokerIdempotencyStore(path);
+      const reservation = firstStore.begin(binanceSpotOrder.idempotencyKey, binanceSpotOrder);
+      if (reservation.status !== "reserved")
+        throw new Error("Expected reserved idempotency entry.");
+
+      reservation.complete({
+        intentId: binanceSpotOrder.intentId,
+        idempotencyKey: binanceSpotOrder.idempotencyKey,
+        status: "executed",
+        executionKind: "cex_order",
+        orderId: "order-1",
+        revalidationPassed: true,
+        executedAt: "2026-05-04T12:00:04.000Z",
+      });
+      const state = JSON.parse(readFileSync(path, "utf8"));
+      const entry = Object.values(state.entries)[0] as { result: { executionKind: string } };
+      entry.result.executionKind = "cex_cancel";
+      writeFileSync(path, `${JSON.stringify(state, null, 2)}\n`);
+
+      expect(() =>
+        new FileBrokerIdempotencyStore(path).begin(
+          binanceSpotOrder.idempotencyKey,
+          binanceSpotOrder,
+        ),
+      ).toThrow("result executionKind mismatches intent");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects cached file place-order results with mismatched status evidence", () => {
+    const dir = mkdtempSync(join(tmpdir(), "broker-idempotency-"));
+    try {
+      const path = join(dir, "store.json");
+      const firstStore = new FileBrokerIdempotencyStore(path);
+      const reservation = firstStore.begin(binanceSpotOrder.idempotencyKey, binanceSpotOrder);
+      if (reservation.status !== "reserved")
+        throw new Error("Expected reserved idempotency entry.");
+
+      reservation.complete({
+        intentId: binanceSpotOrder.intentId,
+        idempotencyKey: binanceSpotOrder.idempotencyKey,
+        status: "executed",
+        executionKind: "cex_order",
+        orderId: "order-1",
+        orderStatus: {
+          orderId: "order-1",
+          symbol: binanceSpotOrder.symbol,
+          side: binanceSpotOrder.side.toUpperCase(),
+          status: "FILLED",
+          executedQty: 0.002,
+          avgPrice: 3500,
+        },
+        revalidationPassed: true,
+        executedAt: "2026-05-04T12:00:04.000Z",
+      });
+      const state = JSON.parse(readFileSync(path, "utf8"));
+      const entry = Object.values(state.entries)[0] as {
+        result: { orderStatus: { side: string } };
+      };
+      entry.result.orderStatus.side = binanceSpotOrder.side === "buy" ? "SELL" : "BUY";
+      writeFileSync(path, `${JSON.stringify(state, null, 2)}\n`);
+
+      expect(() =>
+        new FileBrokerIdempotencyStore(path).begin(
+          binanceSpotOrder.idempotencyKey,
+          binanceSpotOrder,
+        ),
+      ).toThrow("result orderStatus mismatches intent");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects persisted pending audit events with mismatched event IDs", () => {
+    const dir = mkdtempSync(join(tmpdir(), "broker-idempotency-"));
+    try {
+      const path = join(dir, "store.json");
+      const firstStore = new FileBrokerIdempotencyStore(path);
+      const reservation = firstStore.begin(binanceSpotOrder.idempotencyKey, binanceSpotOrder);
+      if (reservation.status !== "reserved")
+        throw new Error("Expected reserved idempotency entry.");
+
+      reservation.complete(
+        {
+          intentId: binanceSpotOrder.intentId,
+          idempotencyKey: binanceSpotOrder.idempotencyKey,
+          status: "executed",
+          executionKind: "cex_order",
+          orderId: "order-1",
+          revalidationPassed: true,
+          executedAt: "2026-05-04T12:00:04.000Z",
+        },
+        {
+          eventId: "11111111-1111-4111-8111-111111111111",
+          eventType: "broker.executed",
+          environment: "canary_live",
+          intentId: binanceSpotOrder.intentId,
+          principal: binanceSpotOrder.principal,
+          correlationId: "corr-001",
+          data: { status: "executed", orderId: "order-1" },
+        },
+      );
+
+      expect(() =>
+        new FileBrokerIdempotencyStore(path).begin(
+          binanceSpotOrder.idempotencyKey,
+          binanceSpotOrder,
+        ),
+      ).toThrow("pendingAudit eventId mismatches intent");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects persisted pending audit events with mismatched audit hashes", () => {
+    const dir = mkdtempSync(join(tmpdir(), "broker-idempotency-"));
+    try {
+      const path = join(dir, "store.json");
+      const firstStore = new FileBrokerIdempotencyStore(path);
+      const reservation = firstStore.begin(binanceSpotOrder.idempotencyKey, binanceSpotOrder);
+      if (reservation.status !== "reserved")
+        throw new Error("Expected reserved idempotency entry.");
+
+      reservation.complete(
+        {
+          intentId: binanceSpotOrder.intentId,
+          idempotencyKey: binanceSpotOrder.idempotencyKey,
+          status: "failed",
+          revalidationPassed: true,
+          rejectionReason: "Execution failed.",
+          executedAt: "2026-05-04T12:00:04.000Z",
+        },
+        {
+          eventId: terminalAuditEventId(binanceSpotOrder, "corr-001", "broker.failed"),
+          eventType: "broker.failed",
+          environment: "canary_live",
+          intentId: binanceSpotOrder.intentId,
+          principal: binanceSpotOrder.principal,
+          correlationId: "corr-001",
+          data: {
+            status: "failed",
+            rejectionReason: "Execution failed.",
+            error: "original error",
+          },
+        },
+      );
+      const state = JSON.parse(readFileSync(path, "utf8"));
+      const entry = Object.values(state.entries)[0] as {
+        pendingAudit: { data: { error: string } };
+      };
+      entry.pendingAudit.data.error = "forged error";
+      writeFileSync(path, `${JSON.stringify(state, null, 2)}\n`);
+
+      expect(() =>
+        new FileBrokerIdempotencyStore(path).begin(
+          binanceSpotOrder.idempotencyKey,
+          binanceSpotOrder,
+        ),
+      ).toThrow("pendingAudit hash mismatches event");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

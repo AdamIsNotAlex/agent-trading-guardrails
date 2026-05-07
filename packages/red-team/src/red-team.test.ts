@@ -81,7 +81,7 @@ function makeAllowPolicy(): PolicyEvaluator {
     async evaluate(): Promise<PolicyOutput> {
       return {
         decision: "allow",
-        reasons: [],
+        reasons: [{ rule: "test", message: "Allowed." }],
         requiresHumanApproval: false,
         matchedAllowRules: ["test"],
         matchedDenyRules: [],
@@ -139,7 +139,7 @@ function makeOnchainHardDenyPolicy(): PolicyEvaluator {
       }
       return {
         decision: "allow",
-        reasons: [],
+        reasons: [{ rule: "ethereum-sepolia-sign", message: "Allowed." }],
         requiresHumanApproval: false,
         matchedAllowRules: ["ethereum-sepolia-sign"],
         matchedDenyRules: [],

@@ -37,6 +37,7 @@ interface CachedEntry {
   payloadHash: string;
   result: BrokerExecutionResult;
   pendingAudit?: BrokerAuditEvent;
+  pendingAuditHash?: string;
   expiresAt?: number;
   completePending?(result: BrokerExecutionResult): void;
   abortPending?(error: unknown): void;
@@ -107,6 +108,7 @@ export class InMemoryBrokerIdempotencyStore implements BrokerIdempotencyStore {
           payloadHash,
           result,
           pendingAudit,
+          pendingAuditHash: pendingAudit ? hashPendingAudit(pendingAudit) : undefined,
           expiresAt: this.options.ttlMs === undefined ? undefined : this.now() + this.options.ttlMs,
           completePending: complete,
           abortPending: abort,
@@ -172,6 +174,7 @@ type FileEntry =
       payloadHash: string;
       result: BrokerExecutionResult;
       pendingAudit?: BrokerAuditEvent;
+      pendingAuditHash?: string;
     }
   | {
       status: "in_progress";
@@ -261,6 +264,7 @@ export class FileBrokerIdempotencyStore implements BrokerIdempotencyStore {
               payloadHash,
               result,
               pendingAudit,
+              pendingAuditHash: pendingAudit ? hashPendingAudit(pendingAudit) : undefined,
             };
           });
         } catch (err) {
@@ -441,6 +445,10 @@ export class FileBrokerIdempotencyStore implements BrokerIdempotencyStore {
   }
 }
 
+export function hashPendingAudit(event: BrokerAuditEvent): string {
+  return createHash("sha256").update(stableStringify(event)).digest("hex");
+}
+
 export function hashIntentPayload(intent: TradingIntent): string {
   return createHash("sha256").update(stableStringify(intent)).digest("hex");
 }
@@ -452,6 +460,19 @@ export function scopeIdempotencyKey(key: string, intent: TradingIntent): string 
     action: intent.action,
     resource: intent.resource,
   });
+}
+
+function terminalAuditEventId(
+  intent: TradingIntent,
+  correlationId: string,
+  eventType: "broker.executed" | "broker.failed",
+): string {
+  const hash = createHash("sha256")
+    .update(
+      `${eventType}:${intent.intentId}:${intent.idempotencyKey}:${intent.principal}:${intent.action}:${intent.resource}:${correlationId}`,
+    )
+    .digest("hex");
+  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-8${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
 }
 
 function waitForFileLockRetry(): void {
@@ -502,13 +523,16 @@ function parseFileEntry(key: string, value: unknown): FileEntry {
   if (!result.success) {
     throw new Error(`Invalid idempotency store entry ${key}: cached result is invalid.`);
   }
-  const pendingAudit = validatePendingAudit(key, result.data, value.pendingAudit);
+  const pendingAuditHash =
+    typeof value.pendingAuditHash === "string" ? value.pendingAuditHash : undefined;
+  const pendingAudit = validatePendingAudit(key, result.data, value.pendingAudit, pendingAuditHash);
 
   return {
     status: "cached",
     payloadHash: value.payloadHash,
     result: result.data,
     pendingAudit,
+    pendingAuditHash,
   };
 }
 
@@ -517,6 +541,15 @@ function validateCachedEntryForIntent(
   entry: CachedEntry,
   intent: TradingIntent,
 ): void {
+  if (entry.result.intentId !== intent.intentId) {
+    throw new Error(`Invalid idempotency store entry ${key}: result intentId mismatches intent.`);
+  }
+  if (entry.result.idempotencyKey !== intent.idempotencyKey) {
+    throw new Error(
+      `Invalid idempotency store entry ${key}: result idempotencyKey mismatches intent.`,
+    );
+  }
+  validateCachedResultEvidenceForIntent(key, entry.result, intent);
   if (!entry.pendingAudit) return;
   if (entry.pendingAudit.environment !== intent.environment) {
     throw new Error(
@@ -528,14 +561,102 @@ function validateCachedEntryForIntent(
       `Invalid idempotency store entry ${key}: pendingAudit principal mismatches intent.`,
     );
   }
+  const eventType = entry.pendingAudit.eventType;
+  if (eventType !== "broker.executed" && eventType !== "broker.failed") {
+    throw new Error(
+      `Invalid idempotency store entry ${key}: pendingAudit eventType mismatches result.`,
+    );
+  }
+  if (
+    entry.pendingAudit.eventId !==
+    terminalAuditEventId(intent, entry.pendingAudit.correlationId, eventType)
+  ) {
+    throw new Error(
+      `Invalid idempotency store entry ${key}: pendingAudit eventId mismatches intent.`,
+    );
+  }
+}
+
+function validateCachedResultEvidenceForIntent(
+  key: string,
+  result: BrokerExecutionResult,
+  intent: TradingIntent,
+): void {
+  const expectedKind = executionKindForIntent(intent);
+  if (result.status === "executed" && result.executionKind !== expectedKind) {
+    throw new Error(
+      `Invalid idempotency store entry ${key}: result executionKind mismatches intent.`,
+    );
+  }
+  if (
+    intent.action === "cex.cancel_order" &&
+    "orderId" in result &&
+    result.orderId !== intent.orderId
+  ) {
+    throw new Error(`Invalid idempotency store entry ${key}: result orderId mismatches intent.`);
+  }
+  if (intent.action === "cex.get_order_status") {
+    if ("orderId" in result && result.orderId !== undefined && result.orderId !== intent.orderId) {
+      throw new Error(`Invalid idempotency store entry ${key}: result orderId mismatches intent.`);
+    }
+    const orderStatus = "orderStatus" in result ? result.orderStatus : undefined;
+    if (!orderStatus || orderStatus.orderId !== intent.orderId) {
+      throw new Error(
+        `Invalid idempotency store entry ${key}: result orderStatus mismatches intent.`,
+      );
+    }
+    if (orderStatus.symbol !== intent.symbol) {
+      throw new Error(
+        `Invalid idempotency store entry ${key}: result orderStatus mismatches intent.`,
+      );
+    }
+  }
+  if (intent.action === "cex.place_order") {
+    const orderStatus = "orderStatus" in result ? result.orderStatus : undefined;
+    if (!orderStatus) return;
+    if (orderStatus.symbol !== intent.symbol) {
+      throw new Error(
+        `Invalid idempotency store entry ${key}: result orderStatus mismatches intent.`,
+      );
+    }
+    if (orderStatus.side.toLowerCase() !== intent.side) {
+      throw new Error(
+        `Invalid idempotency store entry ${key}: result orderStatus mismatches intent.`,
+      );
+    }
+    if ("orderId" in result && orderStatus.orderId !== result.orderId) {
+      throw new Error(
+        `Invalid idempotency store entry ${key}: result orderStatus mismatches result.`,
+      );
+    }
+  }
+}
+
+function executionKindForIntent(intent: TradingIntent): BrokerExecutionResult["executionKind"] {
+  switch (intent.action) {
+    case "cex.place_order":
+      return "cex_order";
+    case "cex.cancel_order":
+      return "cex_cancel";
+    case "cex.get_order_status":
+      return "cex_order_status";
+    case "onchain.request_signature":
+      return "onchain_signature";
+    case "onchain.simulate_transaction":
+      return "onchain_simulation";
+  }
 }
 
 function validatePendingAudit(
   key: string,
   result: BrokerExecutionResult,
   value: unknown,
+  hash: string | undefined,
 ): BrokerAuditEvent | undefined {
   if (value === undefined) return undefined;
+  if (typeof hash !== "string" || !/^[0-9a-f]{64}$/.test(hash)) {
+    throw new Error(`Invalid idempotency store entry ${key}: pendingAuditHash is invalid.`);
+  }
   if (!isBrokerAuditEvent(value)) {
     throw new Error(`Invalid idempotency store entry ${key}: pendingAudit is invalid.`);
   }
@@ -553,6 +674,9 @@ function validatePendingAudit(
   if (!pendingAuditDataMatchesResult(value.data, result)) {
     throw new Error(`Invalid idempotency store entry ${key}: pendingAudit data mismatches result.`);
   }
+  if (hashPendingAudit(value) !== hash) {
+    throw new Error(`Invalid idempotency store entry ${key}: pendingAudit hash mismatches event.`);
+  }
   return value;
 }
 
@@ -560,10 +684,14 @@ function pendingAuditDataMatchesResult(
   data: Record<string, unknown>,
   result: BrokerExecutionResult,
 ): boolean {
+  const allowedKeys = pendingAuditDataKeys(result);
+  if (Object.keys(data).some((key) => !allowedKeys.has(key))) return false;
   if (data.status !== result.status) return false;
   if ("rejectionReason" in result && data.rejectionReason !== result.rejectionReason) return false;
   if (!resultHasField(result, "rejectionReason") && data.rejectionReason !== undefined)
     return false;
+  if (data.reason !== undefined && typeof data.reason !== "string") return false;
+  if (data.error !== undefined && typeof data.error !== "string") return false;
   if ("orderId" in result && data.orderId !== result.orderId) return false;
   if (!resultHasField(result, "orderId") && data.orderId !== undefined) return false;
   if ("transactionHash" in result && data.transactionHash !== result.transactionHash) return false;
@@ -581,6 +709,24 @@ function pendingAuditDataMatchesResult(
     return false;
   }
   return true;
+}
+
+function pendingAuditDataKeys(result: BrokerExecutionResult): Set<string> {
+  const keys = new Set(["status"]);
+  for (const key of [
+    "rejectionReason",
+    "orderId",
+    "transactionHash",
+    "orderStatus",
+    "simulationEvidence",
+  ]) {
+    if (resultHasField(result, key)) keys.add(key);
+  }
+  if (result.status === "failed") {
+    keys.add("reason");
+    keys.add("error");
+  }
+  return keys;
 }
 
 function resultHasField(result: BrokerExecutionResult, field: string): boolean {

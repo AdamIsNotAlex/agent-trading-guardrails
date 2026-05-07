@@ -394,7 +394,7 @@ describe("PolicyOutput", () => {
   it("accepts valid allow decision", () => {
     const output = {
       decision: "allow" as const,
-      reasons: [],
+      reasons: [{ rule: "binance-spot-low-notional", message: "Allowed." }],
       requiresHumanApproval: false,
       matchedAllowRules: ["binance-spot-low-notional"],
       matchedDenyRules: [],
@@ -448,6 +448,19 @@ describe("PolicyOutput", () => {
         requiresHumanApproval: true,
         matchedAllowRules: [],
         matchedDenyRules: ["test"],
+        evaluatedAt: "2026-05-04T12:00:02.000Z",
+      }),
+    ).toThrow();
+  });
+
+  it("rejects needs_human without reasons", () => {
+    expect(() =>
+      PolicyOutput.parse({
+        decision: "needs_human",
+        reasons: [],
+        requiresHumanApproval: true,
+        matchedAllowRules: [],
+        matchedDenyRules: [],
         evaluatedAt: "2026-05-04T12:00:02.000Z",
       }),
     ).toThrow();

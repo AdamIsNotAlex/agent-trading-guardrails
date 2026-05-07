@@ -48,7 +48,7 @@ function makePolicy(): PolicyEvaluator {
     async evaluate(_input: PolicyInput): Promise<PolicyOutput> {
       return {
         decision: "allow",
-        reasons: [],
+        reasons: [{ rule: "dev-all", message: "Allowed." }],
         requiresHumanApproval: false,
         matchedAllowRules: ["dev-all"],
         matchedDenyRules: [],

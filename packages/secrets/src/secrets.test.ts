@@ -400,6 +400,20 @@ describe("Secret redaction", () => {
     expect(redacted).not.toContain("word1 word2 word3 word4");
   });
 
+  it("redacts authorization bearer tokens in text", () => {
+    const text = "Authorization: Bearer secret-token";
+    const redacted = redactSecrets(text);
+    expect(redacted).toBe("Authorization: Bearer [REDACTED]");
+    expect(redacted).not.toContain("secret-token");
+  });
+
+  it("redacts unlabeled bearer tokens in text", () => {
+    const text = "upstream failed with Bearer secret-token";
+    const redacted = redactSecrets(text);
+    expect(redacted).toBe("upstream failed with Bearer [REDACTED]");
+    expect(redacted).not.toContain("secret-token");
+  });
+
   it("redacts secret fields in objects", () => {
     const obj = {
       name: "test",

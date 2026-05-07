@@ -241,6 +241,7 @@ describe("AuditWriter", () => {
     const privateKey = "audit-private-key-value";
     const vaultToken = "audit-vault-token-value";
     const authorization = "Bearer audit-authorization-token";
+    const unlabeledBearerToken = "Bearer audit-unlabeled-token";
     const pemPrivateKey =
       "-----BEGIN PRIVATE KEY-----\naudit-pem-secret\n-----END PRIVATE KEY-----";
     const hexPrivateKey = `${"a".repeat(64)}`;
@@ -256,7 +257,12 @@ describe("AuditWriter", () => {
           privateKey,
           vaultToken,
           headers: { authorization },
-          notes: [pemPrivateKey, `private key is 0x${hexPrivateKey}`],
+          notes: [
+            pemPrivateKey,
+            `private key is 0x${hexPrivateKey}`,
+            `Authorization: ${authorization}`,
+            `connector failed with ${unlabeledBearerToken}`,
+          ],
           nonSensitive: "keep-me",
         },
       },
@@ -271,6 +277,7 @@ describe("AuditWriter", () => {
       privateKey,
       vaultToken,
       authorization,
+      unlabeledBearerToken,
       "audit-pem-secret",
       hexPrivateKey,
     ]) {
@@ -283,7 +290,12 @@ describe("AuditWriter", () => {
       headers: { authorization: "[REDACTED]" },
       nonSensitive: "keep-me",
     });
-    expect(parsed.nested.notes).toEqual(["[REDACTED]", "private key is [REDACTED]"]);
+    expect(parsed.nested.notes).toEqual([
+      "[REDACTED]",
+      "private key is [REDACTED]",
+      "Authorization: Bearer [REDACTED]",
+      "connector failed with Bearer [REDACTED]",
+    ]);
   });
 
   it("maintains hash chain across events", () => {

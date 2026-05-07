@@ -163,6 +163,20 @@ describe("transformOpaOutput", () => {
     ).toThrow("non-deny decision cannot include hard-deny evidence");
   });
 
+  it("rejects allow output with escalation evidence", () => {
+    expect(() =>
+      transformOpaOutput({
+        decision: "allow",
+        reasons: [{ rule: "allow-binance-spot", message: "Allowed." }],
+        escalation_reasons: [{ rule: "daily_notional_limit", message: "Daily notional exceeded." }],
+        requires_human_approval: false,
+        matched_allow_rules: ["allow-binance-spot"],
+        matched_deny_rules: [],
+        evaluatedAt,
+      }),
+    ).toThrow("allow decision cannot include escalation evidence");
+  });
+
   it("rejects needs_human output with hard deny evidence", () => {
     expect(() =>
       transformOpaOutput({
@@ -195,11 +209,26 @@ describe("transformOpaOutput", () => {
       transformOpaOutput({
         decision: "needs_human",
         reasons: [{ rule: "daily_notional_limit", message: "daily_notional_limit" }],
+        escalation_reasons: ["daily_notional_limit"],
         requires_human_approval: false,
         matched_allow_rules: [],
         matched_deny_rules: [],
         evaluatedAt,
       }),
     ).toThrow();
+  });
+
+  it("rejects needs_human output with reasons outside escalation evidence", () => {
+    expect(() =>
+      transformOpaOutput({
+        decision: "needs_human",
+        reasons: [{ rule: "unrelated", message: "Unrelated." }],
+        escalation_reasons: ["daily_notional_limit"],
+        requires_human_approval: true,
+        matched_allow_rules: [],
+        matched_deny_rules: [],
+        evaluatedAt,
+      }),
+    ).toThrow("needs_human decision reasons must match escalation evidence");
   });
 });

@@ -11,9 +11,13 @@ export class PaperExecutionConnector implements ExecutionConnector {
     intent: TradingIntent,
     beforeSideEffect?: BeforeConnectorSideEffect,
   ): Promise<ConnectorExecutionResult> {
-    if (intent.action === "cex.place_order" || intent.action === "cex.cancel_order") {
+    if (intent.action === "cex.place_order") {
       beforeSideEffect?.();
       return { orderId: `paper-${randomUUID().slice(0, 8)}` };
+    }
+    if (intent.action === "cex.cancel_order") {
+      beforeSideEffect?.();
+      return { orderId: intent.orderId };
     }
     if (intent.action === "onchain.request_signature") {
       beforeSideEffect?.();
