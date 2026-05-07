@@ -14,8 +14,10 @@ import {
 } from "node:fs";
 import { dirname } from "node:path";
 import {
+  AuditEventType,
   type BrokerExecutionResult,
   BrokerExecutionResult as BrokerExecutionResultSchema,
+  Environment,
   type TradingIntent,
 } from "@guardrails/schemas";
 import {
@@ -499,10 +501,7 @@ function parseFileEntry(key: string, value: unknown): FileEntry {
   if (!result.success) {
     throw new Error(`Invalid idempotency store entry ${key}: cached result is invalid.`);
   }
-  const pendingAudit = value.pendingAudit;
-  if (pendingAudit !== undefined && !isBrokerAuditEvent(pendingAudit)) {
-    throw new Error(`Invalid idempotency store entry ${key}: pendingAudit is invalid.`);
-  }
+  const pendingAudit = validatePendingAudit(key, result.data, value.pendingAudit);
 
   return {
     status: "cached",
@@ -512,11 +511,34 @@ function parseFileEntry(key: string, value: unknown): FileEntry {
   };
 }
 
+function validatePendingAudit(
+  key: string,
+  result: BrokerExecutionResult,
+  value: unknown,
+): BrokerAuditEvent | undefined {
+  if (value === undefined) return undefined;
+  if (!isBrokerAuditEvent(value)) {
+    throw new Error(`Invalid idempotency store entry ${key}: pendingAudit is invalid.`);
+  }
+  const expectedEventType = result.status === "executed" ? "broker.executed" : "broker.failed";
+  if (value.eventType !== expectedEventType) {
+    throw new Error(
+      `Invalid idempotency store entry ${key}: pendingAudit eventType mismatches result.`,
+    );
+  }
+  if (value.intentId !== result.intentId) {
+    throw new Error(
+      `Invalid idempotency store entry ${key}: pendingAudit intentId mismatches result.`,
+    );
+  }
+  return value;
+}
+
 function isBrokerAuditEvent(value: unknown): value is BrokerAuditEvent {
   return (
     isPlainObject(value) &&
-    typeof value.eventType === "string" &&
-    typeof value.environment === "string" &&
+    AuditEventType.safeParse(value.eventType).success &&
+    Environment.safeParse(value.environment).success &&
     typeof value.correlationId === "string" &&
     isPlainObject(value.data) &&
     optionalString(value.eventId) &&

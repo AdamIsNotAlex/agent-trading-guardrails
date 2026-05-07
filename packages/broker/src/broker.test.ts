@@ -1392,6 +1392,86 @@ describe("ExecutionBroker", () => {
     }
   });
 
+  it("rejects persisted pending audit events with invalid enum values", () => {
+    const dir = mkdtempSync(join(tmpdir(), "broker-idempotency-"));
+    try {
+      const path = join(dir, "store.json");
+      const firstStore = new FileBrokerIdempotencyStore(path);
+      const reservation = firstStore.begin(binanceSpotOrder.idempotencyKey, binanceSpotOrder);
+      if (reservation.status !== "reserved")
+        throw new Error("Expected reserved idempotency entry.");
+
+      reservation.complete(
+        {
+          intentId: binanceSpotOrder.intentId,
+          idempotencyKey: binanceSpotOrder.idempotencyKey,
+          status: "executed",
+          executionKind: "cex_order",
+          orderId: "order-1",
+          revalidationPassed: true,
+          executedAt: "2026-05-04T12:00:04.000Z",
+        },
+        {
+          eventType: "broker.forged",
+          environment: "canary_live",
+          intentId: binanceSpotOrder.intentId,
+          principal: binanceSpotOrder.principal,
+          correlationId: "corr-001",
+          data: { orderId: "order-1" },
+        } as never,
+      );
+
+      expect(() =>
+        new FileBrokerIdempotencyStore(path).begin(
+          binanceSpotOrder.idempotencyKey,
+          binanceSpotOrder,
+        ),
+      ).toThrow("pendingAudit is invalid");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects persisted pending audit events that mismatch cached results", () => {
+    const dir = mkdtempSync(join(tmpdir(), "broker-idempotency-"));
+    try {
+      const path = join(dir, "store.json");
+      const firstStore = new FileBrokerIdempotencyStore(path);
+      const reservation = firstStore.begin(binanceSpotOrder.idempotencyKey, binanceSpotOrder);
+      if (reservation.status !== "reserved")
+        throw new Error("Expected reserved idempotency entry.");
+
+      reservation.complete(
+        {
+          intentId: binanceSpotOrder.intentId,
+          idempotencyKey: binanceSpotOrder.idempotencyKey,
+          status: "executed",
+          executionKind: "cex_order",
+          orderId: "order-1",
+          revalidationPassed: true,
+          executedAt: "2026-05-04T12:00:04.000Z",
+        },
+        {
+          eventType: "broker.failed",
+          environment: "canary_live",
+          intentId: binanceSpotOrder.intentId,
+          principal: binanceSpotOrder.principal,
+          correlationId: "corr-001",
+          data: { orderId: "order-1" },
+        },
+      );
+
+      expect(() =>
+        new FileBrokerIdempotencyStore(path).begin(
+          binanceSpotOrder.idempotencyKey,
+          binanceSpotOrder,
+        ),
+      ).toThrow("pendingAudit eventType mismatches result");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("initializes an empty file idempotency store when the state file is missing", async () => {
     const dir = mkdtempSync(join(tmpdir(), "broker-idempotency-"));
     try {
