@@ -60,6 +60,12 @@ hard_deny_reasons contains {"rule": "token_approval_amount_invalid", "message": 
 	not valid_decimal_string(amount)
 }
 
+hard_deny_reasons contains {"rule": "token_approval_metadata_invalid", "message": "ERC-20 approvals require a valid decimal maximum approval amount."} if {
+	input.isTokenApproval == true
+	max_amount := object.get(input, "maxTokenApprovalAmount", null)
+	not valid_decimal_string(max_amount)
+}
+
 hard_deny_reasons contains {"rule": "token_approval_cap_exceeded", "message": "ERC-20 approval amount exceeds policy cap."} if {
 	input.isTokenApproval == true
 	input.tokenApprovalAmountExceedsCap == true

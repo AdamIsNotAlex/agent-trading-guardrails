@@ -44,6 +44,11 @@ function requiredField(raw: Record<string, unknown>, camel: string, snake: strin
   throw new Error(`OPA output missing ${snake}.`);
 }
 
+function allReasonsMatchRules(reasons: PolicyOutput["reasons"], rules: string[]): boolean {
+  const ruleSet = new Set(rules);
+  return reasons.every((reason) => ruleSet.has(reason.rule));
+}
+
 export function transformOpaOutput(raw: Record<string, unknown>): PolicyOutput {
   if (!("decision" in raw)) throw new Error("OPA output missing decision.");
 
@@ -92,6 +97,9 @@ export function transformOpaOutput(raw: Record<string, unknown>): PolicyOutput {
     }
     if (policyOutput.matchedDenyRules.length > 0) {
       throw new Error("allow decision cannot include matched deny rule evidence.");
+    }
+    if (!allReasonsMatchRules(policyOutput.reasons, policyOutput.matchedAllowRules)) {
+      throw new Error("allow decision reasons must match allow rule evidence.");
     }
   }
   if (policyOutput.decision === "deny" && policyOutput.reasons.length === 0) {

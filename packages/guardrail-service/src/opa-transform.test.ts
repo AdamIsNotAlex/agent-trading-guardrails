@@ -150,6 +150,19 @@ describe("transformOpaOutput", () => {
     ).toThrow("allow decision cannot include matched deny rule evidence");
   });
 
+  it("rejects allow output with deny reasons despite matched allow evidence", () => {
+    expect(() =>
+      transformOpaOutput({
+        decision: "allow",
+        reasons: [{ rule: "default_deny", message: "Default deny." }],
+        requires_human_approval: false,
+        matched_allow_rules: ["allow-binance-spot"],
+        matched_deny_rules: [],
+        evaluatedAt,
+      }),
+    ).toThrow("allow decision reasons must match allow rule evidence");
+  });
+
   it("rejects needs_human output without human approval flag", () => {
     expect(() =>
       transformOpaOutput({

@@ -302,6 +302,41 @@ test_hard_deny_approval_amount_invalid_when_non_decimal if {
 	reason.rule == "token_approval_amount_invalid"
 }
 
+# Hard deny: approval metadata amount is missing
+test_hard_deny_approval_metadata_invalid_when_missing if {
+	inp := object.union(base_input, {
+		"action": "onchain.request_signature",
+		"chain": "ethereum",
+		"resource": "onchain:ethereum:sepolia:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+		"isTokenApproval": true,
+		"tokenApprovalAmount": "100",
+		"tokenApprovalAmountMissing": false,
+		"tokenApprovalUnlimited": false,
+		"tokenApprovalAmountExceedsCap": false,
+	})
+	guardrail.decision == "deny" with input as inp
+	some reason in guardrail.hard_deny_reasons with input as inp
+	reason.rule == "token_approval_metadata_invalid"
+}
+
+# Hard deny: approval metadata amount is not decimal
+test_hard_deny_approval_metadata_invalid_when_non_decimal if {
+	inp := object.union(base_input, {
+		"action": "onchain.request_signature",
+		"chain": "ethereum",
+		"resource": "onchain:ethereum:sepolia:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+		"isTokenApproval": true,
+		"maxTokenApprovalAmount": "not-a-number",
+		"tokenApprovalAmount": "100",
+		"tokenApprovalAmountMissing": false,
+		"tokenApprovalUnlimited": false,
+		"tokenApprovalAmountExceedsCap": false,
+	})
+	guardrail.decision == "deny" with input as inp
+	some reason in guardrail.hard_deny_reasons with input as inp
+	reason.rule == "token_approval_metadata_invalid"
+}
+
 # Hard deny: approval amount exceeds requested metadata
 test_hard_deny_approval_amount_above_metadata if {
 	inp := object.union(base_input, {
@@ -347,6 +382,7 @@ test_finite_approval_within_cap_not_hard_denied_by_approval_rule if {
 		"resource": "onchain:ethereum:sepolia:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
 		"contractAddress": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
 		"isTokenApproval": true,
+		"maxTokenApprovalAmount": "100",
 		"tokenApprovalAmount": "100",
 		"tokenApprovalAmountMissing": false,
 		"tokenApprovalUnlimited": false,
