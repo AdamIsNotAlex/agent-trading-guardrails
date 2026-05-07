@@ -147,7 +147,21 @@ describe("transformOpaOutput", () => {
         matched_deny_rules: ["withdrawal_denied"],
         evaluatedAt,
       }),
-    ).toThrow("allow decision cannot include matched deny rule evidence");
+    ).toThrow("non-deny decision cannot include hard-deny evidence");
+  });
+
+  it("rejects needs_human output with hard deny evidence", () => {
+    expect(() =>
+      transformOpaOutput({
+        decision: "needs_human",
+        reasons: [{ rule: "daily_notional_limit", message: "daily_notional_limit" }],
+        hard_deny_reasons: [{ rule: "withdrawal_denied", message: "Withdrawals denied." }],
+        requires_human_approval: true,
+        matched_allow_rules: [],
+        matched_deny_rules: [],
+        evaluatedAt,
+      }),
+    ).toThrow("non-deny decision cannot include hard-deny evidence");
   });
 
   it("rejects allow output with deny reasons despite matched allow evidence", () => {

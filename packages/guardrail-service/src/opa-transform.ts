@@ -59,10 +59,11 @@ export function transformOpaOutput(raw: Record<string, unknown>): PolicyOutput {
   }
 
   const directReasons = hasDirectReasons ? normalizeReasons(raw.reasons, "reasons") : [];
+  const hardDenyReasons = normalizeOptionalReasons(raw.hard_deny_reasons, "hard_deny_reasons");
   const reasons = hasDirectReasons
     ? directReasons
     : [
-        ...normalizeOptionalReasons(raw.hard_deny_reasons, "hard_deny_reasons"),
+        ...hardDenyReasons,
         ...normalizeOptionalReasons(raw.escalation_reasons, "escalation_reasons"),
       ];
   const requiresHumanApproval = requiredField(
@@ -88,15 +89,17 @@ export function transformOpaOutput(raw: Record<string, unknown>): PolicyOutput {
     evaluatedAt: raw.evaluatedAt ?? new Date().toISOString(),
   });
 
+  if (policyOutput.decision !== "deny") {
+    if (hardDenyReasons.length > 0 || policyOutput.matchedDenyRules.length > 0) {
+      throw new Error("non-deny decision cannot include hard-deny evidence.");
+    }
+  }
   if (policyOutput.decision === "allow") {
     if (policyOutput.requiresHumanApproval) {
       throw new Error("allow decision cannot require human approval.");
     }
     if (policyOutput.matchedAllowRules.length === 0) {
       throw new Error("allow decision requires matched allow rule evidence.");
-    }
-    if (policyOutput.matchedDenyRules.length > 0) {
-      throw new Error("allow decision cannot include matched deny rule evidence.");
     }
     if (!allReasonsMatchRules(policyOutput.reasons, policyOutput.matchedAllowRules)) {
       throw new Error("allow decision reasons must match allow rule evidence.");

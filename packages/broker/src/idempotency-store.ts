@@ -531,7 +531,30 @@ function validatePendingAudit(
       `Invalid idempotency store entry ${key}: pendingAudit intentId mismatches result.`,
     );
   }
+  if (!pendingAuditDataMatchesResult(value.data, result)) {
+    throw new Error(`Invalid idempotency store entry ${key}: pendingAudit data mismatches result.`);
+  }
   return value;
+}
+
+function pendingAuditDataMatchesResult(
+  data: Record<string, unknown>,
+  result: BrokerExecutionResult,
+): boolean {
+  if ("orderId" in result && data.orderId !== result.orderId) return false;
+  if ("transactionHash" in result && data.transactionHash !== result.transactionHash) return false;
+  if ("orderStatus" in result && !deepEqual(data.orderStatus, result.orderStatus)) return false;
+  if (
+    "simulationEvidence" in result &&
+    !deepEqual(data.simulationEvidence, result.simulationEvidence)
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function deepEqual(left: unknown, right: unknown): boolean {
+  return stableStringify(left) === stableStringify(right);
 }
 
 function isBrokerAuditEvent(value: unknown): value is BrokerAuditEvent {
@@ -541,10 +564,14 @@ function isBrokerAuditEvent(value: unknown): value is BrokerAuditEvent {
     Environment.safeParse(value.environment).success &&
     typeof value.correlationId === "string" &&
     isPlainObject(value.data) &&
-    optionalString(value.eventId) &&
+    requiredString(value.eventId) &&
     optionalString(value.intentId) &&
     optionalString(value.principal)
   );
+}
+
+function requiredString(value: unknown): boolean {
+  return typeof value === "string" && value.length > 0;
 }
 
 function optionalString(value: unknown): boolean {

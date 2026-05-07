@@ -1412,6 +1412,7 @@ describe("ExecutionBroker", () => {
           executedAt: "2026-05-04T12:00:04.000Z",
         },
         {
+          eventId: "11111111-1111-4111-8111-111111111111",
           eventType: "broker.forged",
           environment: "canary_live",
           intentId: binanceSpotOrder.intentId,
@@ -1452,6 +1453,7 @@ describe("ExecutionBroker", () => {
           executedAt: "2026-05-04T12:00:04.000Z",
         },
         {
+          eventId: "11111111-1111-4111-8111-111111111111",
           eventType: "broker.failed",
           environment: "canary_live",
           intentId: binanceSpotOrder.intentId,
@@ -1467,6 +1469,47 @@ describe("ExecutionBroker", () => {
           binanceSpotOrder,
         ),
       ).toThrow("pendingAudit eventType mismatches result");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects persisted pending audit events with mismatched execution evidence", () => {
+    const dir = mkdtempSync(join(tmpdir(), "broker-idempotency-"));
+    try {
+      const path = join(dir, "store.json");
+      const firstStore = new FileBrokerIdempotencyStore(path);
+      const reservation = firstStore.begin(binanceSpotOrder.idempotencyKey, binanceSpotOrder);
+      if (reservation.status !== "reserved")
+        throw new Error("Expected reserved idempotency entry.");
+
+      reservation.complete(
+        {
+          intentId: binanceSpotOrder.intentId,
+          idempotencyKey: binanceSpotOrder.idempotencyKey,
+          status: "executed",
+          executionKind: "cex_order",
+          orderId: "order-1",
+          revalidationPassed: true,
+          executedAt: "2026-05-04T12:00:04.000Z",
+        },
+        {
+          eventId: "11111111-1111-4111-8111-111111111111",
+          eventType: "broker.executed",
+          environment: "canary_live",
+          intentId: binanceSpotOrder.intentId,
+          principal: binanceSpotOrder.principal,
+          correlationId: "corr-001",
+          data: { orderId: "forged-order" },
+        },
+      );
+
+      expect(() =>
+        new FileBrokerIdempotencyStore(path).begin(
+          binanceSpotOrder.idempotencyKey,
+          binanceSpotOrder,
+        ),
+      ).toThrow("pendingAudit data mismatches result");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
