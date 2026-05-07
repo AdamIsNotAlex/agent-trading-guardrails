@@ -226,6 +226,7 @@ export class FileBrokerIdempotencyStore implements BrokerIdempotencyStore {
       if (existing.status === "in_progress") {
         return { status: "pending", result: Promise.reject(this.inProgressError()) };
       }
+      validateCachedEntryForIntent(key, existing, intent);
       return {
         status: "cached",
         result: existing.result,
@@ -511,6 +512,24 @@ function parseFileEntry(key: string, value: unknown): FileEntry {
   };
 }
 
+function validateCachedEntryForIntent(
+  key: string,
+  entry: CachedEntry,
+  intent: TradingIntent,
+): void {
+  if (!entry.pendingAudit) return;
+  if (entry.pendingAudit.environment !== intent.environment) {
+    throw new Error(
+      `Invalid idempotency store entry ${key}: pendingAudit environment mismatches intent.`,
+    );
+  }
+  if (entry.pendingAudit.principal !== intent.principal) {
+    throw new Error(
+      `Invalid idempotency store entry ${key}: pendingAudit principal mismatches intent.`,
+    );
+  }
+}
+
 function validatePendingAudit(
   key: string,
   result: BrokerExecutionResult,
@@ -543,16 +562,29 @@ function pendingAuditDataMatchesResult(
 ): boolean {
   if (data.status !== result.status) return false;
   if ("rejectionReason" in result && data.rejectionReason !== result.rejectionReason) return false;
+  if (!resultHasField(result, "rejectionReason") && data.rejectionReason !== undefined)
+    return false;
   if ("orderId" in result && data.orderId !== result.orderId) return false;
+  if (!resultHasField(result, "orderId") && data.orderId !== undefined) return false;
   if ("transactionHash" in result && data.transactionHash !== result.transactionHash) return false;
+  if (!resultHasField(result, "transactionHash") && data.transactionHash !== undefined)
+    return false;
   if ("orderStatus" in result && !deepEqual(data.orderStatus, result.orderStatus)) return false;
+  if (!resultHasField(result, "orderStatus") && data.orderStatus !== undefined) return false;
   if (
     "simulationEvidence" in result &&
     !deepEqual(data.simulationEvidence, result.simulationEvidence)
   ) {
     return false;
   }
+  if (!resultHasField(result, "simulationEvidence") && data.simulationEvidence !== undefined) {
+    return false;
+  }
   return true;
+}
+
+function resultHasField(result: BrokerExecutionResult, field: string): boolean {
+  return Object.hasOwn(result, field);
 }
 
 function deepEqual(left: unknown, right: unknown): boolean {

@@ -53,6 +53,18 @@ export class ApprovalStore {
           reject(new Error(`Approval request ${approvalId} was not found.`));
           return;
         }
+        if (new Date() > new Date(request.timeoutAt)) {
+          if (request.state === "pending") {
+            try {
+              this.timeout(request, new Date().toISOString());
+            } catch (err) {
+              reject(err);
+              return;
+            }
+          }
+          reject(new Error(`Approval request ${approvalId} timed out.`));
+          return;
+        }
         if (request.state === "approved") {
           resolve(request);
           return;
@@ -67,16 +79,6 @@ export class ApprovalStore {
         }
         if (request.state === "consumed") {
           reject(new Error(`Approval request ${approvalId} was already used.`));
-          return;
-        }
-        if (new Date() > new Date(request.timeoutAt)) {
-          try {
-            this.timeout(request, new Date().toISOString());
-          } catch (err) {
-            reject(err);
-            return;
-          }
-          reject(new Error(`Approval request ${approvalId} timed out.`));
           return;
         }
         if (Date.now() >= deadline) {

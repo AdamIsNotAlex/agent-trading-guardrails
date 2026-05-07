@@ -7,7 +7,7 @@ describe("transformOpaOutput", () => {
   it("maps snake_case OPA allow output to PolicyOutput", () => {
     const output = transformOpaOutput({
       decision: "allow",
-      reasons: [],
+      reasons: [{ rule: "allow-binance-spot", message: "Allowed." }],
       requires_human_approval: false,
       matched_allow_rules: ["allow-binance-spot"],
       matched_deny_rules: [],
@@ -16,7 +16,7 @@ describe("transformOpaOutput", () => {
 
     expect(output).toEqual({
       decision: "allow",
-      reasons: [],
+      reasons: [{ rule: "allow-binance-spot", message: "Allowed." }],
       requiresHumanApproval: false,
       matchedAllowRules: ["allow-binance-spot"],
       matchedDenyRules: [],
@@ -75,7 +75,7 @@ describe("transformOpaOutput", () => {
   it("injects evaluatedAt when OPA output omits it", () => {
     const output = transformOpaOutput({
       decision: "allow",
-      reasons: [],
+      reasons: [{ rule: "allow-binance-spot", message: "Allowed." }],
       requires_human_approval: false,
       matched_allow_rules: ["allow-binance-spot"],
       matched_deny_rules: [],
@@ -122,6 +122,19 @@ describe("transformOpaOutput", () => {
         evaluatedAt,
       }),
     ).toThrow();
+  });
+
+  it("rejects allow output without allow reasons", () => {
+    expect(() =>
+      transformOpaOutput({
+        decision: "allow",
+        reasons: [],
+        requires_human_approval: false,
+        matched_allow_rules: ["allow-binance-spot"],
+        matched_deny_rules: [],
+        evaluatedAt,
+      }),
+    ).toThrow("allow decision requires at least one allow reason");
   });
 
   it("rejects allow output with deny reasons but no matched allow rule", () => {

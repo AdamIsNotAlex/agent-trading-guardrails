@@ -179,16 +179,16 @@ describe("ApprovalStore", () => {
     });
   });
 
-  it("wait returns approved requests without rewriting expired approval metadata", async () => {
+  it("wait rejects expired approved requests without rewriting approval metadata", async () => {
     const store = new ApprovalStore({ defaultTimeoutSeconds: 300 });
     const req = store.create(baseParams);
     const approved = store.approve(req.approvalId, "operator");
     if (!approved) throw new Error("approval failed");
     approved.timeoutAt = new Date(Date.now() - 1_000).toISOString();
 
-    const result = await store.waitForApproval(req.approvalId, 10);
+    await expect(store.waitForApproval(req.approvalId, 10)).rejects.toThrow("timed out");
 
-    expect(result).toMatchObject({
+    expect(store.get(req.approvalId)).toMatchObject({
       state: "approved",
       decidedAt: approved.decidedAt,
       decidedBy: "operator",

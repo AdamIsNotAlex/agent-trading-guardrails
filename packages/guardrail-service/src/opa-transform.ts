@@ -101,6 +101,9 @@ export function transformOpaOutput(raw: Record<string, unknown>): PolicyOutput {
     if (policyOutput.matchedAllowRules.length === 0) {
       throw new Error("allow decision requires matched allow rule evidence.");
     }
+    if (policyOutput.reasons.length === 0) {
+      throw new Error("allow decision requires at least one allow reason.");
+    }
     if (!allReasonsMatchRules(policyOutput.reasons, policyOutput.matchedAllowRules)) {
       throw new Error("allow decision reasons must match allow rule evidence.");
     }

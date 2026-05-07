@@ -1515,6 +1515,91 @@ describe("ExecutionBroker", () => {
     }
   });
 
+  it("rejects persisted pending audit events with extra execution evidence", () => {
+    const dir = mkdtempSync(join(tmpdir(), "broker-idempotency-"));
+    try {
+      const path = join(dir, "store.json");
+      const firstStore = new FileBrokerIdempotencyStore(path);
+      const reservation = firstStore.begin(binanceSpotOrder.idempotencyKey, binanceSpotOrder);
+      if (reservation.status !== "reserved")
+        throw new Error("Expected reserved idempotency entry.");
+
+      reservation.complete(
+        {
+          intentId: binanceSpotOrder.intentId,
+          idempotencyKey: binanceSpotOrder.idempotencyKey,
+          status: "failed",
+          revalidationPassed: true,
+          rejectionReason: "Execution failed.",
+          executedAt: "2026-05-04T12:00:04.000Z",
+        },
+        {
+          eventId: "11111111-1111-4111-8111-111111111111",
+          eventType: "broker.failed",
+          environment: "canary_live",
+          intentId: binanceSpotOrder.intentId,
+          principal: binanceSpotOrder.principal,
+          correlationId: "corr-001",
+          data: {
+            status: "failed",
+            rejectionReason: "Execution failed.",
+            orderId: "forged-order",
+          },
+        },
+      );
+
+      expect(() =>
+        new FileBrokerIdempotencyStore(path).begin(
+          binanceSpotOrder.idempotencyKey,
+          binanceSpotOrder,
+        ),
+      ).toThrow("pendingAudit data mismatches result");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects persisted pending audit events that mismatch the current intent", () => {
+    const dir = mkdtempSync(join(tmpdir(), "broker-idempotency-"));
+    try {
+      const path = join(dir, "store.json");
+      const firstStore = new FileBrokerIdempotencyStore(path);
+      const reservation = firstStore.begin(binanceSpotOrder.idempotencyKey, binanceSpotOrder);
+      if (reservation.status !== "reserved")
+        throw new Error("Expected reserved idempotency entry.");
+
+      reservation.complete(
+        {
+          intentId: binanceSpotOrder.intentId,
+          idempotencyKey: binanceSpotOrder.idempotencyKey,
+          status: "executed",
+          executionKind: "cex_order",
+          orderId: "order-1",
+          revalidationPassed: true,
+          executedAt: "2026-05-04T12:00:04.000Z",
+        },
+        {
+          eventId: "11111111-1111-4111-8111-111111111111",
+          eventType: "broker.executed",
+          environment: "production",
+          intentId: binanceSpotOrder.intentId,
+          principal: binanceSpotOrder.principal,
+          correlationId: "corr-001",
+          data: { status: "executed", orderId: "order-1" },
+        },
+      );
+
+      expect(() =>
+        new FileBrokerIdempotencyStore(path).begin(
+          binanceSpotOrder.idempotencyKey,
+          binanceSpotOrder,
+        ),
+      ).toThrow("pendingAudit environment mismatches intent");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("initializes an empty file idempotency store when the state file is missing", async () => {
     const dir = mkdtempSync(join(tmpdir(), "broker-idempotency-"));
     try {
