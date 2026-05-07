@@ -42,6 +42,7 @@ function isSecretKey(key: string): boolean {
     normalized.includes("mnemonic") ||
     normalized.includes("seed") ||
     normalized === "token" ||
+    normalized === "authorization" ||
     ["vaulttoken", "accesstoken", "refreshtoken", "authtoken", "bearertoken"].some((suffix) =>
       normalized.endsWith(suffix),
     ) ||

@@ -171,6 +171,15 @@ describe("OnchainSigningIntent", () => {
     ).toMatchObject({ maxTokenApprovalAmount: UINT256_MAX });
   });
 
+  it("rejects token approval metadata above uint256", () => {
+    expect(() =>
+      OnchainSigningIntent.parse({
+        ...ethereumSepoliaSigning,
+        maxTokenApprovalAmount: `${UINT256_MAX}0`,
+      }),
+    ).toThrow();
+  });
+
   it("allows approval calldata without metadata through schema for policy hard-deny", () => {
     expect(
       OnchainSigningIntent.parse({

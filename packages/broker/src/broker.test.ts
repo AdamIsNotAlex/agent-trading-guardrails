@@ -1418,7 +1418,7 @@ describe("ExecutionBroker", () => {
           intentId: binanceSpotOrder.intentId,
           principal: binanceSpotOrder.principal,
           correlationId: "corr-001",
-          data: { orderId: "order-1" },
+          data: { status: "executed", orderId: "order-1" },
         } as never,
       );
 
@@ -1459,7 +1459,7 @@ describe("ExecutionBroker", () => {
           intentId: binanceSpotOrder.intentId,
           principal: binanceSpotOrder.principal,
           correlationId: "corr-001",
-          data: { orderId: "order-1" },
+          data: { status: "executed", orderId: "order-1" },
         },
       );
 
@@ -1500,7 +1500,7 @@ describe("ExecutionBroker", () => {
           intentId: binanceSpotOrder.intentId,
           principal: binanceSpotOrder.principal,
           correlationId: "corr-001",
-          data: { orderId: "forged-order" },
+          data: { status: "executed", orderId: "forged-order" },
         },
       );
 
@@ -1650,7 +1650,7 @@ describe("ExecutionBroker", () => {
         intentId: binanceSpotOrder.intentId,
         principal: binanceSpotOrder.principal,
         correlationId: "corr-001",
-        data: { orderId: "order-1" },
+        data: { status: "executed", orderId: "order-1" },
       },
     );
     reservation.failAudit(new Error("audit down"));

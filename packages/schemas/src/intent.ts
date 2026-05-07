@@ -105,7 +105,18 @@ export const OnchainSimulationIntent = z.union([
 ]);
 export type OnchainSimulationIntent = z.infer<typeof OnchainSimulationIntent>;
 
-const TokenApprovalAmount = z.string().regex(/^(0|[1-9]\d*)$/);
+const UINT256_MAX_DECIMAL =
+  "115792089237316195423570985008687907853269984665640564039457584007913129639935";
+
+const TokenApprovalAmount = z
+  .string()
+  .regex(/^(0|[1-9]\d*)$/)
+  .refine(
+    (value) =>
+      value.length < UINT256_MAX_DECIMAL.length ||
+      (value.length === UINT256_MAX_DECIMAL.length && value <= UINT256_MAX_DECIMAL),
+    "Token approval amount must fit in uint256.",
+  );
 
 const OnchainSigningBase = {
   action: z.literal("onchain.request_signature"),

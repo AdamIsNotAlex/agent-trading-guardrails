@@ -721,6 +721,8 @@ function parseApprovalMetadata(value: string | undefined): bigint | null {
   const normalized = value.toLowerCase();
   if (UNBOUNDED_APPROVAL_ALIASES.has(normalized)) return BigInt(UINT256_MAX);
   if (!/^(0|[1-9]\d*)$/.test(value)) return null;
+  if (value.length > UINT256_MAX.length) return null;
+  if (value.length === UINT256_MAX.length && value > UINT256_MAX) return null;
   return BigInt(value);
 }
 

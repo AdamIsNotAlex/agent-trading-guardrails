@@ -406,7 +406,11 @@ describe("Secret redaction", () => {
       apiSecret: "super-secret-value",
       privateKey: "0x123",
       vaultToken: "vault-token-value",
-      headers: { "X-Vault-Token": "header-vault-token", "X-API-Key": "header-api-key" },
+      headers: {
+        authorization: "Bearer secret-token",
+        "X-Vault-Token": "header-vault-token",
+        "X-API-Key": "header-api-key",
+      },
       config: { mnemonic: "word1 word2", vault_token: "nested-vault-token" },
     };
     const redacted = redactObject(obj) as Record<string, unknown>;
@@ -414,6 +418,7 @@ describe("Secret redaction", () => {
     expect(redacted.apiSecret).toBe("[REDACTED]");
     expect(redacted.privateKey).toBe("[REDACTED]");
     expect(redacted.vaultToken).toBe("[REDACTED]");
+    expect((redacted.headers as Record<string, unknown>).authorization).toBe("[REDACTED]");
     expect((redacted.headers as Record<string, unknown>)["X-Vault-Token"]).toBe("[REDACTED]");
     expect((redacted.headers as Record<string, unknown>)["X-API-Key"]).toBe("[REDACTED]");
     expect((redacted.config as Record<string, unknown>).mnemonic).toBe("[REDACTED]");

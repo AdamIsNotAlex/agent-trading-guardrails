@@ -404,7 +404,11 @@ export class ExecutionBroker {
           intentId: intent.intentId,
           principal: intent.principal,
           correlationId: approval.correlationId,
-          data: { error: redactSecrets(executionError) },
+          data: {
+            status: result.status,
+            rejectionReason: result.rejectionReason,
+            error: redactSecrets(executionError),
+          },
         };
         terminalPersistenceStarted = true;
         return this.finishExecutionWithAudit(reservation, result, auditEvent, () => {
@@ -432,7 +436,12 @@ export class ExecutionBroker {
           intentId: intent.intentId,
           principal: intent.principal,
           correlationId: approval.correlationId,
-          data: { reason, error: redactSecrets(String(err)) },
+          data: {
+            status: failedResult.status,
+            rejectionReason: failedResult.rejectionReason,
+            reason,
+            error: redactSecrets(String(err)),
+          },
         };
         terminalPersistenceStarted = true;
         return this.finishExecutionWithAudit(reservation, failedResult, auditEvent, () => {
@@ -448,6 +457,7 @@ export class ExecutionBroker {
         principal: intent.principal,
         correlationId: approval.correlationId,
         data: {
+          status: result.status,
           orderId: executionResult.orderId,
           transactionHash: executionResult.transactionHash,
           orderStatus: executionResult.orderStatus,

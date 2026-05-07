@@ -541,6 +541,8 @@ function pendingAuditDataMatchesResult(
   data: Record<string, unknown>,
   result: BrokerExecutionResult,
 ): boolean {
+  if (data.status !== result.status) return false;
+  if ("rejectionReason" in result && data.rejectionReason !== result.rejectionReason) return false;
   if ("orderId" in result && data.orderId !== result.orderId) return false;
   if ("transactionHash" in result && data.transactionHash !== result.transactionHash) return false;
   if ("orderStatus" in result && !deepEqual(data.orderStatus, result.orderStatus)) return false;
