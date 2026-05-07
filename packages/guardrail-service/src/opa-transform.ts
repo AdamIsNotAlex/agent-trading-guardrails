@@ -49,6 +49,15 @@ function allReasonsMatchRules(reasons: PolicyOutput["reasons"], rules: string[])
   return reasons.every((reason) => ruleSet.has(reason.rule));
 }
 
+function reasonRulesExactlyMatch(reasons: PolicyOutput["reasons"], rules: string[]): boolean {
+  const reasonRules = reasons.map((reason) => reason.rule).sort();
+  const sortedRules = [...rules].sort();
+  return (
+    reasonRules.length === sortedRules.length &&
+    reasonRules.every((rule, index) => rule === sortedRules[index])
+  );
+}
+
 export function transformOpaOutput(raw: Record<string, unknown>): PolicyOutput {
   if (!("decision" in raw)) throw new Error("OPA output missing decision.");
 
@@ -107,21 +116,26 @@ export function transformOpaOutput(raw: Record<string, unknown>): PolicyOutput {
       throw new Error("allow decision reasons must match allow rule evidence.");
     }
   }
-  if (policyOutput.decision === "deny" && policyOutput.reasons.length === 0) {
-    throw new Error("deny decision requires at least one deny reason.");
+  if (policyOutput.decision === "deny") {
+    if (policyOutput.reasons.length === 0) {
+      throw new Error("deny decision requires at least one deny reason.");
+    }
+    if (hardDenyReasons.length > 0) {
+      const hardDenyRules = hardDenyReasons.map((reason) => reason.rule);
+      if (!reasonRulesExactlyMatch(policyOutput.reasons, hardDenyRules)) {
+        throw new Error("deny decision reasons must match hard-deny evidence.");
+      }
+    }
   }
   if (policyOutput.decision === "needs_human") {
     if (!policyOutput.requiresHumanApproval) {
       throw new Error("needs_human decision must require human approval.");
     }
-    if (
-      escalationReasons.length > 0 &&
-      !allReasonsMatchRules(
-        policyOutput.reasons,
-        escalationReasons.map((reason) => reason.rule),
-      )
-    ) {
-      throw new Error("needs_human decision reasons must match escalation evidence.");
+    if (escalationReasons.length > 0) {
+      const escalationRules = escalationReasons.map((reason) => reason.rule);
+      if (!reasonRulesExactlyMatch(policyOutput.reasons, escalationRules)) {
+        throw new Error("needs_human decision reasons must match escalation evidence.");
+      }
     }
   }
 

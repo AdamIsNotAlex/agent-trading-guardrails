@@ -56,6 +56,20 @@ describe("transformOpaOutput", () => {
     ]);
   });
 
+  it("rejects deny output with reasons outside hard-deny evidence", () => {
+    expect(() =>
+      transformOpaOutput({
+        decision: "deny",
+        reasons: [{ rule: "default_deny", message: "Default deny." }],
+        requires_human_approval: false,
+        matched_allow_rules: [],
+        matched_deny_rules: ["deny-bridge"],
+        hard_deny_reasons: [{ rule: "deny-bridge", message: "Bridge transactions are denied." }],
+        evaluatedAt,
+      }),
+    ).toThrow("deny decision reasons must match hard-deny evidence");
+  });
+
   it("combines escalation reasons and marks needs_human output", () => {
     const output = transformOpaOutput({
       decision: "needs_human",
@@ -224,6 +238,20 @@ describe("transformOpaOutput", () => {
         decision: "needs_human",
         reasons: [{ rule: "unrelated", message: "Unrelated." }],
         escalation_reasons: ["daily_notional_limit"],
+        requires_human_approval: true,
+        matched_allow_rules: [],
+        matched_deny_rules: [],
+        evaluatedAt,
+      }),
+    ).toThrow("needs_human decision reasons must match escalation evidence");
+  });
+
+  it("rejects needs_human output missing escalation reason evidence", () => {
+    expect(() =>
+      transformOpaOutput({
+        decision: "needs_human",
+        reasons: [{ rule: "daily_notional_limit", message: "daily_notional_limit" }],
+        escalation_reasons: ["daily_notional_limit", "daily_loss_limit"],
         requires_human_approval: true,
         matched_allow_rules: [],
         matched_deny_rules: [],

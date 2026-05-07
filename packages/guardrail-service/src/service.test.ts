@@ -1410,6 +1410,33 @@ describe("GuardrailService", () => {
       });
     });
 
+    it("preserves cached approval correlation for needs_human decisions", async () => {
+      const audit = makeAuditSpy();
+      const approvalStore = new ApprovalStore({ defaultTimeoutSeconds: 300 });
+      const svc = new GuardrailService(
+        config,
+        makeReviewer(),
+        makePolicy("needs_human"),
+        makeRisk(),
+        audit.writer,
+        approvalStore,
+      );
+
+      const first = await svc.evaluate(binanceSpotOrder);
+      const second = await svc.evaluate(binanceSpotOrder);
+
+      expect(second.outcome).toBe("needs_human");
+      expect(second.correlationId).toBe(first.correlationId);
+      expect(second.approvalId).toBe(first.approvalId);
+      expect(second.decisionToken).toBe(first.decisionToken);
+      expect(approvalStore.list()).toHaveLength(1);
+      expect(audit.events.filter((event) => event.eventType === "approval.requested")).toHaveLength(
+        1,
+      );
+      expect(audit.events.at(-1)?.eventType).toBe("decision.final");
+      expect(audit.events.at(-1)?.correlationId).toBe(first.correlationId);
+    });
+
     it("rejects conflicting payload with same idempotency key", async () => {
       const svc = new GuardrailService(
         config,

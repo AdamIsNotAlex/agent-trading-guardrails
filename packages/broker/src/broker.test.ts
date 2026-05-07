@@ -825,6 +825,31 @@ describe("ExecutionBroker", () => {
     expect(result.rejectionReason).toBe("Human approval does not match the execution intent.");
   });
 
+  it("rejects escalated execution when approval correlation differs", async () => {
+    const approvalStore = new ApprovalStore({ defaultTimeoutSeconds: 300 });
+    const request = createApprovalRequest(approvalStore);
+    approvalStore.approve(request.approvalId, "operator");
+    const broker = new ExecutionBroker(
+      config,
+      new PaperExecutionConnector(),
+      new InMemoryKillSwitch(),
+      makeAudit(),
+      makeIdempotency(),
+      approvalStore,
+    );
+    const approval = makeNeedsHumanApproval(request.approvalId);
+    const replayCorrelationId = "corr-replayed";
+
+    const result = await broker.execute({
+      ...approval,
+      correlationId: replayCorrelationId,
+      decisionToken: tokenForApproval(approval, { correlationId: replayCorrelationId }),
+    });
+
+    expect(result.status).toBe("rejected");
+    expect(result.rejectionReason).toBe("Human approval does not match the execution intent.");
+  });
+
   it("executes escalated intent after human approval", async () => {
     const approvalStore = new ApprovalStore({ defaultTimeoutSeconds: 300 });
     const request = createApprovalRequest(approvalStore);

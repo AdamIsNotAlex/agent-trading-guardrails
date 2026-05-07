@@ -444,7 +444,9 @@ export class GuardrailService {
     }
     if (cached) {
       const cachedDecision = cached instanceof Promise ? await cached : cached;
-      return this.finalizeDecision(intent, cachedDecision, correlationId, auditContext);
+      const cachedCorrelationId =
+        cachedDecision.outcome === "needs_human" ? cachedDecision.correlationId : correlationId;
+      return this.finalizeDecision(intent, cachedDecision, cachedCorrelationId, auditContext);
     }
     this.idempotency.reserve(idempotencyScope, payloadHash);
 

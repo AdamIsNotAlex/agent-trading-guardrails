@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   binanceCancelOrder,
@@ -178,6 +179,28 @@ describe("OnchainSigningIntent", () => {
         maxTokenApprovalAmount: `${UINT256_MAX}0`,
       }),
     ).toThrow();
+  });
+
+  it("mirrors uint256 token approval bounds in generated JSON schema", () => {
+    const schema = JSON.parse(
+      readFileSync(new URL("../json-schema/onchain-signing-intent.json", import.meta.url), "utf8"),
+    ) as {
+      definitions: {
+        "onchain-signing-intent": {
+          anyOf: Array<{
+            properties?: { maxTokenApprovalAmount?: { pattern?: string } };
+          }>;
+        };
+      };
+    };
+    const pattern = schema.definitions["onchain-signing-intent"].anyOf
+      .map((variant) => variant.properties?.maxTokenApprovalAmount?.pattern)
+      .find((value): value is string => value !== undefined);
+
+    expect(pattern).toBeDefined();
+    const approvalAmountPattern = new RegExp(pattern ?? "");
+    expect(approvalAmountPattern.test(UINT256_MAX)).toBe(true);
+    expect(approvalAmountPattern.test((BigInt(UINT256_MAX) + 1n).toString())).toBe(false);
   });
 
   it("allows approval calldata without metadata through schema for policy hard-deny", () => {

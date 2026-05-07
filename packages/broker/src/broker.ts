@@ -262,7 +262,7 @@ export class ExecutionBroker {
         }
         if (
           approvedRequest.approvalType !== "one_time" ||
-          !this.approvalMatchesIntent(approvedRequest, intent)
+          !this.approvalMatchesIntent(approvedRequest, intent, approval.correlationId)
         ) {
           return finish(
             this.reject(
@@ -600,13 +600,18 @@ export class ExecutionBroker {
     return this.approvalStore.list().find((request) => this.approvalMatchesIntent(request, intent));
   }
 
-  private approvalMatchesIntent(request: ApprovalRequest, intent: TradingIntent): boolean {
+  private approvalMatchesIntent(
+    request: ApprovalRequest,
+    intent: TradingIntent,
+    correlationId?: string,
+  ): boolean {
     return (
       request.intentId === intent.intentId &&
       request.principal === intent.principal &&
       request.action === intent.action &&
       request.resource === intent.resource &&
       request.environment === intent.environment &&
+      (correlationId === undefined || request.correlationId === correlationId) &&
       this.stableJson(request.intentData) === this.stableJson(intent)
     );
   }
