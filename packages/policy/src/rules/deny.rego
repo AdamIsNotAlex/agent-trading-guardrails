@@ -54,6 +54,12 @@ hard_deny_reasons contains {"rule": "token_approval_amount_missing", "message": 
 	input.tokenApprovalAmountMissing == true
 }
 
+hard_deny_reasons contains {"rule": "token_approval_amount_invalid", "message": "ERC-20 approvals require a valid decimal approval amount."} if {
+	input.isTokenApproval == true
+	amount := object.get(input, "tokenApprovalAmount", null)
+	not valid_decimal_string(amount)
+}
+
 hard_deny_reasons contains {"rule": "token_approval_cap_exceeded", "message": "ERC-20 approval amount exceeds policy cap."} if {
 	input.isTokenApproval == true
 	input.tokenApprovalAmountExceedsCap == true
@@ -61,7 +67,14 @@ hard_deny_reasons contains {"rule": "token_approval_cap_exceeded", "message": "E
 
 hard_deny_reasons contains {"rule": "token_approval_cap_exceeded", "message": "ERC-20 approval amount exceeds policy cap."} if {
 	input.isTokenApproval == true
+	valid_decimal_string(data.policy.limits[input.environment].max_token_approval_amount)
 	decimal_string_exceeds(input.tokenApprovalAmount, data.policy.limits[input.environment].max_token_approval_amount)
+}
+
+hard_deny_reasons contains {"rule": "token_approval_amount_exceeds_metadata", "message": "ERC-20 approval amount exceeds requested metadata amount."} if {
+	input.isTokenApproval == true
+	valid_decimal_string(input.maxTokenApprovalAmount)
+	decimal_string_exceeds(input.tokenApprovalAmount, input.maxTokenApprovalAmount)
 }
 
 hard_deny_reasons contains {"rule": "unsupported_chain_environment_pair", "message": "Unsupported onchain chain/environment pair."} if {
@@ -118,15 +131,20 @@ approval_facts_complete if {
 	input.tokenApprovalAmountExceedsCap in {true, false}
 }
 
+valid_decimal_string(value) if {
+	is_string(value)
+	regex.match("^(0|[1-9][0-9]*)$", value)
+}
+
 decimal_string_exceeds(amount, cap) if {
-	is_string(amount)
-	is_string(cap)
+	valid_decimal_string(amount)
+	valid_decimal_string(cap)
 	count(amount) > count(cap)
 }
 
 decimal_string_exceeds(amount, cap) if {
-	is_string(amount)
-	is_string(cap)
+	valid_decimal_string(amount)
+	valid_decimal_string(cap)
 	count(amount) == count(cap)
 	amount > cap
 }

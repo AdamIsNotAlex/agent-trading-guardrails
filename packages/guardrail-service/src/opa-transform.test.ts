@@ -137,6 +137,19 @@ describe("transformOpaOutput", () => {
     ).toThrow();
   });
 
+  it("rejects allow output with matched deny rule evidence", () => {
+    expect(() =>
+      transformOpaOutput({
+        decision: "allow",
+        reasons: [{ rule: "allow-binance-spot", message: "Allowed." }],
+        requires_human_approval: false,
+        matched_allow_rules: ["allow-binance-spot"],
+        matched_deny_rules: ["withdrawal_denied"],
+        evaluatedAt,
+      }),
+    ).toThrow("allow decision cannot include matched deny rule evidence");
+  });
+
   it("rejects needs_human output without human approval flag", () => {
     expect(() =>
       transformOpaOutput({
