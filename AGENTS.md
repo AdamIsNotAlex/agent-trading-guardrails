@@ -50,3 +50,9 @@ when relevant, and screenshots or logs only for user-visible CLI/deployment beha
 Never commit real API keys, wallet private keys, seed phrases, or production `.env` files. Start from
 `env.example`, keep secrets outside the agent runtime, and preserve the architecture rule that
 reviewer output is advisory while policy and broker boundaries remain authoritative.
+
+## Lessons
+
+- `pnpm-workspace.yaml` sets `minimumReleaseAge: 10080`; urgent security patch overrides for
+  newly released packages must also add matching `minimumReleaseAgeExclude` entries, including
+  package-specific binary packages such as `@esbuild/*` when overriding `esbuild`.
