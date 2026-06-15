@@ -83,9 +83,21 @@ Impact:
 
 The security model correctly says agents must not directly reach exchanges, RPC endpoints, internal networks, or metadata services, but the repository does not yet automatically enforce all of those boundaries.
 
+### 7. Production-grade KMS/HSM/MPC signer backends are not implemented
+
+Evidence:
+
+- `docs/signing-backends.md` defines requirements for KMS, HSM, and MPC adapters, including implementing `SignerBackend`, keeping key material inside the signing boundary, supporting rotation, and producing signing audit trails.
+- `docs/deployment-profiles.md` says wallet private keys should stay in KMS/HSM/MPC backends and Vault should store only references or signer configuration.
+- The inspected source contains local/dev signer implementations and connector signer interfaces, but no concrete KMS, HSM, or MPC signer backend implementation.
+
+Impact:
+
+The repository has the right signing-boundary design, but production wallet signing infrastructure is still missing. Real live deployments need a concrete KMS/HSM/MPC adapter before wallet private keys can be handled with production-grade controls.
+
 ## Medium Priority
 
-### 7. Integration test gate is loose
+### 8. Integration test gate is loose
 
 Evidence:
 
@@ -97,7 +109,7 @@ Impact:
 
 The test suite is substantial, but integration coverage is not part of the default CI command and some planned integration paths are still missing.
 
-### 8. Binance has no built-in real REST client implementation
+### 9. Binance has no built-in real REST client implementation
 
 Evidence:
 
@@ -109,7 +121,7 @@ Impact:
 
 The Binance connector has validation and execution orchestration logic, but real Binance API access must be provided externally or implemented later.
 
-### 9. EVM and Solana provider balance-delta support is still skeletal
+### 10. EVM and Solana provider balance-delta support is still skeletal
 
 Evidence:
 
@@ -121,7 +133,7 @@ Impact:
 
 The simulation/signing flow exists, but reliable balance-change extraction for real signing flows is not fully implemented in the built-in providers.
 
-### 10. Risk Engine coverage for onchain actions is thin
+### 11. Risk Engine coverage for onchain actions is thin
 
 Evidence:
 
@@ -132,7 +144,7 @@ Impact:
 
 Onchain protection exists, but it is not uniformly covered by the same dynamic risk engine checks used for CEX order flow.
 
-### 11. Prompt-injection detection is pattern-based
+### 12. Prompt-injection detection is pattern-based
 
 Evidence:
 
@@ -150,4 +162,4 @@ The detector covers known fixtures and common patterns, but it is not a complete
 - The project is suitable as a security-focused framework prototype or internal MVP.
 - It is not yet a complete production trading platform.
 
-The short version: this repository has a serious safety kernel for preventing AI agents from directly moving money, but it still needs the deployable service/runtime layer, real operational integrations, live-trading preflight, durable approval infrastructure, and production-grade execution backends before it can be considered production-ready.
+The short version: this repository has a serious safety kernel for preventing AI agents from directly moving money, but it still needs the deployable service/runtime layer, real operational integrations, live-trading preflight, durable approval infrastructure, concrete KMS/HSM/MPC signer backends, and production-grade execution backends before it can be considered production-ready.
