@@ -22,16 +22,16 @@ A TypeScript-based guardrails framework that lets AI trading agents (OpenClaw, H
 
 ## Architecture
 
-```
-Agent (OpenClaw / Hermes)
-  → Guarded Tool Adapter
-  → Intent Normalizer
-  → Reviewer Agent (advisory)
-  → Policy Engine (OPA/Rego — deterministic)
-  → Dynamic Risk Engine
-  → Execution Broker
-  → CEX Connector / Onchain Signer
-  → Audit Log / Kill Switch
+```mermaid
+flowchart TD
+  Agent["Agent (OpenClaw / Hermes)"] --> Adapter["Guarded Tool Adapter"]
+  Adapter --> Normalizer["Intent Normalizer"]
+  Normalizer --> Reviewer["Reviewer Agent (advisory)"]
+  Reviewer --> Policy["Policy Engine<br/>(OPA/Rego — deterministic)"]
+  Policy --> Risk["Dynamic Risk Engine"]
+  Risk --> Broker["Execution Broker"]
+  Broker --> Connector["CEX Connector / Onchain Signer"]
+  Connector --> Audit["Audit Log / Kill Switch"]
 ```
 
 See [docs/architecture.md](docs/architecture.md) for details.
