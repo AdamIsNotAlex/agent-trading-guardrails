@@ -50,15 +50,15 @@ Hash-chained SQLite audit records. Tamper evidence depends on protecting `AUDIT_
 
 ## Data Flow
 
-```
-Agent proposes structured intent
-  → Schema validation (Zod)
-  → Reviewer agent returns structured verdict
-  → TypeScript normalizes facts for OPA
-  → OPA/Rego evaluates policy (allow | deny | needs_human)
-  → Dynamic risk engine checks live state
-  → Broker revalidates and executes (or rejects)
-  → Audit log records full decision chain
+```mermaid
+flowchart TD
+  Intent["Agent proposes structured intent"] --> Schema["Schema validation (Zod)"]
+  Schema --> Reviewer["Reviewer agent returns structured verdict"]
+  Reviewer --> Facts["TypeScript normalizes facts for OPA"]
+  Facts --> Policy["OPA/Rego evaluates policy<br/>(allow | deny | needs_human)"]
+  Policy --> Risk["Dynamic risk engine checks live state"]
+  Risk --> Broker["Broker revalidates and executes<br/>(or rejects)"]
+  Broker --> Audit["Audit log records full decision chain"]
 ```
 
 ## Environment Profiles
