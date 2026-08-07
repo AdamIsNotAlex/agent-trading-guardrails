@@ -56,3 +56,7 @@ reviewer output is advisory while policy and broker boundaries remain authoritat
 - `pnpm-workspace.yaml` sets `minimumReleaseAge: 10080`; urgent security patch overrides for
   newly released packages must also add matching `minimumReleaseAgeExclude` entries, including
   package-specific binary packages such as `@esbuild/*` when overriding `esbuild`.
+- `vitest.config.ts` uses `packages/*/src/**/*.test.ts`, which also matches
+  `*.integration.test.ts`; `pnpm test` therefore runs integration files too. On a clean checkout,
+  run `pnpm build` before `pnpm test:integration` because workspace package exports target `dist/`;
+  the GitHub Actions workflow already preserves that order.
