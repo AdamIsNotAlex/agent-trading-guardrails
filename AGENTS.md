@@ -21,7 +21,7 @@ deployment assets are in `deploy/`, and design/security documentation is in `doc
 - `pnpm test:integration`: run `*.integration.test.ts` using the integration config.
 - `pnpm lint`: run Biome checks.
 - `pnpm lint:fix` or `pnpm format`: apply safe Biome fixes/formatting.
-- `pnpm ci`: run lint, typecheck, and tests; use this before opening a PR.
+- `pnpm run ci`: run lint, typecheck, unit tests, and integration tests before opening a PR.
 
 ## Coding Style & Naming Conventions
 
@@ -32,11 +32,14 @@ Prefer explicit interfaces at package boundaries and avoid non-null assertions u
 
 ## Testing Guidelines
 
-Vitest discovers `packages/*/src/**/*.test.ts`; integration tests use
-`packages/*/src/**/*.integration.test.ts`. Place tests next to the code they exercise and name them
+The unit configuration discovers `packages/*/src/**/*.test.ts` but excludes `*.integration.test.ts`;
+the integration configuration discovers `packages/*/src/**/*.integration.test.ts` only.
+Both configurations fail when no test files are discovered.
+
+Place tests next to the code they exercise and name them
 after the behavior or module, for example `broker.test.ts` or `connector.test.ts`. Add coverage when
 changing policy decisions, signing/secrets behavior, execution paths, audit integrity, or risk
-checks. Run `pnpm ci` for broad validation.
+checks. Run `pnpm run ci` for broad validation.
 
 ## Commit & Pull Request Guidelines
 
@@ -56,7 +59,7 @@ reviewer output is advisory while policy and broker boundaries remain authoritat
 - `pnpm-workspace.yaml` sets `minimumReleaseAge: 10080`; urgent security patch overrides for
   newly released packages must also add matching `minimumReleaseAgeExclude` entries, including
   package-specific binary packages such as `@esbuild/*` when overriding `esbuild`.
-- `vitest.config.ts` uses `packages/*/src/**/*.test.ts`, which also matches
-  `*.integration.test.ts`; `pnpm test` therefore runs integration files too. On a clean checkout,
-  run `pnpm build` before `pnpm test:integration` because workspace package exports target `dist/`;
-  the GitHub Actions workflow already preserves that order.
+- `vitest.config.ts` excludes `**/*.integration.test.ts` while preserving `configDefaults.exclude`.
+  Both configs fail on empty discovery; `pnpm run ci` runs unit and integration suites separately.
+  On a clean checkout, run `pnpm build` before either suite because workspace package exports
+  target `dist/`; the GitHub Actions workflow already preserves that order.

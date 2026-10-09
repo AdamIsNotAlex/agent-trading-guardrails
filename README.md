@@ -49,13 +49,22 @@ corepack enable
 pnpm install
 cp env.example .env
 
-# Run tests
+# Build workspace packages before running tests
+pnpm build
+
+# Run unit tests (excludes *.integration.test.ts)
 pnpm test
+
+# Run integration tests
+pnpm test:integration
 
 # Lint and typecheck
 pnpm lint
 pnpm typecheck
 ```
+
+Both test suites fail if no matching test files are discovered. `pnpm run ci` runs lint,
+typecheck, unit tests, and integration tests.
 
 ## Security
 

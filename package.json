@@ -16,7 +16,7 @@
     "format": "biome format --write .",
     "format:check": "biome format .",
     "typecheck": "tsc -b",
-    "ci": "pnpm lint && pnpm typecheck && pnpm test"
+    "ci": "pnpm lint && pnpm typecheck && pnpm test && pnpm test:integration"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
