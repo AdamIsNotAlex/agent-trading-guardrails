@@ -1,6 +1,6 @@
 # Agent Trading Guardrails — Implementation Review
 
-Date: 2026-05-04
+Date: 2026-05-04 (historical snapshot; integration-test status updated 2026-10-09)
 Reviewer: Codex CLI (gpt-5.5 xhigh) + Claude Opus 4.6 cross-verification
 Source: `planning/init.todo.md`
 
@@ -61,13 +61,13 @@ None — all tasks are checked.
 
 ## Phase 1 — Repository And Tooling
 
-**Score: 16/17 fully implemented, 1 partial**
+**Original review score: 16/17 fully implemented, 1 partial; the integration-test structure is now complete.**
 
 ### Over-marked `[x]` tasks
 
 | Task | Status | Issue |
 |------|--------|-------|
-| Add integration test structure | PARTIAL | `vitest.integration.config.ts` exists and the CI step is wired, but zero actual `*.integration.test.ts` files exist in the repo. |
+| Add integration test structure | DONE (since review) | Four `*.integration.test.ts` files now cover OPA HTTP evaluation, Rego output transformation, EVM Sepolia, and Solana devnet. Both `pnpm run ci` and GitHub Actions invoke the integration suite. See [current coverage and prerequisite details](handoff-2026-08-07.md#8-remaining-integration-coverage-gaps). |
 
 ### Skipped tasks
 
@@ -191,7 +191,7 @@ None.
 | Implement order status polling | MISSING | No `getOrderStatus` public method on connector. `BinanceApiClient` and `BinancePaperSimulator` both have it defined, but the connector never surfaces or calls them. |
 | Enforce USD-M futures isolated-mode and leverage-cap policy | PARTIAL | Leverage cap enforced, but no `marginType`, `ISOLATED`, or isolated-mode field anywhere. Isolated-mode half is unimplemented. |
 | Enforce no-withdrawal API key requirement | PARTIAL | Docs cover it. No runtime check validates the API key's withdrawal permission. |
-| Add integration tests with mocked Binance API | PARTIAL | `connector.test.ts` has 15 unit tests with a mocked client, but `pnpm test:integration` finds zero `*.integration.test.ts` files. |
+| Add integration tests with mocked Binance API | PARTIAL | `connector.test.ts` uses a mocked client; Binance HTTP-level integration coverage is still missing. The repository's existing integration suites cover OPA, EVM, and Solana, not Binance. |
 | Add optional sandbox/testnet tests | MISSING | No testnet/sandbox test files or env-gated testnet path exist. |
 
 ### Skipped tasks
@@ -284,7 +284,7 @@ None.
 | Task | Status | Issue |
 |------|--------|-------|
 | Expose only guarded proposal/query tools | PARTIAL | Adapters expose guarded tools, but `onchain.request_signature` and `onchain.get_portfolio` from `packages/schemas/src/intent.ts` are not covered by the adapter surface. |
-| Add end-to-end tests (agents propose valid intents) | PARTIAL | `adapters.test.ts` (11 tests) covers valid proposals but uses mocked reviewer/policy/risk — not a true end-to-end stack. No `*.e2e.*` or `*.integration.test.ts` files. |
+| Add end-to-end tests (agents propose valid intents) | PARTIAL | `adapters.test.ts` covers valid proposals but uses mocked reviewer/policy/risk — not a true end-to-end stack. No service-stack `*.integration.test.ts` files exist in `packages/agent-adapters/src`; this is an adapter-specific coverage gap. |
 | Add end-to-end tests (agents cannot access keys/direct paths) | PARTIAL | Same test file checks absence of key/broker/connector properties and rejects unknown direct tools, but no true sandbox/live-execution e2e tests. |
 | Add example OpenClaw strategy using guarded tools | MISSING | No example strategy file found anywhere in the repo. |
 | Add example Hermes Agent strategy using guarded tools | MISSING | No example strategy file found anywhere in the repo. |

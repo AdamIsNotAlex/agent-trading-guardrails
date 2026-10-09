@@ -278,13 +278,13 @@ DNS-level logging is completely absent. HTTP access logs write to ephemeral tmpf
 - [ ] Mount a persistent volume or configure log shipping for nginx access/error logs (currently writing to `/tmp` tmpfs in the container).
 - [ ] Update `deploy/docker/nginx-egress.conf` or `docker-compose.yml` accordingly.
 
-### P2.8 — Add integration test files (Phases 1, 7, 12)
+### P2.8 — Extend integration coverage (Phases 1, 7, 12)
 
-`vitest.integration.config.ts` and the CI step exist, but zero `*.integration.test.ts` files exist.
+Four integration test files now cover OPA HTTP evaluation, Rego output transformation, EVM Sepolia, and Solana devnet. Both `pnpm run ci` and GitHub Actions invoke the integration suite; unit tests exclude integration files, and both Vitest configurations fail on empty discovery. See [current coverage and prerequisite details](handoff-2026-08-07.md#8-remaining-integration-coverage-gaps). Remaining work is the Binance and agent-adapter coverage below.
 
 - [ ] Create `packages/binance-connector/src/binance.integration.test.ts` with mocked Binance REST API (HTTP-level mocking, not class-level mocks) testing the full connector flow.
 - [ ] Create `packages/agent-adapters/src/adapters.integration.test.ts` testing adapters against a real (mocked-infrastructure) guardrail service stack — not just class-level mocks.
-- [ ] Optionally create `packages/evm-connector/src/evm.integration.test.ts` and `packages/solana-connector/src/solana.integration.test.ts` once concrete RPC providers exist (P1.1, P1.2).
+- [x] Add provider integration tests using local HTTP RPC mocks: `packages/evm-connector/src/sepolia-provider.integration.test.ts` and `packages/solana-connector/src/devnet-provider.integration.test.ts` (P1.1, P1.2).
 
 ### P2.9 — Add missing kill switch tests (Phase 15)
 

@@ -63,3 +63,6 @@ reviewer output is advisory while policy and broker boundaries remain authoritat
   Both configs fail on empty discovery; `pnpm run ci` runs unit and integration suites separately.
   On a clean checkout, run `pnpm build` before either suite because workspace package exports
   target `dist/`; the GitHub Actions workflow already preserves that order.
+- The real-Rego transform integration is conditional on `opa` being on `PATH`; without it, the
+  suite is skipped even with `passWithNoTests: false`. The separate GitHub Actions
+  `opa-policy-test` job does not install OPA in the integration-test job.
