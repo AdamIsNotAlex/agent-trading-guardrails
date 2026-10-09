@@ -19,4 +19,4 @@ USER agent
 
 ENV NODE_ENV=production
 
-CMD ["node", "-e", "console.error('No standalone agent runtime entrypoint is defined yet.'); process.exit(1)"]
+CMD ["node", "packages/agent-adapters/dist/main.js"]

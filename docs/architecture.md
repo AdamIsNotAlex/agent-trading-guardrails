@@ -36,6 +36,13 @@ Performs live data checks that are awkward to express in Rego: market data fresh
 
 The only component allowed to call CEX APIs or signing services. Revalidates state before execution. Enforces policy result. Handles idempotency, kill switch, and audit logging.
 
+Standalone composition lives in `packages/runtime`. Guardrail exposes `GET /health` and
+`POST /evaluate`; the broker exposes `GET /health` and `POST /execute`. The Agent JSONL
+entrypoint submits intents over HTTP but never executes automatically. The standalone broker
+uses simulated execution for `dev`/`paper`; live connectors remain in-process integrations.
+The runtime risk provider reads one trusted file snapshot per evaluation, never request-supplied
+market facts. Guardrail and broker own separate audit chains, and broker idempotency is durable.
+
 ### Secret and Signing Boundary
 
 CEX API keys live only in the broker or secret manager (Vault). Wallet private keys live only in the signer, KMS, HSM, or MPC system. The agent runtime never sees secrets.

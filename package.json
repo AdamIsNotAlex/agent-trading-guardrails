@@ -7,6 +7,9 @@
   },
   "scripts": {
     "build": "tsc -b",
+    "start:service": "node --env-file-if-exists=.env packages/runtime/dist/service-main.js",
+    "start:broker": "node --env-file-if-exists=.env packages/runtime/dist/broker-main.js",
+    "start:agent": "node packages/agent-adapters/dist/main.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

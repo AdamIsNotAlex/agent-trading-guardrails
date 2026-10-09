@@ -22,10 +22,12 @@ import type {
 } from "./interfaces.js";
 import { transformOpaOutput } from "./opa-transform.js";
 
-type AuditContext = Pick<
+export type AuditContext = Pick<
   Parameters<AuditWriter["write"]>[0],
   "promptId" | "sessionId" | "inputRef"
->;
+> & {
+  correlationId?: string;
+};
 
 type TokenApprovalFacts = Pick<
   PolicyInput,
@@ -335,7 +337,7 @@ export class GuardrailService {
   }
 
   async evaluate(rawIntent: unknown, auditContext: AuditContext = {}): Promise<GuardrailDecision> {
-    const correlationId = generateCorrelationId();
+    const correlationId = auditContext.correlationId ?? generateCorrelationId();
     const now = new Date().toISOString();
 
     const parseResult = TradingIntent.safeParse(rawIntent);

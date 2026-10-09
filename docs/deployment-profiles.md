@@ -6,12 +6,74 @@ The framework supports multiple deployment profiles. Each profile defines how co
 
 ## Local Docker (Development)
 
-- Docker Compose currently starts only supporting services: OPA and optional dev Vault.
-- Standalone agent, guardrail-service, broker, and egress-proxy runtime containers are not implemented yet.
-- OPA runs as `openpolicyagent/opa:1.16.1-static`.
-- Vault runs in dev mode (dev server only — not for production).
-- SQLite audit databases should use `AUDIT_HASH_ANCHOR_PATH` outside dev/test; keep the anchor outside the database directory, mode `0600`, and back it up after writes.
-- No real CEX keys or wallet keys required for `dev` and `paper` profiles.
+- Docker Compose starts Guardrail HTTP, the paper execution broker, and OPA. The optional `agent` profile provides a JSON Lines intent-submission process; the `dev` profile adds dev Vault.
+- `deploy/docker/Dockerfile.service`, `Dockerfile.broker`, and `Dockerfile.agent` run compiled Node entrypoints as non-root users. Agent has only `GUARDRAIL_URL`, a read-only filesystem, and an internal network shared with Guardrail—not the broker or OPA networks. A direct-LLM egress proxy is not included.
+- Published Guardrail (3000), broker (3001), OPA (8181), and optional Vault (8200) ports bind to `127.0.0.1`. Do not publish the unauthenticated development HTTP APIs on a public interface.
+- OPA uses the pinned `openpolicyagent/opa:1.16.1-static` image. Reviewer uses the existing OpenAI provider and requires `OPENAI_API_KEY`; an absent key is a startup configuration error, not an automatic approval.
+- Broker's standalone entrypoint deliberately supports `dev` and `paper` only, using `PaperExecutionConnector`. It refuses other profiles instead of presenting simulated trades as real execution. CEX/signing connectors remain available through the in-process API.
+- Guardrail and broker have separate audit databases and external hash anchors. Each audit chain must have exactly one writer. Non-dev profiles require strong decision/audit secrets and hash anchors; no CEX or wallet keys are needed for simulated execution.
+
+### Start locally
+
+After `pnpm install`, `pnpm build`, and copying `env.example` to `.env`, configure the reviewer key and a trusted risk snapshot producer:
+
+```sh
+docker compose up -d opa
+pnpm start:service                 # terminal 1; loads .env
+pnpm start:broker                  # terminal 2; loads .env
+curl -i http://127.0.0.1:3000/health
+
+# Separate terminal; the agent does NOT load .env or receive signing/reviewer secrets.
+GUARDRAIL_URL=http://127.0.0.1:3000 pnpm --silent start:agent < intents.jsonl
+```
+
+For containers, use `docker compose up --build -d guardrail broker`, then `docker compose run --rm -T agent < intents.jsonl`. Compose supplies only the required environment variables to each process. `SIGINT`/`SIGTERM` stop the HTTP listener, let in-flight requests finish, and close the audit database. Configuration/listen failures exit nonzero.
+
+The service factory is `createGuardrailServer(service)` in `@guardrails/service`; it returns an unbound Node `http.Server` and never listens on import. `packages/runtime` assembles the existing OPA evaluator, OpenAI reviewer, risk engine, audit writer, broker, kill switch, and durable broker idempotency store.
+
+### HTTP contract
+
+| Endpoint | Request | Response |
+|----------|---------|----------|
+| Guardrail `GET /health` | No body | `service.health()`: 200 for `ok`, 503 for `degraded`; `opaHealthy` describes OPA reachability, not readiness of every external dependency |
+| Guardrail `POST /evaluate` | Raw `TradingIntent` JSON, `Content-Type: application/json` | 200 with `GuardrailDecision`; policy/risk denials are decisions, not HTTP transport failures |
+| Broker `GET /health` | No body | 200 with `status: ok`, `executionMode: paper` after successful dependency construction |
+| Broker `POST /execute` | Signed decision fields plus the original `intent` | 200 with `BrokerExecutionResult`; the broker still verifies the HMAC, age, environment, kill switch, approval state, and idempotency before execution |
+
+```sh
+curl -i http://127.0.0.1:3000/evaluate \
+  -H 'Content-Type: application/json' -H 'x-correlation-id: strategy-order-42' \
+  --data-binary @intent.json
+```
+
+Validation failures return JSON: 400 for malformed JSON/schema/correlation IDs, 413 for a body over 1 MiB, 415 for an unsupported media type, 404 for unknown routes, and 405 with `Allow` for wrong methods. Internal failures return a generic 500 without exception details or secrets.
+
+`x-correlation-id` accepts 1–128 characters from `[A-Za-z0-9._:-]`; omission generates a UUID. Responses echo the HTTP request ID, including application errors. Evaluation carries it into audit events and the signed decision. **Cached `needs_human` decisions retain their original body `correlationId`, `approvalId`, and token** to preserve the human-approval binding; the response header identifies the new HTTP request. Broker never replaces a signed decision's ID with its transport request ID.
+
+For `/execute`, send `{intentId, correlationId, outcome, decidedAt, decisionToken, approvalId?, intent}` from the decision and original intent. Never generate tokens in the agent. `/evaluate` does not automatically execute. Human-approval resolution is not exposed over HTTP; process-local approval stores are not shared between standalone processes, so the broker rejects `needs_human` requests without an approved record. Use the existing in-process approval integration for that workflow.
+
+The Agent entrypoint consumes raw intents, one JSON object per line, and prints one decision or `{error, message, correlationId?}` per nonblank line. It continues after invalid JSON/schema or failed HTTP requests and exits 1 if any submission failed; a policy denial is a successful submission, not a transport error. Requests time out after 30 seconds. EOF exits normally. This is an intent transport, not an autonomous strategy/LLM loop, and it never calls `/execute`.
+
+### Runtime configuration and risk data
+
+`GUARDRAIL_HOST`/`GUARDRAIL_PORT` default to `127.0.0.1:3000`; `BROKER_HOST`/`BROKER_PORT` default to `127.0.0.1:3001`. Images explicitly bind to `0.0.0.0` inside their private networks. `OPA_URL`, `REVIEWER_PROVIDER=openai`, `REVIEWER_MODEL`, `OPENAI_API_KEY`, `GUARDRAIL_ENV`, `GUARDRAIL_DECISION_SECRET`, and `APPROVAL_TIMEOUT_SECONDS` configure evaluation. Service and broker must use the same environment and decision secret.
+
+`GUARDRAIL_AUDIT_DB_PATH` and `BROKER_AUDIT_DB_PATH` default to `./data/guardrail-audit.db` and `./data/broker-audit.db`; corresponding `*_AUDIT_HASH_ANCHOR_PATH` variables select separate anchors. Generic `AUDIT_DB_PATH`/`AUDIT_HASH_ANCHOR_PATH` remain usable when configuring just one process. Never point two processes at the same chain. `BROKER_IDEMPOTENCY_PATH` defaults to `./data/broker-idempotency.json`; preserve it across restarts. `BROKER_KILL_SWITCH=true` starts the broker with its global kill switch active.
+
+`RISK_DATA_PATH` defaults to `./data/risk/risk-snapshot.json`. Compose mounts the host `./data/risk` directory read-only into Guardrail. A trusted feed outside the agent must atomically replace this JSON file. Each evaluation reads one consistent snapshot and applies `DEFAULT_CANARY_LIVE_LIMITS`; missing, malformed, mismatched, future-dated, or stale facts fail closed. The runtime never substitutes intent prices for market data or synthesizes successful risk checks.
+
+Snapshot shape (illustrative values only; timestamp `0` is intentionally stale):
+
+```json
+{
+  "marketData": [{ "symbol": "ETH-USDC", "price": 3500, "timestampMs": 0 }],
+  "portfolios": [{ "account": "subaccount-1", "timestampMs": 0, "positions": [] }],
+  "dailyStats": [{ "account": "subaccount-1", "date": "2026-10-09", "totalNotionalUsd": 0, "realizedLossUsd": 0, "orderCount": 0 }],
+  "lastOrderTimestamps": { "subaccount-1": null }
+}
+```
+
+Positions have `{symbol, quantity, notionalUsd}`. `dailyStats.date` must match the current UTC date. An explicit `null` last-order timestamp means the trusted feed knows there were no previous orders; an absent account is unavailable, not an empty history. Refresh timestamps only when the underlying facts have actually been refreshed. The snapshot producer must incorporate execution activity; the reader is not an exchange feed or accounting writer.
 
 ## Single VPS
 

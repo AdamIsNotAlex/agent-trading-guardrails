@@ -90,6 +90,17 @@ When the required sandbox, network, and filesystem controls are deployed, the ag
 
 These controls must be enforced by the runtime, container network, service mesh, firewall, or orchestrator in live deployments. They are deployment requirements, not guarantees provided by the repository's local development Compose stack.
 
+The standalone HTTP endpoints are development interfaces without caller authentication. Loopback
+bindings and private Compose networks are intentional defaults, not a substitute for authenticated
+identity. Before remote deployment, put the APIs behind an authenticated gateway (for example,
+mTLS) that binds the caller to the permitted `principal`. A supplied `x-correlation-id` is trace
+metadata, never authorization. Do not expose OPA or `/execute` directly to untrusted networks.
+
+Compose gives Agent only the Guardrail URL and an internal network, not reviewer keys, decision
+secrets, risk snapshot mounts, audit volumes, or broker access. The JSONL Agent entrypoint does not
+load `.env`; do not inject a service/broker environment wholesale into an agent process. Risk
+snapshots must be maintained by a trusted producer outside the agent's writable filesystem.
+
 | Direction | Agent Runtime | Broker/Signer |
 |-----------|--------------|---------------|
 | LLM providers | Allowed (via proxy) | N/A |

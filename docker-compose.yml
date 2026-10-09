@@ -1,15 +1,112 @@
 networks:
+  agent-net:
+    driver: bridge
+    internal: true
   broker-net:
     driver: bridge
   guardrail-net:
     driver: bridge
 
+volumes:
+  guardrail-data:
+  guardrail-anchor:
+  broker-data:
+  broker-anchor:
+
 services:
+  guardrail:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.service
+    environment:
+      GUARDRAIL_ENV: ${GUARDRAIL_ENV:-dev}
+      OPA_URL: http://opa:8181
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      REVIEWER_PROVIDER: ${REVIEWER_PROVIDER:-openai}
+      REVIEWER_MODEL: ${REVIEWER_MODEL:-gpt-5.5}
+      GUARDRAIL_DECISION_SECRET: ${GUARDRAIL_DECISION_SECRET:-dev-decision-secret}
+      AUDIT_HASH_SECRET: ${AUDIT_HASH_SECRET:-dev-audit-hash-secret}
+      AUDIT_DB_PATH: /app/data/audit.db
+      AUDIT_HASH_ANCHOR_PATH: /app/audit-anchor/head.hash
+      RISK_DATA_PATH: /app/risk-data/risk-snapshot.json
+      APPROVAL_TIMEOUT_SECONDS: ${APPROVAL_TIMEOUT_SECONDS:-300}
+    volumes:
+      - guardrail-data:/app/data
+      - guardrail-anchor:/app/audit-anchor
+      - ./data/risk:/app/risk-data:ro
+    ports:
+      - "127.0.0.1:3000:3000"
+    networks:
+      - agent-net
+      - guardrail-net
+    depends_on:
+      - opa
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 6s
+      retries: 3
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  broker:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.broker
+    environment:
+      GUARDRAIL_ENV: ${GUARDRAIL_ENV:-dev}
+      GUARDRAIL_DECISION_SECRET: ${GUARDRAIL_DECISION_SECRET:-dev-decision-secret}
+      AUDIT_HASH_SECRET: ${AUDIT_HASH_SECRET:-dev-audit-hash-secret}
+      AUDIT_DB_PATH: /app/data/audit.db
+      AUDIT_HASH_ANCHOR_PATH: /app/audit-anchor/head.hash
+      BROKER_IDEMPOTENCY_PATH: /app/data/idempotency.json
+      BROKER_KILL_SWITCH: ${BROKER_KILL_SWITCH:-false}
+    volumes:
+      - broker-data:/app/data
+      - broker-anchor:/app/audit-anchor
+    ports:
+      - "127.0.0.1:3001:3001"
+    networks:
+      - broker-net
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 6s
+      retries: 3
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  agent:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.agent
+    environment:
+      GUARDRAIL_URL: http://guardrail:3000
+    stdin_open: true
+    profiles:
+      - agent
+    networks:
+      - agent-net
+    depends_on:
+      guardrail:
+        condition: service_healthy
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
   opa:
     image: openpolicyagent/opa:1.16.1-static@sha256:637ffdb793e146e50ec45cc023ee78fc5bc52c11816ce7adee41ce20e46e5ed8
     command: ["run", "--server", "--addr=0.0.0.0:8181", "/policies"]
     volumes:
       - ./packages/policy/src:/policies:ro
+    ports:
+      - "127.0.0.1:8181:8181"
     networks:
       - guardrail-net
     read_only: true
@@ -20,7 +117,7 @@ services:
     environment:
       VAULT_DEV_ROOT_TOKEN_ID: dev-only-token
     ports:
-      - "8200:8200"
+      - "127.0.0.1:8200:8200"
     networks:
       - broker-net
     cap_drop:

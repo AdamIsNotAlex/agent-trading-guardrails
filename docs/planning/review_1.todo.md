@@ -357,14 +357,14 @@ Price-band enforcement now compares priced order intents against live market pri
 
 ### P2.17 — Add HTTP server layer for GuardrailService (Phase 3)
 
-The service has in-process methods only — no HTTP endpoints despite tasks saying "endpoint."
+Implemented the Node HTTP transport and independent runtime assembly in `packages/runtime`, with functioning Agent/Broker Docker commands.
 
-- [ ] Create `packages/guardrail-service/src/server.ts` with a lightweight HTTP server (e.g., Hono or Fastify):
-  - [ ] `GET /health` → calls `service.health()`.
-  - [ ] `POST /evaluate` → accepts intent JSON body, calls `service.evaluate()`, returns `GuardrailDecision`.
-- [ ] Add request validation middleware using the Zod schemas.
-- [ ] Add correlation ID injection from request headers or auto-generated.
-- [ ] Add test for HTTP endpoint responses.
+- [x] Create `packages/guardrail-service/src/server.ts` with a lightweight Node HTTP server:
+  - [x] `GET /health` → calls `service.health()` (200/503).
+  - [x] `POST /evaluate` → accepts intent JSON body, calls `service.evaluate()`, returns `GuardrailDecision`.
+- [x] Add request validation middleware using the Zod schemas, bounded JSON bodies, and HTTP error responses.
+- [x] Add correlation ID injection from request headers or auto-generated, carried through audit and signed decisions while preserving approval replay bindings.
+- [x] Add tests for HTTP endpoint responses and actual standalone runtime smoke coverage.
 
 ### P2.18 — Add Binance sandbox/testnet tests (Phase 7)
 

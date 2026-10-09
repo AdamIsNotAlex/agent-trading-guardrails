@@ -1,0 +1,26 @@
+{
+  "name": "@guardrails/runtime",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start:service": "node dist/service-main.js",
+    "start:broker": "node dist/broker-main.js"
+  },
+  "dependencies": {
+    "@guardrails/audit": "workspace:*",
+    "@guardrails/broker": "workspace:*",
+    "@guardrails/reviewer": "workspace:*",
+    "@guardrails/risk-engine": "workspace:*",
+    "@guardrails/schemas": "workspace:*",
+    "@guardrails/secrets": "workspace:*",
+    "@guardrails/service": "workspace:*",
+    "better-sqlite3": "^12.9.0",
+    "zod": "^3.25.23"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^25.6.0"
+  }
+}

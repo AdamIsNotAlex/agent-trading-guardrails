@@ -66,6 +66,27 @@ pnpm typecheck
 Both test suites fail if no matching test files are discovered. `pnpm run ci` runs lint,
 typecheck, unit tests, and integration tests.
 
+### Standalone services
+
+Set `OPENAI_API_KEY` in `.env` and configure the trusted risk snapshot described in
+[Deployment Profiles](docs/deployment-profiles.md#runtime-configuration-and-risk-data).
+
+```sh
+docker compose up -d opa
+pnpm start:service  # terminal 1: GET /health, POST /evaluate on 127.0.0.1:3000
+pnpm start:broker   # terminal 2: GET /health, POST /execute on 127.0.0.1:3001
+```
+
+Submit raw intent JSON Lines with `pnpm --silent start:agent < intents.jsonl`; the agent does not
+load `.env`, hold signing/reviewer secrets, or automatically execute decisions. For containers,
+use `docker compose up --build -d guardrail broker` and
+`docker compose run --rm -T agent < intents.jsonl`.
+
+The standalone broker performs **simulated execution in dev/paper only**. The HTTP APIs are
+unauthenticated development interfaces, loopback-published by default; use an authenticated
+gateway before remote deployment. See the [HTTP contract](docs/deployment-profiles.md#http-contract)
+for validation, correlation IDs, approval limitations, and startup configuration.
+
 ## Security
 
 **Real API keys, wallet private keys, seed phrases, and other secrets must never be committed to this repository.** Use the `env.example` file as a template and store actual secrets in `.env` (gitignored) or a secret manager.

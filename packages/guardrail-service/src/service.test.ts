@@ -1474,5 +1474,58 @@ describe("GuardrailService", () => {
       expect(r2.correlationId).toBeTruthy();
       expect(r1.correlationId).not.toBe(r2.correlationId);
     });
+
+    it("binds an explicit correlation ID into audit events and the signed token", async () => {
+      const audit = makeAuditSpy();
+      const svc = new GuardrailService(
+        config,
+        makeReviewer(),
+        makePolicy(),
+        makeRisk(),
+        audit.writer,
+      );
+      const correlationId = "http-request-correlation-1";
+
+      const result = await svc.evaluate(binanceSpotOrder, { correlationId });
+
+      expect(result.correlationId).toBe(correlationId);
+      expect(result.decisionToken).toMatch(/^[0-9a-f]{64}$/);
+      expect(audit.events.map((event) => event.correlationId)).toEqual(
+        audit.events.map(() => correlationId),
+      );
+      expect(audit.events.at(-1)?.data.decision).toMatchObject({ correlationId });
+    });
+
+    it("keeps the original needs_human approval binding on a later ID", async () => {
+      const audit = makeAuditSpy();
+      const approvalStore = new ApprovalStore({ defaultTimeoutSeconds: 300 });
+      const svc = new GuardrailService(
+        config,
+        makeReviewer(),
+        makePolicy("needs_human"),
+        makeRisk(),
+        audit.writer,
+        approvalStore,
+      );
+
+      const first = await svc.evaluate(binanceSpotOrder, {
+        correlationId: "approval-binding",
+      });
+      const second = await svc.evaluate(binanceSpotOrder, {
+        correlationId: "later-http-request",
+      });
+
+      expect(first.correlationId).toBe("approval-binding");
+      expect(second.correlationId).toBe("approval-binding");
+      expect(second.approvalId).toBe(first.approvalId);
+      expect(second.decisionToken).toBe(first.decisionToken);
+      expect(approvalStore.get(first.approvalId ?? "")).toMatchObject({
+        correlationId: "approval-binding",
+      });
+      expect(audit.events.filter((event) => event.eventType === "approval.requested")).toHaveLength(
+        1,
+      );
+      expect(audit.events.at(-1)?.correlationId).toBe("approval-binding");
+    });
   });
 });

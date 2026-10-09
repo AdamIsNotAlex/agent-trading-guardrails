@@ -1,0 +1,27 @@
+FROM node:22-slim AS builder
+
+WORKDIR /app
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json ./
+COPY packages/ ./packages/
+
+RUN corepack enable && pnpm install --frozen-lockfile && pnpm build
+
+FROM node:22-slim AS runtime
+
+RUN groupadd -r guardrail && useradd -r -g guardrail -s /bin/false guardrail \
+    && mkdir -p /app/data /app/audit-anchor \
+    && chown -R guardrail:guardrail /app/data /app/audit-anchor
+
+WORKDIR /app
+
+COPY --from=builder /app ./
+
+USER guardrail
+
+ENV NODE_ENV=production
+ENV GUARDRAIL_HOST=0.0.0.0
+
+EXPOSE 3000
+
+CMD ["node", "packages/runtime/dist/service-main.js"]

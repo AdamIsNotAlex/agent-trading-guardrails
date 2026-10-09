@@ -12,7 +12,8 @@
     }
   },
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "start": "node dist/main.js"
   },
   "dependencies": {
     "@guardrails/schemas": "workspace:*",

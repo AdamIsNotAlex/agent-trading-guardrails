@@ -1,0 +1,10 @@
+.git
+.omp
+.env
+.env.*
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+coverage
+data
+audit-anchor

@@ -66,3 +66,11 @@ reviewer output is advisory while policy and broker boundaries remain authoritat
 - The real-Rego transform integration is conditional on `opa` being on `PATH`; without it, the
   suite is skipped even with `passWithNoTests: false`. The separate GitHub Actions
   `opa-policy-test` job does not install OPA in the integration-test job.
+- Standalone Guardrail and broker audit chains need separate SQLite databases and hash anchors:
+  `AuditWriter` retains its chain head in memory, so sharing a chain across processes is unsafe.
+- HTTP response `x-correlation-id` identifies the current request. A cached `needs_human`
+  decision retains its original body correlation ID and token to preserve the approval binding;
+  clients must not rewrite the signed decision to match the transport header.
+- `transformOpaOutput` validates more than the `PolicyOutput` schema: every allow reason's
+  `rule` must appear in `matchedAllowRules`. HTTP fixtures must preserve that relationship
+  or the real service correctly converts them into fail-closed denials.

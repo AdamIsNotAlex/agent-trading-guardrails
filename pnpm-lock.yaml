@@ -189,6 +189,43 @@ importers:
         specifier: ^25.6.0
         version: 25.6.0
 
+  packages/runtime:
+    dependencies:
+      '@guardrails/audit':
+        specifier: workspace:*
+        version: link:../audit
+      '@guardrails/broker':
+        specifier: workspace:*
+        version: link:../broker
+      '@guardrails/reviewer':
+        specifier: workspace:*
+        version: link:../reviewer
+      '@guardrails/risk-engine':
+        specifier: workspace:*
+        version: link:../risk-engine
+      '@guardrails/schemas':
+        specifier: workspace:*
+        version: link:../schemas
+      '@guardrails/secrets':
+        specifier: workspace:*
+        version: link:../secrets
+      '@guardrails/service':
+        specifier: workspace:*
+        version: link:../guardrail-service
+      better-sqlite3:
+        specifier: ^12.9.0
+        version: 12.9.0
+      zod:
+        specifier: ^3.25.23
+        version: 3.25.76
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.13
+        version: 7.6.13
+      '@types/node':
+        specifier: ^25.6.0
+        version: 25.6.0
+
   packages/schemas:
     dependencies:
       zod:
@@ -1234,11 +1271,6 @@ packages:
   safe-buffer@5.2.1:
     resolution: {integrity: sha512-rp3So07KcdmmKbGvgaNxQSJr7bGVSVk5S9Eq1F+ppbRo70+YeaDxkw5Dd8NPN+GD6bjnYm2VuPuCXmpuYvmCXQ==}
 
-  semver@7.7.4:
-    resolution: {integrity: sha512-vFKC2IEtQnVhpT78h1Yp8wzwrf8CM+MzKMHGJZfBtzhZNycRFnXsHk6E5TxIkkMsgNS7mdX3AGB7x2QM2di4lA==}
-    engines: {node: '>=10'}
-    hasBin: true
-
   semver@7.8.2:
     resolution: {integrity: sha512-c8jsqUZm3omBOI66G90z1Dyw5z622G8oLG+omfsHBJf3CWQTlOcwOjvOG6wtiNfW6anKm/eA39LMwMtMez2TiQ==}
     engines: {node: '>=10'}
@@ -2199,7 +2231,7 @@ snapshots:
 
   node-abi@3.90.0:
     dependencies:
-      semver: 7.7.4
+      semver: 7.8.2
 
   node-fetch@2.7.0:
     dependencies:
@@ -2316,8 +2348,6 @@ snapshots:
       utf-8-validate: 6.0.6
 
   safe-buffer@5.2.1: {}
-
-  semver@7.7.4: {}
 
   semver@7.8.2: {}
 

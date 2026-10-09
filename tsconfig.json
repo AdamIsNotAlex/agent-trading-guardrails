@@ -27,6 +27,7 @@
     { "path": "packages/agent-adapters" },
     { "path": "packages/audit" },
     { "path": "packages/approval" },
+    { "path": "packages/runtime" },
     { "path": "packages/red-team" }
   ]
 }
