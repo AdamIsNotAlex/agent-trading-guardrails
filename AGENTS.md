@@ -74,3 +74,6 @@ reviewer output is advisory while policy and broker boundaries remain authoritat
 - `transformOpaOutput` validates more than the `PolicyOutput` schema: every allow reason's
   `rule` must appear in `matchedAllowRules`. HTTP fixtures must preserve that relationship
   or the real service correctly converts them into fail-closed denials.
+- `pnpm run ci` does not run dependency audits. Verify both `pnpm audit --audit-level=high --prod`
+  and `pnpm audit --audit-level=high` after dependency fixes: development-only paths can fail
+  `CI / security` even when the production audit passes.

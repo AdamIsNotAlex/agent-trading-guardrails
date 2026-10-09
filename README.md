@@ -91,4 +91,16 @@ for validation, correlation IDs, approval limitations, and startup configuration
 
 **Real API keys, wallet private keys, seed phrases, and other secrets must never be committed to this repository.** Use the `env.example` file as a template and store actual secrets in `.env` (gitignored) or a secret manager.
 
+CI audits both production and development dependencies and fails on high or critical advisories.
+Run these checks separately from `pnpm run ci`:
+
+```sh
+pnpm audit --audit-level=high --prod
+pnpm audit --audit-level=high
+```
+
+Security patch pins are maintained in `pnpm-workspace.yaml` and `pnpm-lock.yaml`. When a patch
+is newer than the seven-day release-age gate, add its exact version to `minimumReleaseAgeExclude`
+rather than disabling the gate. A successful audit can still report lower-severity advisories.
+
 See [docs/security-boundaries.md](docs/security-boundaries.md) for the full security model.
