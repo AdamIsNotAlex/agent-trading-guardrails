@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import {
   type BeforeConnectorSideEffect,
+  type ConnectorExecutionResult,
   ConnectorRevalidationError,
   type ExecutionConnector,
   scopeIdempotencyKey,
@@ -9,11 +10,18 @@ import type { TradingIntent } from "@guardrails/schemas";
 import type {
   BinanceApiClient,
   BinanceConfig,
+  BinanceOrderResult,
   FuturesMarginTypeParams,
   OrderStatusParams,
 } from "./interfaces.js";
 import { BinancePaperSimulator } from "./paper-simulator.js";
-import { rejectMarginModes, validateIntent } from "./validation.js";
+import { reconcileAcceptedOrder, toBrokerOrderStatus } from "./reconciliation.js";
+import {
+  rejectMarginModes,
+  validateIntent,
+  validateIpAllowlist,
+  validateLiveKeyPermissions,
+} from "./validation.js";
 
 export class BinanceConnector implements ExecutionConnector {
   private paper = new BinancePaperSimulator();
@@ -22,7 +30,12 @@ export class BinanceConnector implements ExecutionConnector {
     private config: BinanceConfig,
     private client: BinanceApiClient | null,
     private mode: "paper" | "live",
-  ) {}
+  ) {
+    if (mode === "live" && !config.testnet) {
+      const allowlist = validateIpAllowlist(config.ipAllowlist);
+      if (!allowlist.valid) throw new Error(allowlist.reason);
+    }
+  }
 
   private validateExecutableIntent(intent: TradingIntent): void {
     const marginCheck = rejectMarginModes(intent);
@@ -71,6 +84,72 @@ export class BinanceConnector implements ExecutionConnector {
     }
   }
 
+  private async verifyLiveApiKey(
+    intent: TradingIntent,
+  ): Promise<{ passed: boolean; reason?: string }> {
+    if (!this.client) return { passed: false, reason: "Binance API client not configured." };
+    if (this.config.testnet) return { passed: true };
+    try {
+      const permissions = await this.client.getApiKeyPermissions();
+      const check = validateLiveKeyPermissions(permissions, intent, this.config);
+      if (!check.valid) return { passed: false, reason: check.reason };
+      return { passed: true };
+    } catch {
+      return { passed: false, reason: "Failed to verify Binance API key permissions." };
+    }
+  }
+
+  private async acknowledgeLiveOrder(
+    intent: TradingIntent,
+    acknowledged: BinanceOrderResult,
+  ): Promise<ConnectorExecutionResult> {
+    const orderStatus = toBrokerOrderStatus(acknowledged);
+    const approvedQuantity =
+      intent.action === "cex.place_order" ? intent.quantity : acknowledged.executedQty;
+    const approvedPrice =
+      intent.action === "cex.place_order" ? intent.price : acknowledged.avgPrice;
+    if (!this.client) {
+      return {
+        orderId: acknowledged.orderId,
+        orderStatus,
+        reconciliation: reconcileAcceptedOrder({
+          acknowledged,
+          lookupFailed: true,
+          approvedQuantity,
+          approvedPrice,
+        }),
+      };
+    }
+    try {
+      const observed = await this.client.getOrderStatus({
+        account: "account" in intent ? intent.account : "",
+        symbol: acknowledged.symbol,
+        orderId: acknowledged.orderId,
+      });
+      return {
+        orderId: acknowledged.orderId,
+        orderStatus,
+        reconciliation: reconcileAcceptedOrder({
+          acknowledged,
+          observed,
+          approvedQuantity,
+          approvedPrice,
+        }),
+      };
+    } catch {
+      return {
+        orderId: acknowledged.orderId,
+        orderStatus,
+        reconciliation: reconcileAcceptedOrder({
+          acknowledged,
+          lookupFailed: true,
+          approvedQuantity,
+          approvedPrice,
+        }),
+      };
+    }
+  }
+
   async revalidate(intent: TradingIntent): Promise<{ passed: boolean; reason?: string }> {
     const marginCheck = rejectMarginModes(intent);
     if (!marginCheck.valid) return { passed: false, reason: marginCheck.reason };
@@ -91,6 +170,8 @@ export class BinanceConnector implements ExecutionConnector {
 
     if (this.mode === "live") {
       if (!this.client) return { passed: false, reason: "Binance API client not configured." };
+      const permissions = await this.verifyLiveApiKey(intent);
+      if (!permissions.passed) return permissions;
 
       if (intent.action === "cex.place_order" && intent.accountMode === "usdm_futures") {
         try {
@@ -146,7 +227,7 @@ export class BinanceConnector implements ExecutionConnector {
   async execute(
     intent: TradingIntent,
     beforeSideEffect?: BeforeConnectorSideEffect,
-  ): ReturnType<ExecutionConnector["execute"]> {
+  ): Promise<ConnectorExecutionResult> {
     const validation = await this.revalidate(intent);
     if (!validation.passed) {
       throw new ConnectorRevalidationError(
@@ -185,7 +266,7 @@ export class BinanceConnector implements ExecutionConnector {
   private async executeSpotOrder(
     intent: TradingIntent,
     beforeSideEffect?: BeforeConnectorSideEffect,
-  ): ReturnType<ExecutionConnector["execute"]> {
+  ): Promise<ConnectorExecutionResult> {
     if (!("symbol" in intent) || !("side" in intent) || !("orderType" in intent)) {
       throw new Error("Invalid spot order intent.");
     }
@@ -209,13 +290,13 @@ export class BinanceConnector implements ExecutionConnector {
     if (!this.client) throw new Error("Binance API client not configured for live mode.");
     beforeSideEffect?.();
     const result = await this.client.placeSpotOrder(params);
-    return { orderId: result.orderId };
+    return this.acknowledgeLiveOrder(intent, result);
   }
 
   private async executeFuturesOrder(
     intent: TradingIntent,
     beforeSideEffect?: BeforeConnectorSideEffect,
-  ): ReturnType<ExecutionConnector["execute"]> {
+  ): Promise<ConnectorExecutionResult> {
     if (!("symbol" in intent) || !("side" in intent) || !("orderType" in intent)) {
       throw new Error("Invalid futures order intent.");
     }
@@ -247,13 +328,13 @@ export class BinanceConnector implements ExecutionConnector {
     await this.verifyFuturesIsolatedMargin({ account: params.account, symbol: params.symbol });
     beforeSideEffect?.();
     const result = await this.client.placeFuturesOrder(params);
-    return { orderId: result.orderId };
+    return this.acknowledgeLiveOrder(intent, result);
   }
 
   private async executeCancelOrder(
     intent: TradingIntent,
     beforeSideEffect?: BeforeConnectorSideEffect,
-  ): ReturnType<ExecutionConnector["execute"]> {
+  ): Promise<ConnectorExecutionResult> {
     if (!("orderId" in intent) || !("symbol" in intent) || !("account" in intent)) {
       throw new Error("Invalid cancel order intent.");
     }

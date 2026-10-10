@@ -33,6 +33,62 @@
             "orderId": {
               "type": "string",
               "minLength": 1
+            },
+            "reconciliation": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "enum": ["matched", "discrepancy", "unavailable"]
+                },
+                "checkedAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "expected": {
+                  "type": "object",
+                  "properties": {
+                    "orderId": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "symbol": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "side": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "status": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "executedQty": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "avgPrice": {
+                      "type": "number",
+                      "minimum": 0
+                    }
+                  },
+                  "required": ["orderId", "symbol", "side", "status", "executedQty", "avgPrice"],
+                  "additionalProperties": false
+                },
+                "observed": {
+                  "$ref": "#/definitions/broker-execution-result/anyOf/0/properties/reconciliation/properties/expected"
+                },
+                "discrepancies": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              "required": ["status", "checkedAt", "expected", "discrepancies"],
+              "additionalProperties": false
             }
           },
           "required": [
@@ -71,35 +127,10 @@
               "const": "cex_order"
             },
             "orderStatus": {
-              "type": "object",
-              "properties": {
-                "orderId": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "symbol": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "side": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "status": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "executedQty": {
-                  "type": "number",
-                  "minimum": 0
-                },
-                "avgPrice": {
-                  "type": "number",
-                  "minimum": 0
-                }
-              },
-              "required": ["orderId", "symbol", "side", "status", "executedQty", "avgPrice"],
-              "additionalProperties": false
+              "$ref": "#/definitions/broker-execution-result/anyOf/0/properties/reconciliation/properties/expected"
+            },
+            "reconciliation": {
+              "$ref": "#/definitions/broker-execution-result/anyOf/0/properties/reconciliation"
             }
           },
           "required": [
@@ -142,7 +173,10 @@
               "minLength": 1
             },
             "orderStatus": {
-              "$ref": "#/definitions/broker-execution-result/anyOf/1/properties/orderStatus"
+              "$ref": "#/definitions/broker-execution-result/anyOf/0/properties/reconciliation/properties/expected"
+            },
+            "reconciliation": {
+              "$ref": "#/definitions/broker-execution-result/anyOf/0/properties/reconciliation"
             }
           },
           "required": [
@@ -226,7 +260,7 @@
               "minLength": 1
             },
             "orderStatus": {
-              "$ref": "#/definitions/broker-execution-result/anyOf/1/properties/orderStatus"
+              "$ref": "#/definitions/broker-execution-result/anyOf/0/properties/reconciliation/properties/expected"
             }
           },
           "required": [

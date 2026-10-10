@@ -13,6 +13,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AuditEventType, Environment } from "@guardrails/schemas";
 import type Database from "better-sqlite3";
+import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { readMigrationFiles } from "drizzle-orm/migrator";
@@ -44,11 +45,13 @@ export class AuditWriter {
   private pendingAnchorRepairHash?: string;
   private hashSecret: string;
   private hashAnchorPath?: string;
+  private environment: Environment;
 
   constructor(
     private sqlite: Database.Database,
     options: AuditWriterOptions,
   ) {
+    this.environment = options.environment;
     this.hashSecret =
       options.hashSecret ?? process.env.AUDIT_HASH_SECRET ?? "dev-audit-hash-secret";
     this.hashAnchorPath = options.hashAnchorPath ?? process.env.AUDIT_HASH_ANCHOR_PATH;
@@ -317,6 +320,32 @@ export class AuditWriter {
       if (committedHash) this.pendingAnchorRepairHash = committedHash;
       throw err;
     }
+  }
+
+  checkHealth(): void {
+    const eventId = randomUUID();
+    const correlationId = randomUUID();
+    const data = { healthProbe: true };
+    this.write({
+      eventId,
+      eventType: "broker.preflight",
+      environment: this.environment,
+      correlationId,
+      data,
+    });
+    const row = this.db.select().from(auditEvents).where(eq(auditEvents.eventId, eventId)).get();
+    if (
+      !row ||
+      row.eventType !== "broker.preflight" ||
+      row.correlationId !== correlationId ||
+      row.environment !== this.environment ||
+      row.data !== JSON.stringify(data) ||
+      row.eventHash !== this.computeEventHash(row) ||
+      row.eventHash !== this.lastHash
+    ) {
+      throw new Error("Audit health probe did not persist a verifiable event.");
+    }
+    this.verifyAnchoredHash(false);
   }
 
   getLastHash(): string {

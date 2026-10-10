@@ -1,6 +1,7 @@
 import type {
   AuditEventType,
   BrokerExecutionResult,
+  BrokerOrderReconciliation,
   BrokerSimulationEvidence,
   Environment,
   TradingIntent,
@@ -21,6 +22,7 @@ interface ConnectorExecutionEvidence {
   orderId?: string;
   transactionHash?: string;
   orderStatus?: ConnectorOrderStatus;
+  reconciliation?: BrokerOrderReconciliation;
   simulationEvidence?: BrokerSimulationEvidence;
 }
 
@@ -57,6 +59,7 @@ export type KillSwitchScope =
 
 export interface AuditWriter {
   write(event: BrokerAuditEvent): void;
+  checkHealth?(): void;
 }
 
 export interface BrokerAuditEvent {
@@ -80,6 +83,14 @@ export class IdempotencyConflictError extends Error {
   constructor(key: string) {
     super(`Idempotency key ${key} was already used with a different intent payload.`);
     this.name = "IdempotencyConflictError";
+  }
+}
+
+export class KillSwitchReachabilityError extends Error {
+  constructor(cause?: unknown) {
+    super("Kill switch is not reachable.");
+    this.name = "KillSwitchReachabilityError";
+    if (cause !== undefined) this.cause = cause;
   }
 }
 

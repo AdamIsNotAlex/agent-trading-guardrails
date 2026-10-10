@@ -15,6 +15,17 @@ export const BrokerOrderStatus = z
   .strict();
 export type BrokerOrderStatus = z.infer<typeof BrokerOrderStatus>;
 
+export const BrokerOrderReconciliation = z
+  .object({
+    status: z.enum(["matched", "discrepancy", "unavailable"]),
+    checkedAt: z.string().datetime(),
+    expected: BrokerOrderStatus,
+    observed: BrokerOrderStatus.optional(),
+    discrepancies: z.array(z.string().min(1)),
+  })
+  .strict();
+export type BrokerOrderReconciliation = z.infer<typeof BrokerOrderReconciliation>;
+
 export const BrokerExecutionKind = z.enum([
   "cex_order",
   "cex_cancel",
@@ -46,6 +57,7 @@ const ExecutedCexOrderByIdResult = BrokerExecutionResultBase.extend({
   executionKind: z.literal("cex_order"),
   revalidationPassed: z.literal(true),
   orderId: z.string().min(1),
+  reconciliation: BrokerOrderReconciliation.optional(),
 });
 
 const ExecutedCexOrderByStatusResult = BrokerExecutionResultBase.extend({
@@ -53,6 +65,7 @@ const ExecutedCexOrderByStatusResult = BrokerExecutionResultBase.extend({
   executionKind: z.literal("cex_order"),
   revalidationPassed: z.literal(true),
   orderStatus: BrokerOrderStatus,
+  reconciliation: BrokerOrderReconciliation.optional(),
 });
 
 const ExecutedCexOrderByIdAndStatusResult = BrokerExecutionResultBase.extend({
@@ -61,6 +74,7 @@ const ExecutedCexOrderByIdAndStatusResult = BrokerExecutionResultBase.extend({
   revalidationPassed: z.literal(true),
   orderId: z.string().min(1),
   orderStatus: BrokerOrderStatus,
+  reconciliation: BrokerOrderReconciliation.optional(),
 });
 
 const ExecutedCexCancelResult = BrokerExecutionResultBase.extend({
@@ -140,6 +154,7 @@ type BrokerExecutedCexOrderResult = BrokerExecutionResultTypeBase &
     status: "executed";
     executionKind: "cex_order";
     revalidationPassed: true;
+    reconciliation?: BrokerOrderReconciliation;
   } & (
     | { orderId: string; orderStatus?: BrokerOrderStatus }
     | { orderId?: string; orderStatus: BrokerOrderStatus }

@@ -1,3 +1,4 @@
+import { ConnectorRevalidationError } from "@guardrails/broker";
 import {
   binanceCancelOrder,
   binanceFuturesOrder,
@@ -6,7 +7,8 @@ import {
 } from "@guardrails/schemas/fixtures";
 import { describe, expect, it } from "vitest";
 import { BinanceConnector } from "./connector.js";
-import type { BinanceApiClient, BinanceConfig } from "./interfaces.js";
+import type { BinanceApiClient, BinanceApiKeyPermissions, BinanceConfig } from "./interfaces.js";
+import { ORDER_STATUS_LOOKUP_FAILED } from "./reconciliation.js";
 
 const config: BinanceConfig = {
   apiKey: "test-key",
@@ -16,9 +18,32 @@ const config: BinanceConfig = {
   allowedSpotSymbols: ["ETH-USDC", "BTC-USDC"],
   allowedFuturesSymbols: ["BTC-USDT", "ETH-USDT"],
   maxFuturesLeverage: 3,
+  ipAllowlist: [],
+};
+const liveMainnetConfig: BinanceConfig = {
+  ...config,
+  testnet: false,
+  ipAllowlist: ["203.0.113.10"],
+};
+const safePermissions: BinanceApiKeyPermissions = {
+  ipRestrict: true,
+  enableWithdrawals: false,
+  enableReading: true,
+  enableSpotAndMarginTrading: true,
+  enableFutures: true,
 };
 
 function makeMockClient(): BinanceApiClient {
+  let lastPlaced:
+    | {
+        orderId: string;
+        symbol: string;
+        side: string;
+        status: string;
+        executedQty: number;
+        avgPrice: number;
+      }
+    | undefined;
   return {
     async getPrice(symbol) {
       return { symbol, price: 3500, timestampMs: Date.now() };
@@ -27,27 +52,29 @@ function makeMockClient(): BinanceApiClient {
       return { account, balances: [], positions: [], timestampMs: Date.now() };
     },
     async placeSpotOrder(params) {
-      return {
+      lastPlaced = {
         orderId: "live-spot-001",
         symbol: params.symbol,
         side: params.side,
         status: "FILLED",
-        executedQty: 0.002,
-        avgPrice: 3500,
+        executedQty: params.quantity ?? 0.002,
+        avgPrice: params.price ?? 3500,
       };
+      return lastPlaced;
     },
     async getFuturesMarginType() {
       return "isolated";
     },
     async placeFuturesOrder(params) {
-      return {
+      lastPlaced = {
         orderId: "live-futures-001",
         symbol: params.symbol,
         side: params.side,
         status: "FILLED",
-        executedQty: 0.0001,
-        avgPrice: 100000,
+        executedQty: params.quantity ?? 0.00004,
+        avgPrice: params.price ?? 100000,
       };
+      return lastPlaced;
     },
     async cancelOrder(params) {
       return {
@@ -60,6 +87,9 @@ function makeMockClient(): BinanceApiClient {
       };
     },
     async getOrderStatus(params) {
+      if (lastPlaced && lastPlaced.orderId === params.orderId) {
+        return { ...lastPlaced };
+      }
       return {
         orderId: params.orderId,
         symbol: params.symbol,
@@ -68,6 +98,9 @@ function makeMockClient(): BinanceApiClient {
         executedQty: 0.002,
         avgPrice: 3500,
       };
+    },
+    async getApiKeyPermissions() {
+      return { ...safePermissions };
     },
   };
 }
@@ -169,6 +202,13 @@ describe("BinanceConnector (live mode with mock)", () => {
     const connector = new BinanceConnector(config, makeMockClient(), "live");
     const result = await connector.execute(binanceSpotOrder);
     expect(result.orderId).toBe("live-spot-001");
+    expect(result.orderStatus).toMatchObject({
+      orderId: "live-spot-001",
+      status: "FILLED",
+      executedQty: 0.002,
+      avgPrice: 3500,
+    });
+    expect(result.reconciliation?.status).toBe("matched");
   });
 
   it("passes stable client order ids for live spot orders", async () => {
@@ -497,5 +537,299 @@ describe("BinanceConnector validation", () => {
     const connector = new BinanceConnector(config, makeMockClient(), "live");
     const snapshot = await connector.getAccountSnapshot("subaccount-1");
     expect(snapshot.account).toBe("subaccount-1");
+  });
+});
+
+describe("BinanceConnector live mainnet permissions and reconciliation", () => {
+  it("rejects empty or wildcard IP allowlists before live mainnet construction", () => {
+    expect(
+      () =>
+        new BinanceConnector(
+          { ...config, testnet: false, ipAllowlist: [] },
+          makeMockClient(),
+          "live",
+        ),
+    ).toThrow();
+    expect(
+      () =>
+        new BinanceConnector(
+          { ...config, testnet: false, ipAllowlist: ["0.0.0.0"] },
+          makeMockClient(),
+          "live",
+        ),
+    ).toThrow();
+  });
+
+  it("does not fetch market data or place orders when the live key is unsafe", async () => {
+    let priceCalls = 0;
+    let placeCalls = 0;
+    const client: BinanceApiClient = {
+      ...makeMockClient(),
+      async getApiKeyPermissions() {
+        return { ...safePermissions, enableWithdrawals: true };
+      },
+      async getPrice(symbol) {
+        priceCalls += 1;
+        return { symbol, price: 3500, timestampMs: Date.now() };
+      },
+      async placeSpotOrder(params) {
+        placeCalls += 1;
+        return {
+          orderId: "should-not-place",
+          symbol: params.symbol,
+          side: params.side,
+          status: "NEW",
+          executedQty: 0,
+          avgPrice: 0,
+        };
+      },
+    };
+    const connector = new BinanceConnector(liveMainnetConfig, client, "live");
+    const result = await connector.revalidate(binanceSpotOrder);
+    expect(result.passed).toBe(false);
+    await expect(connector.execute(binanceSpotOrder)).rejects.toThrow(ConnectorRevalidationError);
+    expect(priceCalls).toBe(0);
+    expect(placeCalls).toBe(0);
+  });
+
+  it("rejects unrestricted or unread live keys before side effects", async () => {
+    for (const permissions of [
+      { ...safePermissions, ipRestrict: false },
+      { ...safePermissions, enableReading: false },
+      { ...safePermissions, enableSpotAndMarginTrading: false },
+    ]) {
+      let placeCalls = 0;
+      const client: BinanceApiClient = {
+        ...makeMockClient(),
+        async getApiKeyPermissions() {
+          return permissions;
+        },
+        async placeSpotOrder(params) {
+          placeCalls += 1;
+          return makeMockClient().placeSpotOrder(params);
+        },
+      };
+      const connector = new BinanceConnector(liveMainnetConfig, client, "live");
+      const result = await connector.revalidate(binanceSpotOrder);
+      expect(result.passed).toBe(false);
+      await expect(connector.execute(binanceSpotOrder)).rejects.toThrow(ConnectorRevalidationError);
+      expect(placeCalls).toBe(0);
+    }
+  });
+
+  it("rejects missing futures trading permission without placing an order", async () => {
+    let placeCalls = 0;
+    const client: BinanceApiClient = {
+      ...makeMockClient(),
+      async getPrice(symbol) {
+        return { symbol, price: binanceFuturesOrder.price, timestampMs: Date.now() };
+      },
+      async getApiKeyPermissions() {
+        return { ...safePermissions, enableFutures: false };
+      },
+      async placeFuturesOrder(params) {
+        placeCalls += 1;
+        return makeMockClient().placeFuturesOrder(params);
+      },
+    };
+    const connector = new BinanceConnector(liveMainnetConfig, client, "live");
+    const result = await connector.revalidate(binanceFuturesOrder);
+    expect(result.passed).toBe(false);
+    await expect(connector.execute(binanceFuturesOrder)).rejects.toThrow(
+      ConnectorRevalidationError,
+    );
+    expect(placeCalls).toBe(0);
+  });
+
+  it("redacts permission lookup failures and skips market data", async () => {
+    let priceCalls = 0;
+    const client: BinanceApiClient = {
+      ...makeMockClient(),
+      async getApiKeyPermissions() {
+        throw new Error(`secret ${config.apiSecret}`);
+      },
+      async getPrice(symbol) {
+        priceCalls += 1;
+        return { symbol, price: 3500, timestampMs: Date.now() };
+      },
+    };
+    const connector = new BinanceConnector(liveMainnetConfig, client, "live");
+    const result = await connector.revalidate(binanceSpotOrder);
+    expect(result.passed).toBe(false);
+    expect(result.reason).not.toContain(config.apiSecret);
+    expect(priceCalls).toBe(0);
+  });
+
+  it("never queries API key permissions on live testnet", async () => {
+    let permissionCalls = 0;
+    const client: BinanceApiClient = {
+      ...makeMockClient(),
+      async getApiKeyPermissions() {
+        permissionCalls += 1;
+        throw new Error("testnet must not query SAPI");
+      },
+    };
+    const connector = new BinanceConnector(config, client, "live");
+    expect((await connector.revalidate(binanceSpotOrder)).passed).toBe(true);
+    const result = await connector.execute(binanceSpotOrder);
+    expect(result.orderId).toBe("live-spot-001");
+    expect(permissionCalls).toBe(0);
+  });
+
+  it("returns matched reconciliation for an accepted live fill", async () => {
+    const connector = new BinanceConnector(liveMainnetConfig, makeMockClient(), "live");
+    const result = await connector.execute(binanceSpotOrder);
+    expect(result.orderId).toBe("live-spot-001");
+    expect(result.orderStatus?.status).toBe("FILLED");
+    expect(result.reconciliation).toMatchObject({
+      status: "matched",
+      expected: { orderId: "live-spot-001", status: "FILLED", executedQty: 0.002 },
+      observed: { orderId: "live-spot-001", status: "FILLED", executedQty: 0.002 },
+      discrepancies: [],
+    });
+  });
+
+  it("returns matched reconciliation for an accepted live futures fill", async () => {
+    const client: BinanceApiClient = {
+      ...makeMockClient(),
+      async getPrice(symbol) {
+        return { symbol, price: binanceFuturesOrder.price, timestampMs: Date.now() };
+      },
+    };
+    const connector = new BinanceConnector(liveMainnetConfig, client, "live");
+    const result = await connector.execute(binanceFuturesOrder);
+    expect(result.orderId).toBe("live-futures-001");
+    expect(result.orderStatus).toMatchObject({
+      orderId: "live-futures-001",
+      side: "SELL",
+      status: "FILLED",
+      executedQty: 0.00004,
+      avgPrice: 100000,
+    });
+    expect(result.reconciliation).toMatchObject({
+      status: "matched",
+      expected: { orderId: "live-futures-001", status: "FILLED", executedQty: 0.00004 },
+      observed: { orderId: "live-futures-001", status: "FILLED", executedQty: 0.00004 },
+      discrepancies: [],
+    });
+  });
+
+  it("does not cache live API key permissions across revalidation", async () => {
+    let permissionCalls = 0;
+    const client: BinanceApiClient = {
+      ...makeMockClient(),
+      async getApiKeyPermissions() {
+        permissionCalls += 1;
+        if (permissionCalls === 1) return { ...safePermissions };
+        return { ...safePermissions, enableWithdrawals: true };
+      },
+    };
+    const connector = new BinanceConnector(liveMainnetConfig, client, "live");
+    expect((await connector.revalidate(binanceSpotOrder)).passed).toBe(true);
+    const second = await connector.revalidate(binanceSpotOrder);
+    expect(second.passed).toBe(false);
+    expect(permissionCalls).toBe(2);
+  });
+
+  it("treats an unfilled accepted LIMIT as matched rather than a failed fill", async () => {
+    const acknowledged = {
+      orderId: "live-spot-new",
+      symbol: "ETH-USDC",
+      side: "BUY",
+      status: "NEW",
+      executedQty: 0,
+      avgPrice: 0,
+    };
+    const client: BinanceApiClient = {
+      ...makeMockClient(),
+      async placeSpotOrder() {
+        return acknowledged;
+      },
+      async getOrderStatus() {
+        return acknowledged;
+      },
+    };
+    const connector = new BinanceConnector(liveMainnetConfig, client, "live");
+    const result = await connector.execute(binanceSpotOrder);
+    expect(result.orderId).toBe("live-spot-new");
+    expect(result.orderStatus?.status).toBe("NEW");
+    expect(result.reconciliation?.status).toBe("matched");
+    expect(result.reconciliation?.discrepancies).toEqual([]);
+  });
+
+  it("preserves the accepted order when status lookup is unavailable", async () => {
+    const client: BinanceApiClient = {
+      ...makeMockClient(),
+      async getOrderStatus() {
+        throw new Error(`order lookup leaked ${config.apiSecret}`);
+      },
+    };
+    const connector = new BinanceConnector(liveMainnetConfig, client, "live");
+    const result = await connector.execute(binanceSpotOrder);
+    expect(result.orderId).toBe("live-spot-001");
+    expect(result.orderStatus).toMatchObject({
+      orderId: "live-spot-001",
+      status: "FILLED",
+      executedQty: 0.002,
+    });
+    expect(result.reconciliation).toMatchObject({
+      status: "unavailable",
+      expected: { orderId: "live-spot-001", status: "FILLED" },
+      discrepancies: [ORDER_STATUS_LOOKUP_FAILED],
+    });
+    expect(result.reconciliation?.observed).toBeUndefined();
+    expect(JSON.stringify(result.reconciliation)).not.toContain(config.apiSecret);
+  });
+
+  it("flags identity, overfill, and limit-price mismatches as discrepancies without dropping the order", async () => {
+    const cases = [
+      {
+        name: "identity",
+        observed: {
+          orderId: "other-order",
+          symbol: "ETH-USDC",
+          side: "BUY",
+          status: "FILLED",
+          executedQty: 0.002,
+          avgPrice: 3500,
+        },
+      },
+      {
+        name: "overfill",
+        observed: {
+          orderId: "live-spot-001",
+          symbol: "ETH-USDC",
+          side: "BUY",
+          status: "FILLED",
+          executedQty: 0.003,
+          avgPrice: 3500,
+        },
+      },
+      {
+        name: "limit",
+        observed: {
+          orderId: "live-spot-001",
+          symbol: "ETH-USDC",
+          side: "BUY",
+          status: "FILLED",
+          executedQty: 0.002,
+          avgPrice: 3600,
+        },
+      },
+    ];
+    for (const testCase of cases) {
+      const client: BinanceApiClient = {
+        ...makeMockClient(),
+        async getOrderStatus() {
+          return testCase.observed;
+        },
+      };
+      const connector = new BinanceConnector(liveMainnetConfig, client, "live");
+      const result = await connector.execute(binanceSpotOrder);
+      expect(result.orderId, testCase.name).toBe("live-spot-001");
+      expect(result.orderStatus?.status, testCase.name).toBe("FILLED");
+      expect(result.reconciliation?.status, testCase.name).toBe("discrepancy");
+      expect(result.reconciliation?.observed, testCase.name).toEqual(testCase.observed);
+    }
   });
 });

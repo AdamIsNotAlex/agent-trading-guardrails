@@ -36,4 +36,5 @@ export interface GuardrailDecision {
   riskResult: DynamicRiskResult | null;
   decidedAt: string;
   decisionToken?: string;
+  dryRun?: true;
 }

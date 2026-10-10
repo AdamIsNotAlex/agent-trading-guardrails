@@ -9,6 +9,14 @@ import {
 } from "@guardrails/schemas";
 import { assertNotVaultDevInProduction, redactSecrets } from "@guardrails/secrets";
 import {
+  type BrokerDryRunResult,
+  createDryRunAuthorization,
+  type DryRunAuthorization,
+  dryRunAuthorizationMatches,
+  dryRunIsFresh,
+  type GuardrailDryRunApproval,
+} from "./dry-run.js";
+import {
   type AuditWriter,
   type BrokerIdempotencyReservation,
   type BrokerIdempotencyStore,
@@ -18,6 +26,7 @@ import {
   type KillSwitch,
   type KillSwitchScope,
 } from "./interfaces.js";
+import { getKillSwitchScopes, LiveModePreflightCheck, readKillSwitchActive } from "./preflight.js";
 
 export interface BrokerConfig {
   environment: Environment;
@@ -25,6 +34,10 @@ export interface BrokerConfig {
   decisionVerificationSecret: string;
   decisionMaxAgeMs?: number;
   vaultAddr?: string;
+}
+
+export interface BrokerExecuteOptions {
+  dryRunAuthorization?: DryRunAuthorization;
 }
 
 export type GuardrailApproval =
@@ -54,6 +67,7 @@ export function createGuardrailDecisionToken(params: {
   correlationId: string;
   decidedAt: string;
   approvalId?: string;
+  dryRun?: true;
 }): string {
   return createHmac("sha256", params.secret)
     .update(
@@ -63,20 +77,26 @@ export function createGuardrailDecisionToken(params: {
         correlationId: params.correlationId,
         decidedAt: params.decidedAt,
         approvalId: params.approvalId ?? null,
+        ...(params.dryRun ? { dryRun: true } : {}),
       }),
     )
     .digest("hex");
 }
 
 export class ExecutionBroker {
+  private approvalStore: ApprovalStore;
+  private liveApprovalStore?: ApprovalStore;
+
   constructor(
     private config: BrokerConfig,
     private connector: ExecutionConnector,
     private killSwitch: KillSwitch,
     private audit: AuditWriter,
     private idempotency: BrokerIdempotencyStore,
-    private approvalStore = new ApprovalStore({ defaultTimeoutSeconds: 300 }),
+    approvalStore?: ApprovalStore,
   ) {
+    this.liveApprovalStore = approvalStore;
+    this.approvalStore = approvalStore ?? new ApprovalStore({ defaultTimeoutSeconds: 300 });
     assertDecisionSecret(config.environment, config.decisionVerificationSecret);
     if (
       config.decisionMaxAgeMs !== undefined &&
@@ -89,7 +109,10 @@ export class ExecutionBroker {
     }
   }
 
-  async execute(approval: GuardrailApproval): Promise<BrokerExecutionResult> {
+  async execute(
+    approval: GuardrailApproval,
+    options: BrokerExecuteOptions = {},
+  ): Promise<BrokerExecutionResult> {
     const now = new Date().toISOString();
     const parseResult = TradingIntent.safeParse(approval.intent);
     if (!parseResult.success) {
@@ -107,6 +130,18 @@ export class ExecutionBroker {
       );
     }
     const intent = parseResult.data;
+    const canaryOrder =
+      this.config.environment === "canary_live" && intent.action === "cex.place_order";
+    const dryRunCheckedAt = options.dryRunAuthorization?.checkedAt;
+    if ("dryRun" in approval) {
+      return this.reject(
+        intent,
+        now,
+        approval.correlationId,
+        "dry_run_only",
+        "A dry-run decision cannot execute.",
+      );
+    }
 
     const outcome = approval.outcome as string;
     if (outcome !== "allow" && outcome !== "needs_human") {
@@ -169,6 +204,28 @@ export class ExecutionBroker {
       );
     }
 
+    if (this.config.environment === "canary_live") {
+      if (!this.config.canaryLiveEnabled) {
+        return this.reject(
+          intent,
+          now,
+          approval.correlationId,
+          "canary_live_disabled",
+          "Canary-live execution is not enabled.",
+        );
+      }
+      const preflight = this.preflight(intent, approval.correlationId);
+      if (!preflight.passed) {
+        return this.reject(
+          intent,
+          now,
+          approval.correlationId,
+          "live_preflight_failed",
+          "Live-mode preflight failed.",
+        );
+      }
+    }
+
     const hasApprovalId = "approvalId" in approval;
     const approvalId = hasApprovalId ? approval.approvalId : undefined;
     const matchingApproval = this.findApprovalForIntent(intent);
@@ -224,6 +281,27 @@ export class ExecutionBroker {
     };
 
     try {
+      if (
+        canaryOrder &&
+        !dryRunAuthorizationMatches(
+          options.dryRunAuthorization,
+          this.config.decisionVerificationSecret,
+          intent,
+          now,
+          this.config.decisionMaxAgeMs,
+        )
+      ) {
+        const result = this.reject(
+          intent,
+          now,
+          approval.correlationId,
+          "dry_run_required",
+          "A fresh successful dry-run report is required for this live order.",
+        );
+        reservation.abort(new Error(result.rejectionReason));
+        reservationCompleted = true;
+        return result;
+      }
       if (approvalId) {
         const approvedRequest = this.approvalStore.get(approvalId);
         if (approvedRequest?.state === "consumed") {
@@ -283,9 +361,9 @@ export class ExecutionBroker {
     }
 
     try {
-      const scopes = this.getKillSwitchScopes(intent);
+      const scopes = getKillSwitchScopes(intent);
       for (const scope of scopes) {
-        if (this.killSwitch.isActive(scope)) {
+        if (readKillSwitchActive(this.killSwitch, scope)) {
           this.audit.write({
             eventType: "killswitch.blocked",
             environment: this.config.environment,
@@ -304,18 +382,6 @@ export class ExecutionBroker {
             ),
           );
         }
-      }
-
-      if (this.config.environment === "canary_live" && !this.config.canaryLiveEnabled) {
-        return finish(
-          this.reject(
-            intent,
-            now,
-            approval.correlationId,
-            "canary_live_disabled",
-            "Canary-live execution is not enabled.",
-          ),
-        );
       }
 
       const revalidation = await this.connector.revalidate(intent);
@@ -346,7 +412,7 @@ export class ExecutionBroker {
       }
 
       for (const scope of scopes) {
-        if (this.killSwitch.isActive(scope)) {
+        if (readKillSwitchActive(this.killSwitch, scope)) {
           this.audit.write({
             eventType: "killswitch.blocked",
             environment: this.config.environment,
@@ -367,6 +433,26 @@ export class ExecutionBroker {
         }
       }
 
+      if (
+        canaryOrder &&
+        !dryRunIsFresh(
+          dryRunCheckedAt ?? "",
+          new Date().toISOString(),
+          this.config.decisionMaxAgeMs,
+        )
+      ) {
+        const result = this.reject(
+          intent,
+          now,
+          approval.correlationId,
+          "dry_run_expired",
+          "Dry-run report expired during broker revalidation.",
+        );
+        reservation.abort(new Error(result.rejectionReason));
+        reservationCompleted = true;
+        return result;
+      }
+
       if (approvalId && !this.approvalStore.consumeOneTime(approvalId)) {
         return finish(
           this.reject(
@@ -383,6 +469,16 @@ export class ExecutionBroker {
       try {
         executionResult = await this.connector.execute(intent, () => {
           this.assertKillSwitchInactive(scopes, intent, approval.correlationId);
+          if (
+            canaryOrder &&
+            !dryRunIsFresh(
+              dryRunCheckedAt ?? "",
+              new Date().toISOString(),
+              this.config.decisionMaxAgeMs,
+            )
+          ) {
+            throw new ConnectorRevalidationError("Dry-run report expired before submission.");
+          }
         });
       } catch (err) {
         const executionError = String(err);
@@ -461,6 +557,7 @@ export class ExecutionBroker {
           orderId: executionResult.orderId,
           transactionHash: executionResult.transactionHash,
           orderStatus: executionResult.orderStatus,
+          reconciliation: executionResult.reconciliation,
           simulationEvidence: executionResult.simulationEvidence,
         },
       };
@@ -475,6 +572,129 @@ export class ExecutionBroker {
       }
       throw err;
     }
+  }
+
+  async dryRun(approval: GuardrailDryRunApproval): Promise<BrokerDryRunResult> {
+    const now = new Date().toISOString();
+    const parsed = TradingIntent.safeParse(approval.intent);
+    const intent = parsed.success ? parsed.data : undefined;
+    const report: BrokerDryRunResult = {
+      dryRun: true,
+      intentId: approval.intentId,
+      correlationId: approval.correlationId,
+      checkedAt: now,
+      passed: false,
+      requiresHumanApproval: approval.outcome === "needs_human",
+      checks: [],
+    };
+    const finish = (): BrokerDryRunResult => {
+      report.checkedAt = new Date().toISOString();
+      report.passed = report.checks.every((check) => check.passed);
+      if (
+        report.passed &&
+        !dryRunIsFresh(approval.decidedAt, report.checkedAt, this.config.decisionMaxAgeMs)
+      ) {
+        report.passed = false;
+        report.checks.push({
+          check: "decision_freshness",
+          passed: false,
+          message: "Dry-run decision expired during broker revalidation.",
+        });
+      }
+      try {
+        this.audit.write({
+          eventType: "broker.dry_run",
+          environment: this.config.environment,
+          intentId: intent?.intentId,
+          principal: intent?.principal,
+          correlationId: approval.correlationId,
+          data: { ...report },
+        });
+      } catch {
+        report.passed = false;
+        report.checks.push({
+          check: "audit",
+          passed: false,
+          message: "Dry-run audit could not be written.",
+        });
+      }
+      if (report.passed && intent) {
+        report.authorization = createDryRunAuthorization(
+          this.config.decisionVerificationSecret,
+          intent,
+          report.checkedAt,
+        );
+      }
+      return report;
+    };
+    const validDecision =
+      intent !== undefined &&
+      approval.dryRun === true &&
+      approval.intentId === intent.intentId &&
+      (approval.outcome === "allow" || approval.outcome === "needs_human") &&
+      dryRunIsFresh(approval.decidedAt, now, this.config.decisionMaxAgeMs) &&
+      this.decisionTokenMatches(approval, intent);
+    report.checks.push({
+      check: "decision",
+      passed: validDecision,
+      ...(!validDecision ? { message: "A fresh, authentic dry-run decision is required." } : {}),
+    });
+    if (!validDecision || !intent) return finish();
+
+    const environmentMatches =
+      intent.environment === this.config.environment &&
+      this.config.environment !== "production" &&
+      (this.config.environment !== "canary_live" || this.config.canaryLiveEnabled);
+    report.checks.push({
+      check: "environment",
+      passed: environmentMatches,
+      ...(!environmentMatches
+        ? { message: "Broker environment is mismatched or execution is disabled." }
+        : {}),
+    });
+    if (!environmentMatches) return finish();
+
+    if (this.config.environment === "canary_live") {
+      const preflight = this.preflight(intent, approval.correlationId);
+      report.checks.push(...preflight.checks);
+      if (!preflight.passed) return finish();
+    }
+    try {
+      const validation = await this.connector.revalidate(intent);
+      report.checks.push({
+        check: "connector",
+        passed: validation.passed === true,
+        ...(validation.passed !== true
+          ? { message: this.nonEmptyReason(validation.reason, "Connector revalidation failed.") }
+          : {}),
+      });
+      const inactive = getKillSwitchScopes(intent).every(
+        (scope) => !readKillSwitchActive(this.killSwitch, scope),
+      );
+      report.checks.push({
+        check: "late_kill_switch",
+        passed: inactive,
+        ...(!inactive ? { message: "Kill switch is active." } : {}),
+      });
+    } catch {
+      report.checks.push({
+        check: "broker_revalidation",
+        passed: false,
+        message: "Broker revalidation or kill-switch reachability failed.",
+      });
+    }
+    return finish();
+  }
+
+  private preflight(intent: TradingIntent, correlationId: string) {
+    return new LiveModePreflightCheck({
+      audit: this.audit,
+      killSwitch: this.killSwitch,
+      approvalStore: this.liveApprovalStore,
+      environment: this.config.environment,
+      intent,
+      correlationId,
+    }).run();
   }
 
   private executedResult(
@@ -492,6 +712,7 @@ export class ExecutionBroker {
         orderId: executionResult.orderId,
         transactionHash: executionResult.transactionHash,
         orderStatus: executionResult.orderStatus,
+        reconciliation: executionResult.reconciliation,
         simulationEvidence: executionResult.simulationEvidence,
         revalidationPassed: true,
         executedAt: now,
@@ -663,7 +884,10 @@ export class ExecutionBroker {
     );
   }
 
-  private decisionTokenMatches(approval: GuardrailApproval, intent: TradingIntent): boolean {
+  private decisionTokenMatches(
+    approval: GuardrailApproval | GuardrailDryRunApproval,
+    intent: TradingIntent,
+  ): boolean {
     if (!/^[0-9a-f]{64}$/i.test(approval.decisionToken)) return false;
     const expected = createGuardrailDecisionToken({
       secret: this.config.decisionVerificationSecret,
@@ -672,6 +896,7 @@ export class ExecutionBroker {
       correlationId: approval.correlationId,
       decidedAt: approval.decidedAt,
       approvalId: "approvalId" in approval ? approval.approvalId : undefined,
+      ...("dryRun" in approval && approval.dryRun ? { dryRun: true as const } : {}),
     });
     return timingSafeEqual(
       Buffer.from(approval.decisionToken, "hex"),
@@ -685,7 +910,13 @@ export class ExecutionBroker {
     correlationId: string,
   ): void {
     for (const scope of scopes) {
-      if (this.killSwitch.isActive(scope)) {
+      let active: boolean;
+      try {
+        active = readKillSwitchActive(this.killSwitch, scope);
+      } catch {
+        throw new ConnectorRevalidationError("Kill switch is not reachable.");
+      }
+      if (active) {
         this.audit.write({
           eventType: "killswitch.blocked",
           environment: this.config.environment,
@@ -697,23 +928,6 @@ export class ExecutionBroker {
         throw new ConnectorRevalidationError("Kill switch is active.");
       }
     }
-  }
-
-  private getKillSwitchScopes(intent: TradingIntent): KillSwitchScope[] {
-    const scopes: KillSwitchScope[] = [
-      { type: "global" },
-      { type: "agent", principal: intent.principal },
-    ];
-    if ("exchange" in intent) {
-      scopes.push({ type: "exchange", exchange: intent.exchange });
-    }
-    if ("account" in intent) {
-      scopes.push({ type: "account", account: intent.account });
-    }
-    if ("chain" in intent) {
-      scopes.push({ type: "chain", chain: intent.chain });
-    }
-    return scopes;
   }
 }
 

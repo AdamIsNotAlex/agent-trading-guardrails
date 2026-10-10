@@ -120,6 +120,18 @@ describe("standalone broker HTTP boundary", () => {
     expect(await replay.json()).toEqual(first);
   });
 
+  it("never executes a request explicitly marked as a dry-run", async () => {
+    const url = await start();
+    const signed = approval();
+    const previewResponse = await execute(url, { ...signed, dryRun: true });
+    expect(previewResponse.status).toBe(400);
+    const actual = await execute(url, signed);
+    expect(await actual.json()).toMatchObject({
+      status: "executed",
+      executionKind: "cex_order",
+    });
+  });
+
   it("rejects missing signatures at HTTP validation and tampering at the broker", async () => {
     const url = await start();
     const signed = approval();

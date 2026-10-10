@@ -1,5 +1,10 @@
-export type { BrokerConfig, GuardrailApproval } from "./broker.js";
+export type { BrokerConfig, BrokerExecuteOptions, GuardrailApproval } from "./broker.js";
 export { createGuardrailDecisionToken, ExecutionBroker } from "./broker.js";
+export type {
+  BrokerDryRunResult,
+  DryRunAuthorization,
+  GuardrailDryRunApproval,
+} from "./dry-run.js";
 export type {
   FileBrokerIdempotencyStoreOptions,
   InMemoryBrokerIdempotencyStoreOptions,
@@ -15,6 +20,7 @@ export type {
   BeforeConnectorSideEffect,
   BrokerAuditEvent,
   BrokerIdempotencyStore,
+  ConnectorExecutionResult,
   ExecutionConnector,
   KillSwitch,
   KillSwitchScope,
@@ -22,3 +28,5 @@ export type {
 export { ConnectorRevalidationError, IdempotencyConflictError } from "./interfaces.js";
 export { InMemoryKillSwitch } from "./kill-switch.js";
 export { PaperExecutionConnector } from "./paper-connector.js";
+export type { PreflightCheckResult } from "./preflight.js";
+export { LiveModePreflightCheck } from "./preflight.js";

@@ -708,6 +708,12 @@ function pendingAuditDataMatchesResult(
   if (!resultHasField(result, "simulationEvidence") && data.simulationEvidence !== undefined) {
     return false;
   }
+  if ("reconciliation" in result && !deepEqual(data.reconciliation, result.reconciliation)) {
+    return false;
+  }
+  if (!resultHasField(result, "reconciliation") && data.reconciliation !== undefined) {
+    return false;
+  }
   return true;
 }
 
@@ -719,6 +725,7 @@ function pendingAuditDataKeys(result: BrokerExecutionResult): Set<string> {
     "transactionHash",
     "orderStatus",
     "simulationEvidence",
+    "reconciliation",
   ]) {
     if (resultHasField(result, key)) keys.add(key);
   }

@@ -16,6 +16,18 @@ const config: BinanceRestConfig = {
   allowedFuturesSymbols: [],
   historySymbols: ["ETH-USDC"],
   maxFuturesLeverage: 2,
+  ipAllowlist: [],
+};
+const mainnetAllowlist = ["203.0.113.10"];
+const safePermissions = {
+  ipRestrict: true,
+  enableWithdrawals: false,
+  createTime: 1_700_000_000_000,
+  enableReading: true,
+  enableSpotAndMarginTrading: true,
+  enableMargin: false,
+  enableFutures: true,
+  permitsUniversalTransfer: false,
 };
 const order = {
   symbol: "ETHUSDC",
@@ -111,9 +123,17 @@ describe("Binance signed REST", () => {
 
   it("selects the bound market and network for public quotes without attaching credentials", async () => {
     for (const [overrides, origin, path] of [
-      [{ testnet: false }, "https://api.binance.com", "/api/v3/ticker/price"],
+      [
+        { testnet: false, ipAllowlist: mainnetAllowlist },
+        "https://api.binance.com",
+        "/api/v3/ticker/price",
+      ],
       [futures, "https://demo-fapi.binance.com", "/fapi/v2/ticker/price"],
-      [{ ...futures, testnet: false }, "https://fapi.binance.com", "/fapi/v2/ticker/price"],
+      [
+        { ...futures, testnet: false, ipAllowlist: mainnetAllowlist },
+        "https://fapi.binance.com",
+        "/fapi/v2/ticker/price",
+      ],
     ] as const) {
       const api = client((url, init) => {
         expect(url.origin).toBe(origin);
@@ -344,5 +364,100 @@ describe("Binance complete history collection", () => {
       futures,
     );
     await expect(stuck.getRiskHistory("dedicated", "2026-10-10")).rejects.toThrow();
+  });
+});
+
+describe("Binance API key permissions", () => {
+  it("queries mainnet SAPI even for USD-M futures and ignores unknown flags", async () => {
+    for (const overrides of [
+      { testnet: false as const, ipAllowlist: mainnetAllowlist },
+      { ...futures, testnet: false as const, ipAllowlist: mainnetAllowlist },
+    ]) {
+      let sent = false;
+      const api = client((url, init) => {
+        expect(url.origin).toBe("https://api.binance.com");
+        expect(url.pathname).toBe("/sapi/v1/account/apiRestrictions");
+        expect(init.method).toBe("GET");
+        expect(new Headers(init.headers).get("x-mbx-apikey")).toBe(config.apiKey);
+        const signature = url.searchParams.get("signature");
+        url.searchParams.delete("signature");
+        expect(signature).toBe(
+          createHmac("sha256", config.apiSecret).update(url.searchParams.toString()).digest("hex"),
+        );
+        sent = true;
+        return response(safePermissions);
+      }, overrides);
+      expect(await api.getApiKeyPermissions()).toEqual({
+        ipRestrict: true,
+        enableWithdrawals: false,
+        enableReading: true,
+        enableSpotAndMarginTrading: true,
+        enableFutures: true,
+      });
+      expect(sent).toBe(true);
+    }
+  });
+
+  it("never sends testnet credentials to mainnet SAPI", async () => {
+    let requests = 0;
+    const api = client(() => {
+      requests += 1;
+      return response(safePermissions);
+    });
+    await expect(api.getApiKeyPermissions()).rejects.toThrow();
+    expect(requests).toBe(0);
+  });
+
+  it("fails closed on malformed permission flags without leaking secrets", async () => {
+    for (const value of [1, 0, "true", "false", null, undefined]) {
+      const api = client(() => response({ ...safePermissions, enableWithdrawals: value }), {
+        testnet: false,
+        ipAllowlist: mainnetAllowlist,
+      });
+      const error = await api.getApiKeyPermissions().catch((caught: Error) => caught);
+      expect(error).toBeInstanceOf(Error);
+      expect(String(error)).not.toContain(config.apiKey);
+      expect(String(error)).not.toContain(config.apiSecret);
+    }
+  });
+
+  it("fails closed on array payloads, missing flags, and extra string flags", async () => {
+    for (const payload of [
+      [],
+      "restricted",
+      { ...safePermissions, ipRestrict: undefined },
+      { ...safePermissions, enableFutures: "true" },
+      { ...safePermissions, enableReading: "1" },
+    ]) {
+      const api = client(() => response(payload), {
+        testnet: false,
+        ipAllowlist: mainnetAllowlist,
+      });
+      const error = await api.getApiKeyPermissions().catch((caught: Error) => caught);
+      expect(error).toBeInstanceOf(Error);
+      expect(String(error)).not.toContain(config.apiKey);
+      expect(String(error)).not.toContain(config.apiSecret);
+    }
+  });
+
+  it("does not leak signed URLs when SAPI transport fails", async () => {
+    const api = client(
+      () => {
+        throw new Error(
+          `fetch https://api.binance.com/sapi/v1/account/apiRestrictions?signature=${config.apiSecret}`,
+        );
+      },
+      { testnet: false, ipAllowlist: mainnetAllowlist },
+    );
+    const error = await api.getApiKeyPermissions().catch((caught: Error) => caught);
+    expect(error).toBeInstanceOf(Error);
+    expect(String(error)).not.toContain(config.apiSecret);
+  });
+
+  it("rejects mainnet clients without a literal IP allowlist", () => {
+    expect(() => client(() => response({}), { testnet: false })).toThrow();
+    expect(() =>
+      client(() => response({}), { testnet: false, ipAllowlist: ["0.0.0.0"] }),
+    ).toThrow();
   });
 });

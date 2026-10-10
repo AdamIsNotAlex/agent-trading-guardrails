@@ -129,3 +129,13 @@ reviewer output is advisory while policy and broker boundaries remain authoritat
   both pre and post state, and observe program accounts as well as writable token accounts.
 - The canonical Token-2022 program is `TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb`;
   the older fixture string ending in `BHN4VPgY6M` is not a valid public key.
+- Canary previews bypass live decision caches/approval creation and use a separate HMAC purpose.
+  Their broker receipt proves readiness, not human approval; normal decisions remain independently required.
+- Binance key restrictions use mainnet SAPI even for USD-M. The response exposes `ipRestrict`, not
+  the actual IP entries; never claim that a local list was compared with the remote allowlist.
+- Accepted order IDs must survive status-query failure. Persist reconciliation with the terminal
+  result/audit outbox so recovery never resubmits an order merely because reconciliation was unavailable.
+- Approval health probes must use schema-valid records (`Environment` has no `test` value), with an
+  immediate insert/read/delete transaction; keep `AuditWriter.write()`'s void callback contract.
+- `generate:json-schema` emits plain pretty JSON. Run Biome formatting on `packages/schemas/json-schema`
+  afterward to preserve repository formatting before linting.

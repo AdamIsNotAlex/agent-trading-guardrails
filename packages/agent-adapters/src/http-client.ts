@@ -195,6 +195,7 @@ function readGuardrailDecision(value: unknown): GuardrailDecision | undefined {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     return undefined;
   }
+  if ("dryRun" in value && value.dryRun !== undefined) return undefined;
   if (!("intentId" in value) || typeof value.intentId !== "string") return undefined;
   if (!("correlationId" in value) || typeof value.correlationId !== "string") {
     return undefined;

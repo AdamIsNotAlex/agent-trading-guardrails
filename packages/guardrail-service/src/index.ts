@@ -17,5 +17,5 @@ export {
   readJsonBody,
   sendJson,
 } from "./server.js";
-export type { AuditContext } from "./service.js";
+export type { AuditContext, EvaluationOptions } from "./service.js";
 export { GuardrailService } from "./service.js";

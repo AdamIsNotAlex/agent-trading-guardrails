@@ -126,6 +126,78 @@ function makePolicy(
 }
 
 describe("GuardrailService", () => {
+  describe("dry-run isolation", () => {
+    it("reports escalation without creating approval and reevaluates live risk afterward", async () => {
+      const approvals = new ApprovalStore({ databasePath: ":memory:", defaultTimeoutSeconds: 300 });
+      const audit = makeAuditSpy();
+      let healthy = true;
+      const risk: RiskEngine = {
+        evaluate: (intent, verdict) => makeRisk(healthy).evaluate(intent, verdict),
+      };
+      const service = new GuardrailService(
+        config,
+        makeReviewer(),
+        makePolicy("needs_human"),
+        risk,
+        audit.writer,
+        approvals,
+      );
+      try {
+        const preview = await service.evaluate(binanceSpotOrder, { dryRun: true });
+        expect(preview).toMatchObject({
+          dryRun: true,
+          outcome: "needs_human",
+          requiresHumanApproval: true,
+          riskResult: { passed: true },
+          policyOutput: { decision: "needs_human" },
+        });
+        expect(preview.approvalId).toBeUndefined();
+        expect(approvals.list()).toEqual([]);
+        expect(audit.events.at(-1)?.eventType).toBe("decision.dry_run");
+
+        healthy = false;
+        const live = await service.evaluate(binanceSpotOrder);
+        expect(live.outcome).toBe("deny");
+        expect(live.dryRun).toBeUndefined();
+        expect(live.reasons[0].rule).toBe("risk_market_data_freshness");
+
+        healthy = true;
+        const refreshed = await service.evaluate(binanceSpotOrder, { dryRun: true });
+        expect(refreshed.outcome).toBe("needs_human");
+        expect(approvals.list()).toEqual([]);
+      } finally {
+        approvals.close();
+      }
+    });
+
+    it("does not consume or return a cached live approval during preview", async () => {
+      const approvals = new ApprovalStore({ databasePath: ":memory:", defaultTimeoutSeconds: 300 });
+      const service = new GuardrailService(
+        config,
+        makeReviewer(),
+        makePolicy("needs_human"),
+        makeRisk(),
+        nullAuditWriter,
+        approvals,
+      );
+      try {
+        const live = await service.evaluate(binanceSpotOrder, { correlationId: "live-approval" });
+        const approval = approvals.approve(live.approvalId ?? "", "operator");
+        expect(approval?.state).toBe("approved");
+        const preview = await service.evaluate(binanceSpotOrder, {
+          correlationId: "preview-approval",
+          dryRun: true,
+        });
+        expect(preview.approvalId).toBeUndefined();
+        expect(preview.correlationId).toBe("preview-approval");
+        expect(preview.decisionToken).not.toBe(live.decisionToken);
+        expect(approvals.list()).toEqual([approval]);
+      } finally {
+        approvals.close();
+      }
+    });
+  });
+
   describe("health", () => {
     it("returns ok when OPA is healthy", async () => {
       const svc = new GuardrailService(

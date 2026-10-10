@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
@@ -624,5 +624,78 @@ describe("AuditWriter", () => {
       .prepare("SELECT event_type FROM audit_events WHERE correlation_id = ?")
       .all(corr) as Array<Record<string, unknown>>;
     expect(rows).toHaveLength(2);
+  });
+
+  it("checkHealth writes a durable event, verifies the hash chain, and checks the anchor", () => {
+    const dir = mkdtempSync(join(tmpdir(), "audit-health-"));
+    try {
+      const db = createTestDb();
+      const writer = new AuditWriter(db, {
+        environment: "dev",
+        hashAnchorPath: join(dir, "head"),
+      });
+      writer.checkHealth();
+      const rows = db.prepare("SELECT event_id, data FROM audit_events").all() as Array<{
+        event_id: string;
+        data: string;
+      }>;
+      expect(rows).toHaveLength(1);
+      expect(JSON.parse(rows[0].data)).toEqual({ healthProbe: true });
+      expect(readFileSync(join(dir, "head"), "utf8").trim()).toBe(writer.getLastHash());
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("checkHealth fails when sqlite is closed", () => {
+    const db = createTestDb();
+    const writer = new AuditWriter(db, { environment: "dev" });
+    db.close();
+    expect(() => writer.checkHealth()).toThrow();
+  });
+
+  it("checkHealth fails when the hash anchor does not match", () => {
+    const dir = mkdtempSync(join(tmpdir(), "audit-health-anchor-"));
+    try {
+      const db = createTestDb();
+      const anchorPath = join(dir, "head");
+      const writer = new AuditWriter(db, { environment: "dev", hashAnchorPath: anchorPath });
+      writer.write({
+        eventType: "intent.received",
+        environment: "dev",
+        correlationId: "corr-health-anchor",
+        data: {},
+      });
+      writeFileSync(anchorPath, `${"f".repeat(64)}\n`);
+      expect(() => writer.checkHealth()).toThrow();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("checkHealth fails when a written event cannot be read back", () => {
+    const db = createTestDb();
+    const writer = new AuditWriter(db, { environment: "dev" });
+    db.exec(`
+      CREATE TRIGGER erase_health_probe AFTER INSERT ON audit_events
+      WHEN json_extract(NEW.data, '$.healthProbe') = 1
+      BEGIN
+        DELETE FROM audit_events WHERE event_id = NEW.event_id;
+      END;
+    `);
+    expect(() => writer.checkHealth()).toThrow();
+  });
+
+  it("checkHealth fails when a stored event hash does not match", () => {
+    const db = createTestDb();
+    const writer = new AuditWriter(db, { environment: "dev" });
+    writer.write({
+      eventType: "intent.received",
+      environment: "dev",
+      correlationId: "corr-health-hash",
+      data: {},
+    });
+    db.prepare("UPDATE audit_events SET event_hash = ?").run("f".repeat(64));
+    expect(() => writer.checkHealth()).toThrow();
   });
 });

@@ -65,8 +65,10 @@ Rotation runs every minute, triggered at 10 MiB, retaining five network-log and 
 |----------|---------|----------|
 | Guardrail `GET /health` | No body | `service.health()`: 200 for `ok`, 503 for `degraded`; `opaHealthy` describes OPA reachability, not readiness of every external dependency |
 | Guardrail `POST /evaluate` | Raw `TradingIntent` JSON, `Content-Type: application/json` | 200 with `GuardrailDecision`; policy/risk denials are decisions, not HTTP transport failures |
+| Guardrail `POST /dry-run` | Raw `TradingIntent` JSON | Fresh `GuardrailDecision` with `dryRun: true`; purpose-separated signature, no live decision cache or human approval creation |
 | Broker `GET /health` | No body | 200 with `status: ok` and configured `executionMode: paper`, `binance-testnet`, or `binance-live`; not proof of exchange credentials or readiness |
-| Broker `POST /execute` | Signed decision fields plus the original `intent` | 200 with `BrokerExecutionResult`; the broker still verifies the HMAC, age, environment, kill switch, approval state, and idempotency before execution |
+| Broker `POST /execute` | Normal signed decision plus original `intent`; new canary orders also require `dryRunAuthorization` | `BrokerExecutionResult`; current preflight, HMAC, environment, kill switch, approval state, idempotency, and connector checks remain authoritative |
+| Broker `POST /dry-run` | Signed preview fields (`dryRun: true`) plus original `intent` | `BrokerDryRunResult` with preflight/revalidation checks and a fresh intent-bound authorization receipt only on success; never submits |
 | Signer `GET /health` (execution network only) | No body | 200 with `mode: offline-sepolia`, `chainId: 11155111`, and the persisted key's public address |
 | Signer `POST /sign` (execution network only) | `SigningRequest`: original allow approval plus bounded EIP-1559 envelope | 200 with `OfflineSignature`: signed bytes and their hash, **not a broadcast/execution result**; 403 for failed authorization/caps and 409 for reused/conflicting/reserved signing state |
 
@@ -81,6 +83,12 @@ Validation failures return JSON: 400 for malformed JSON/schema/correlation IDs, 
 `x-correlation-id` accepts 1–128 characters from `[A-Za-z0-9._:-]`; omission generates a UUID. Responses echo the HTTP request ID, including application errors. Evaluation carries it into audit events and the signed decision. **Cached `needs_human` decisions retain their original body `correlationId`, `approvalId`, and token** to preserve the human-approval binding; the response header identifies the new HTTP request. Broker never replaces a signed decision's ID with its transport request ID.
 
 For `/execute`, send `{intentId, correlationId, outcome, decidedAt, decisionToken, approvalId?, intent}` from the decision and original intent. Never generate tokens in the agent. `/evaluate` does not automatically execute. Human-approval resolution is not exposed over HTTP; a trusted operator uses the standalone command below. After approval, submit the **original signed `needs_human` decision**, including its original correlation ID and approval ID, to Broker. Do not relabel it as `allow` or regenerate its token.
+
+New canary orders add `dryRunAuthorization: {checkedAt, token}` from a successful broker preview.
+The operator command `pnpm --silent start:canary-dry-run < intent.json` orchestrates both preview
+endpoints and emits the complete report; `GUARDRAIL_URL` and operator-only `BROKER_URL` select the
+trusted origins. A preview signature is not a normal execution approval, even if its `dryRun` field
+is removed. See the [canary first-order procedure](live-trading-safety.md#first-live-trade-protocol).
 
 The Agent entrypoint consumes raw intents, one JSON object per line, and prints one decision or `{error, message, correlationId?}` per nonblank line. It continues after invalid JSON/schema or failed HTTP requests and exits 1 if any submission failed; a policy denial is a successful submission, not a transport error. Requests time out after 30 seconds. EOF exits normally. This is an intent transport, not an autonomous strategy/LLM loop, and it never calls `/execute`.
 
@@ -363,10 +371,19 @@ For USD-M use `BINANCE_ACCOUNT_MODE=usdm_futures` and the appropriate `BASE-USDT
 symbols. Configure **one-way positions and isolated margin** at Binance beforehand. The client
 verifies margin mode and the requested leverage; it sets leverage before submitting the order
 but never silently changes cross margin or hedge mode. Canary mainnet additionally requires
-`GUARDRAIL_ENV=canary_live`, `BINANCE_TESTNET=false`, and `BROKER_CANARY_LIVE_ENABLED=true`.
+`GUARDRAIL_ENV=canary_live`, `BINANCE_TESTNET=false`, `BROKER_CANARY_LIVE_ENABLED=true`, and
+`BINANCE_IP_ALLOWLIST` containing the trusted process's comma-separated egress IP literals.
 Paper/dev cannot select real execution; testnet/mainnet mismatches fail startup. `production`
 execution remains unsupported. Policy, approvals, kill switch, signed decisions, and durable
 broker idempotency still apply; none are bypassed by selecting this connector.
+
+Every mainnet Binance runtime requires the IP list at startup (including the read-only risk runtime).
+Broker additionally verifies its key's withdrawal/IP restriction flags from mainnet SAPI, even when
+trading USD-M on `fapi.binance.com`. Testnet does not query this mainnet permissions endpoint.
+Canary execution also probes audit write/readback/anchor integrity and explicitly configured approval
+storage, checks kill-switch reachability, and requires a fresh full-pipeline preview receipt for new
+orders. After submission, `reconciliation` retains both the accepted order and queried state in the
+response and durable audit. Follow the [live-trading protocol and limitations](live-trading-safety.md).
 
 **Data and accounting contract:**
 

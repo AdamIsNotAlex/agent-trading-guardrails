@@ -84,4 +84,43 @@ describe("Binance runtime safety boundaries", () => {
     ).rejects.toThrow();
     expect(outbound).toBe(0);
   });
+
+  it("leaves testnet IP allowlists empty and requires literal IPs for canary live", () => {
+    expect(loadBinanceRestConfig("testnet", settings).ipAllowlist).toEqual([]);
+    expect(
+      loadBinanceRestConfig("testnet", { ...settings, BINANCE_IP_ALLOWLIST: "203.0.113.10" })
+        .ipAllowlist,
+    ).toEqual([]);
+    expect(() =>
+      loadBinanceRestConfig("canary_live", { ...settings, BINANCE_TESTNET: "false" }),
+    ).toThrow("BINANCE_IP_ALLOWLIST is required for live Binance credentials.");
+    expect(() =>
+      loadBinanceRestConfig("canary_live", {
+        ...settings,
+        BINANCE_TESTNET: "false",
+        BINANCE_IP_ALLOWLIST: "0.0.0.0",
+      }),
+    ).toThrow("wildcard");
+    expect(() =>
+      loadBinanceRestConfig("canary_live", {
+        ...settings,
+        BINANCE_TESTNET: "false",
+        BINANCE_IP_ALLOWLIST: "203.0.113.10,203.0.113.10",
+      }),
+    ).toThrow("unique");
+    expect(() =>
+      loadBinanceRestConfig("canary_live", {
+        ...settings,
+        BINANCE_TESTNET: "false",
+        BINANCE_IP_ALLOWLIST: "203.0.113.10,",
+      }),
+    ).toThrow("unique comma-separated");
+    expect(
+      loadBinanceRestConfig("canary_live", {
+        ...settings,
+        BINANCE_TESTNET: "false",
+        BINANCE_IP_ALLOWLIST: "203.0.113.10,2001:db8::1",
+      }).ipAllowlist,
+    ).toEqual(["203.0.113.10", "2001:db8::1"]);
+  });
 });

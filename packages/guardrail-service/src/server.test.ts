@@ -104,6 +104,25 @@ async function evaluate(origin: string, correlationId?: string) {
 }
 
 describe("guardrail HTTP boundary", () => {
+  it("returns a non-executable preview without opening a human approval", async () => {
+    const { origin, approvals } = await listen({ outcome: "needs_human" });
+    const response = await fetch(`${origin}/dry-run`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-correlation-id": "preview-http" },
+      body: JSON.stringify(binanceSpotOrder),
+    });
+    expect(response.status).toBe(200);
+    const preview = (await response.json()) as GuardrailDecision;
+    expect(preview).toMatchObject({
+      dryRun: true,
+      outcome: "needs_human",
+      correlationId: "preview-http",
+      requiresHumanApproval: true,
+    });
+    expect(preview.approvalId).toBeUndefined();
+    expect(approvals.list()).toEqual([]);
+  });
+
   it.each([true, false])("reports actual policy health (healthy=%s)", async (healthy) => {
     const { origin } = await listen({ healthy });
     const response = await fetch(`${origin}/health`, {
@@ -193,6 +212,7 @@ describe("guardrail HTTP boundary", () => {
   it.each([
     ["/unknown", "POST", 404, null],
     ["/evaluate", "GET", 405, "POST"],
+    ["/dry-run", "GET", 405, "POST"],
     ["/health", "POST", 405, "GET"],
   ])("rejects unsupported route or method (%s %s)", async (path, method, status, allow) => {
     const { origin, events } = await listen();

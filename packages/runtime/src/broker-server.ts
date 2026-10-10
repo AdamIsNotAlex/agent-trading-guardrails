@@ -6,6 +6,11 @@ import { getRequestCorrelationId, HttpError, readJsonBody, sendJson } from "@gua
 import { z } from "zod";
 
 const approvalFields = {
+  dryRun: z.never().optional(),
+  dryRunAuthorization: z
+    .object({ checkedAt: z.string().datetime(), token: z.string().regex(/^[a-f0-9]{64}$/) })
+    .strict()
+    .optional(),
   intentId: z.string().uuid(),
   correlationId: z.string().regex(/^[A-Za-z0-9._:-]{1,128}$/),
   intent: TradingIntent,
@@ -24,6 +29,11 @@ const approvalSchema = z.discriminatedUnion("outcome", [
     approvalId: z.string().uuid(),
   }),
 ]);
+const dryRunApprovalSchema = z.object({
+  ...approvalFields,
+  dryRun: z.literal(true),
+  outcome: z.enum(["allow", "needs_human"]),
+});
 
 export function createBrokerServer(
   broker: ExecutionBroker,
@@ -36,7 +46,8 @@ export function createBrokerServer(
         correlationId = getRequestCorrelationId(request);
         response.setHeader("x-correlation-id", correlationId);
         const path = new URL(request.url ?? "/", "http://localhost").pathname;
-        const method = path === "/health" ? "GET" : path === "/execute" ? "POST" : null;
+        const method =
+          path === "/health" ? "GET" : path === "/execute" || path === "/dry-run" ? "POST" : null;
         if (!method) throw new HttpError(404, "Route not found.");
         if (request.method !== method) {
           response.setHeader("allow", method);
@@ -46,10 +57,22 @@ export function createBrokerServer(
           sendJson(response, 200, { status: "ok", executionMode });
           return;
         }
+        if (path === "/dry-run") {
+          const parsed = dryRunApprovalSchema.safeParse(await readJsonBody(request));
+          if (!parsed.success) throw new HttpError(400, "Invalid dry-run approval.");
+          sendJson(response, 200, await broker.dryRun(parsed.data));
+          return;
+        }
         const parsed = approvalSchema.safeParse(await readJsonBody(request));
         if (!parsed.success) throw new HttpError(400, "Invalid execution approval.");
         // The signed decision ID must not be replaced by this HTTP request's ID.
-        sendJson(response, 200, await broker.execute(parsed.data));
+        sendJson(
+          response,
+          200,
+          await broker.execute(parsed.data, {
+            dryRunAuthorization: parsed.data.dryRunAuthorization,
+          }),
+        );
       } catch (error) {
         response.setHeader("x-correlation-id", correlationId);
         sendJson(response, error instanceof HttpError ? error.statusCode : 500, {

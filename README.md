@@ -100,6 +100,11 @@ across Guardrail/Broker restarts in shared SQLite; operators use `pnpm start:app
 and `approve`/`deny` from a separate process. See the
 [operator workflow and storage requirements](docs/deployment-profiles.md#cross-process-human-approval).
 
+Before a new canary order, operators run `pnpm --silent start:canary-dry-run < intent.json`.
+The full report verifies readiness without submitting; execution requires its fresh intent-bound
+receipt plus a normal signed decision. Accepted Binance orders include durable status reconciliation.
+See the [canary launch and first-order protocol](docs/live-trading-safety.md#first-live-trade-protocol).
+
 The package-level Sepolia/devnet providers support state-backed balance checks before signing.
 See [RPC capabilities, audited token configuration, fee semantics, and signer requirements](docs/signing-backends.md#built-in-testnet-simulation-before-signing).
 This does not enable onchain broadcasting in default Compose or turn the `LocalDev*Signer`

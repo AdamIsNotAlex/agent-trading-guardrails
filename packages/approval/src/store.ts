@@ -24,8 +24,11 @@ export class ApprovalStore {
   private readonly insertRequest: Database.Statement;
   private readonly updateRequest: Database.Statement;
   private readonly deleteRequest: Database.Statement;
+  private readonly explicitlyConfigured: boolean;
 
   constructor(private config: ApprovalConfig) {
+    this.explicitlyConfigured =
+      typeof config.databasePath === "string" && config.databasePath.trim().length > 0;
     const path = config.databasePath ?? process.env.APPROVAL_DB_PATH ?? "./data/approvals.db";
     if (!path.trim()) throw new Error("Approval database path must not be empty.");
     if (path !== ":memory:") {
@@ -77,6 +80,57 @@ export class ApprovalStore {
 
   close(): void {
     this.database.close();
+  }
+
+  liveConfigured(): boolean {
+    return this.explicitlyConfigured;
+  }
+
+  checkHealth(): void {
+    if (!this.explicitlyConfigured) {
+      throw new Error("Approval store is not explicitly configured for live trading.");
+    }
+    try {
+      this.database
+        .transaction(() => {
+          const now = new Date();
+          const approvalId = randomUUID();
+          const request: PendingApprovalRequest = {
+            approvalId,
+            intentId: "00000000-0000-4000-8000-000000000000",
+            correlationId: randomUUID(),
+            principal: "guardrails.health-probe",
+            action: "health.probe",
+            resource: "approval:health",
+            environment: "dev",
+            escalationReason: "Approval store health probe.",
+            approvalType: "one_time" as const,
+            intentData: { healthProbe: true },
+            state: "pending" as const,
+            createdAt: now.toISOString(),
+            decidedAt: null,
+            decidedBy: null,
+            timeoutAt: new Date(now.getTime() + 60_000).toISOString(),
+          };
+          this.insertRequest.run(request.approvalId, JSON.stringify(request));
+          const stored = this.get(approvalId);
+          if (!stored || stored.state !== "pending" || stored.approvalId !== approvalId) {
+            throw new Error("Approval health probe request was not stored.");
+          }
+          if (this.deleteRequest.run(approvalId).changes !== 1) {
+            throw new Error("Approval health probe request could not be deleted.");
+          }
+          if (this.get(approvalId)) {
+            throw new Error("Approval health probe request was not removed.");
+          }
+        })
+        .immediate();
+    } catch (err) {
+      if (isClosedSqliteError(err)) {
+        throw new Error("Approval store is closed.");
+      }
+      throw err;
+    }
   }
 
   create(params: {
@@ -349,4 +403,22 @@ export class ApprovalStore {
     }
     return timedOut;
   }
+}
+
+function isClosedSqliteError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const message = err.message.toLowerCase();
+  if (
+    message.includes("not open") ||
+    message.includes("database is closed") ||
+    message.includes("closed database")
+  ) {
+    return true;
+  }
+  return (
+    "code" in err &&
+    String((err as { code?: unknown }).code)
+      .toUpperCase()
+      .includes("SQLITE_MISUSE")
+  );
 }

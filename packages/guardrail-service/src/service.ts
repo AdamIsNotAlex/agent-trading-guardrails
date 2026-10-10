@@ -29,6 +29,8 @@ export type AuditContext = Pick<
   correlationId?: string;
 };
 
+export type EvaluationOptions = AuditContext & { dryRun?: true };
+
 type TokenApprovalFacts = Pick<
   PolicyInput,
   | "isTokenApproval"
@@ -71,10 +73,13 @@ export class GuardrailService {
 
   private finalizeInvalidDecision(
     decision: GuardrailDecision,
-    auditContext: AuditContext = {},
+    auditContext: EvaluationOptions = {},
   ): GuardrailDecision {
+    const auditedDecision: GuardrailDecision = auditContext.dryRun
+      ? { ...decision, dryRun: true }
+      : decision;
     this.writeAudit({
-      eventType: "decision.final",
+      eventType: auditContext.dryRun ? "decision.dry_run" : "decision.final",
       environment: this.config.environment,
       correlationId: decision.correlationId,
       promptId: auditContext.promptId,
@@ -84,10 +89,10 @@ export class GuardrailService {
         outcome: decision.outcome,
         reasons: decision.reasons,
         requiresHumanApproval: decision.requiresHumanApproval,
-        decision,
+        decision: auditedDecision,
       },
     });
-    return decision;
+    return auditedDecision;
   }
 
   private requestHumanApproval(
@@ -274,6 +279,7 @@ export class GuardrailService {
     intent: TradingIntent,
     decision: GuardrailDecision,
     correlationId: string,
+    dryRun = false,
   ): string | undefined {
     if (decision.outcome !== "allow" && decision.outcome !== "needs_human") return undefined;
     return createHmac("sha256", this.config.decisionSigningSecret)
@@ -284,6 +290,7 @@ export class GuardrailService {
           correlationId,
           decidedAt: decision.decidedAt,
           approvalId: decision.approvalId ?? null,
+          ...(dryRun ? { dryRun: true } : {}),
         }),
       )
       .digest("hex");
@@ -293,19 +300,25 @@ export class GuardrailService {
     intent: TradingIntent,
     decision: GuardrailDecision,
     correlationId = decision.correlationId,
-    auditContext: AuditContext = {},
+    auditContext: EvaluationOptions = {},
   ): GuardrailDecision {
-    const decisionToken = this.createDecisionToken(intent, decision, correlationId);
-    const auditedDecision = {
+    const decisionToken = this.createDecisionToken(
+      intent,
+      decision,
+      correlationId,
+      auditContext.dryRun === true,
+    );
+    const auditedDecision: GuardrailDecision = {
       ...decision,
       correlationId,
       decisionToken,
+      ...(auditContext.dryRun ? { dryRun: true as const } : {}),
     };
     const auditDecision = decisionToken
       ? { ...auditedDecision, decisionToken: `[sha256:${hashString(decisionToken)}]` }
       : auditedDecision;
     this.writeAudit({
-      eventType: "decision.final",
+      eventType: auditContext.dryRun ? "decision.dry_run" : "decision.final",
       environment: intent.environment,
       correlationId,
       intentId: intent.intentId,
@@ -336,7 +349,10 @@ export class GuardrailService {
     };
   }
 
-  async evaluate(rawIntent: unknown, auditContext: AuditContext = {}): Promise<GuardrailDecision> {
+  async evaluate(
+    rawIntent: unknown,
+    auditContext: EvaluationOptions = {},
+  ): Promise<GuardrailDecision> {
     const correlationId = auditContext.correlationId ?? generateCorrelationId();
     const now = new Date().toISOString();
 
@@ -415,12 +431,14 @@ export class GuardrailService {
       promptId: auditContext.promptId,
       sessionId: auditContext.sessionId,
       inputRef: auditContext.inputRef ?? intent.evidence[0],
-      data: { intent, correlationId },
+      data: { intent, correlationId, ...(auditContext.dryRun ? { dryRun: true } : {}) },
     });
 
     const payloadHash = hashPayload(rawIntent);
     const idempotencyScope = this.idempotencyScope(intent);
-    const cached = this.idempotency.get(idempotencyScope, payloadHash);
+    const cached = auditContext.dryRun
+      ? undefined
+      : this.idempotency.get(idempotencyScope, payloadHash);
     if (cached === "conflict") {
       return this.finalizeDecision(
         intent,
@@ -450,7 +468,7 @@ export class GuardrailService {
         cachedDecision.outcome === "needs_human" ? cachedDecision.correlationId : correlationId;
       return this.finalizeDecision(intent, cachedDecision, cachedCorrelationId, auditContext);
     }
-    this.idempotency.reserve(idempotencyScope, payloadHash);
+    if (!auditContext.dryRun) this.idempotency.reserve(idempotencyScope, payloadHash);
 
     try {
       const contentRejection = this.detectUnsafeContent(intent);
@@ -472,7 +490,7 @@ export class GuardrailService {
           decision.correlationId,
           auditContext,
         );
-        this.idempotency.set(idempotencyScope, payloadHash, finalized);
+        if (!auditContext.dryRun) this.idempotency.set(idempotencyScope, payloadHash, finalized);
         return finalized;
       }
 
@@ -500,7 +518,7 @@ export class GuardrailService {
           decision.correlationId,
           auditContext,
         );
-        this.idempotency.set(idempotencyScope, payloadHash, finalized);
+        if (!auditContext.dryRun) this.idempotency.set(idempotencyScope, payloadHash, finalized);
         return finalized;
       }
 
@@ -526,7 +544,7 @@ export class GuardrailService {
           decision.correlationId,
           auditContext,
         );
-        this.idempotency.set(idempotencyScope, payloadHash, finalized);
+        if (!auditContext.dryRun) this.idempotency.set(idempotencyScope, payloadHash, finalized);
         return finalized;
       }
       this.writeAudit({
@@ -538,7 +556,7 @@ export class GuardrailService {
         promptId: auditContext.promptId,
         sessionId: auditContext.sessionId,
         inputRef: auditContext.inputRef,
-        data: { reviewerVerdict },
+        data: { reviewerVerdict, ...(auditContext.dryRun ? { dryRun: true } : {}) },
       });
 
       let riskResult: DynamicRiskResult;
@@ -566,7 +584,7 @@ export class GuardrailService {
           decision.correlationId,
           auditContext,
         );
-        this.idempotency.set(idempotencyScope, payloadHash, finalized);
+        if (!auditContext.dryRun) this.idempotency.set(idempotencyScope, payloadHash, finalized);
         return finalized;
       }
       this.writeAudit({
@@ -578,7 +596,11 @@ export class GuardrailService {
         promptId: auditContext.promptId,
         sessionId: auditContext.sessionId,
         inputRef: auditContext.inputRef,
-        data: { riskResult, riskChecks: riskResult.checks },
+        data: {
+          riskResult,
+          riskChecks: riskResult.checks,
+          ...(auditContext.dryRun ? { dryRun: true } : {}),
+        },
       });
 
       if (!riskResult.passed) {
@@ -604,7 +626,7 @@ export class GuardrailService {
           decision.correlationId,
           auditContext,
         );
-        this.idempotency.set(idempotencyScope, payloadHash, finalized);
+        if (!auditContext.dryRun) this.idempotency.set(idempotencyScope, payloadHash, finalized);
         return finalized;
       }
 
@@ -660,7 +682,7 @@ export class GuardrailService {
           decision.correlationId,
           auditContext,
         );
-        this.idempotency.set(idempotencyScope, payloadHash, finalized);
+        if (!auditContext.dryRun) this.idempotency.set(idempotencyScope, payloadHash, finalized);
         return finalized;
       }
       this.writeAudit({
@@ -672,7 +694,12 @@ export class GuardrailService {
         promptId: auditContext.promptId,
         sessionId: auditContext.sessionId,
         inputRef: auditContext.inputRef,
-        data: { policyInput, opaInput: policyInput, policyOutput },
+        data: {
+          policyInput,
+          opaInput: policyInput,
+          policyOutput,
+          ...(auditContext.dryRun ? { dryRun: true } : {}),
+        },
       });
 
       const decision: GuardrailDecision = {
@@ -688,7 +715,7 @@ export class GuardrailService {
       };
 
       const approvalDecision =
-        decision.outcome === "needs_human"
+        decision.outcome === "needs_human" && !auditContext.dryRun
           ? this.requestHumanApproval(intent, decision, auditContext)
           : decision;
       let finalized: GuardrailDecision;
@@ -703,13 +730,13 @@ export class GuardrailService {
         if (approvalDecision.approvalId) {
           this.approvalStore.delete(approvalDecision.approvalId);
         }
-        this.idempotency.abort(idempotencyScope, payloadHash, err);
+        if (!auditContext.dryRun) this.idempotency.abort(idempotencyScope, payloadHash, err);
         throw err;
       }
-      this.idempotency.set(idempotencyScope, payloadHash, finalized);
+      if (!auditContext.dryRun) this.idempotency.set(idempotencyScope, payloadHash, finalized);
       return finalized;
     } catch (err) {
-      this.idempotency.abort(idempotencyScope, payloadHash, err);
+      if (!auditContext.dryRun) this.idempotency.abort(idempotencyScope, payloadHash, err);
       throw err;
     }
   }

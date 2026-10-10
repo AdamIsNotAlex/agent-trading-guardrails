@@ -5,9 +5,9 @@ import { join } from "node:path";
 import { ApprovalStore } from "@guardrails/approval";
 import { BrokerExecutionResult, type TradingIntent } from "@guardrails/schemas";
 import {
-  binanceCancelOrder,
-  binanceOrderStatus,
-  binanceSpotOrder,
+  binanceCancelOrder as canaryCancelOrder,
+  binanceOrderStatus as canaryOrderStatus,
+  binanceSpotOrder as canarySpotOrder,
   ethereumSepoliaSigning,
   solanaDevnetSimulation,
 } from "@guardrails/schemas/fixtures";
@@ -23,8 +23,12 @@ import type { AuditWriter, BrokerIdempotencyStore, ExecutionConnector } from "./
 import { InMemoryKillSwitch, KillSwitchAuditError } from "./kill-switch.js";
 import { PaperExecutionConnector } from "./paper-connector.js";
 
+const binanceSpotOrder = { ...canarySpotOrder, environment: "testnet" as const };
+const binanceCancelOrder = { ...canaryCancelOrder, environment: "testnet" as const };
+const binanceOrderStatus = { ...canaryOrderStatus, environment: "testnet" as const };
+
 const config: BrokerConfig = {
-  environment: "canary_live",
+  environment: "testnet",
   canaryLiveEnabled: true,
   decisionVerificationSecret: "test-decision-secret-with-32-bytes",
 };
@@ -1187,26 +1191,27 @@ describe("ExecutionBroker", () => {
       makeAudit(),
       makeIdempotency(),
     );
-    const result = await broker.execute(makeApproval());
+    const result = await broker.execute(makeApproval(canarySpotOrder));
     expect(result.status).toBe("rejected");
-    expect(result.rejectionReason).toContain("not enabled");
   });
 
-  it("allows canary_live when explicitly enabled", async () => {
+  it("does not equate explicit live opt-in with readiness", async () => {
     const canaryConfig: BrokerConfig = {
       environment: "canary_live",
       canaryLiveEnabled: true,
       decisionVerificationSecret: config.decisionVerificationSecret,
     };
+    const execute = vi.fn(async () => ({ orderId: "must-not-submit" }));
     const broker = new ExecutionBroker(
       canaryConfig,
-      new PaperExecutionConnector(),
+      { execute, revalidate: async () => ({ passed: true }) },
       new InMemoryKillSwitch(),
       makeAudit(),
       makeIdempotency(),
     );
-    const result = await broker.execute(makeApproval());
-    expect(result.status).toBe("executed");
+    const result = await broker.execute(makeApproval(canarySpotOrder));
+    expect(result.status).toBe("rejected");
+    expect(execute).not.toHaveBeenCalled();
   });
 
   it("rejects production execution", async () => {
@@ -1606,7 +1611,7 @@ describe("ExecutionBroker", () => {
         {
           eventId: terminalAuditEventId(binanceSpotOrder, "corr-001", "broker.executed"),
           eventType: "broker.forged",
-          environment: "canary_live",
+          environment: binanceSpotOrder.environment,
           intentId: binanceSpotOrder.intentId,
           principal: binanceSpotOrder.principal,
           correlationId: "corr-001",
@@ -1647,7 +1652,7 @@ describe("ExecutionBroker", () => {
         {
           eventId: terminalAuditEventId(binanceSpotOrder, "corr-001", "broker.executed"),
           eventType: "broker.failed",
-          environment: "canary_live",
+          environment: binanceSpotOrder.environment,
           intentId: binanceSpotOrder.intentId,
           principal: binanceSpotOrder.principal,
           correlationId: "corr-001",
@@ -1688,7 +1693,7 @@ describe("ExecutionBroker", () => {
         {
           eventId: terminalAuditEventId(binanceSpotOrder, "corr-001", "broker.executed"),
           eventType: "broker.executed",
-          environment: "canary_live",
+          environment: binanceSpotOrder.environment,
           intentId: binanceSpotOrder.intentId,
           principal: binanceSpotOrder.principal,
           correlationId: "corr-001",
@@ -1728,7 +1733,7 @@ describe("ExecutionBroker", () => {
         {
           eventId: terminalAuditEventId(binanceSpotOrder, "corr-001", "broker.executed"),
           eventType: "broker.failed",
-          environment: "canary_live",
+          environment: binanceSpotOrder.environment,
           intentId: binanceSpotOrder.intentId,
           principal: binanceSpotOrder.principal,
           correlationId: "corr-001",
@@ -1892,7 +1897,7 @@ describe("ExecutionBroker", () => {
         {
           eventId: "11111111-1111-4111-8111-111111111111",
           eventType: "broker.executed",
-          environment: "canary_live",
+          environment: binanceSpotOrder.environment,
           intentId: binanceSpotOrder.intentId,
           principal: binanceSpotOrder.principal,
           correlationId: "corr-001",
@@ -1932,7 +1937,7 @@ describe("ExecutionBroker", () => {
         {
           eventId: terminalAuditEventId(binanceSpotOrder, "corr-001", "broker.failed"),
           eventType: "broker.failed",
-          environment: "canary_live",
+          environment: binanceSpotOrder.environment,
           intentId: binanceSpotOrder.intentId,
           principal: binanceSpotOrder.principal,
           correlationId: "corr-001",
@@ -2092,7 +2097,7 @@ describe("ExecutionBroker", () => {
       },
       {
         eventType: "broker.executed",
-        environment: "canary_live",
+        environment: binanceSpotOrder.environment,
         intentId: binanceSpotOrder.intentId,
         principal: binanceSpotOrder.principal,
         correlationId: "corr-001",
@@ -2300,5 +2305,45 @@ describe("ExecutionBroker", () => {
     );
     await broker.execute(makeApproval());
     expect(revalidateSpy).toHaveBeenCalledWith(binanceSpotOrder);
+  });
+
+  it("does not require a dry-run receipt for canary cancel or status lookups", async () => {
+    const approvalStore = new ApprovalStore({
+      databasePath: ":memory:",
+      defaultTimeoutSeconds: 300,
+    });
+    const execute = vi.fn(async (intent: TradingIntent) =>
+      intent.action === "cex.get_order_status"
+        ? {
+            orderId: canaryOrderStatus.orderId,
+            orderStatus: {
+              orderId: canaryOrderStatus.orderId,
+              symbol: canaryOrderStatus.symbol,
+              side: "BUY",
+              status: "NEW",
+              executedQty: 0,
+              avgPrice: 0,
+            },
+          }
+        : { orderId: canaryCancelOrder.orderId },
+    );
+    const broker = new ExecutionBroker(
+      {
+        environment: "canary_live",
+        canaryLiveEnabled: true,
+        decisionVerificationSecret: config.decisionVerificationSecret,
+      },
+      { execute, revalidate: async () => ({ passed: true }) },
+      new InMemoryKillSwitch(),
+      { write() {}, checkHealth() {} },
+      makeIdempotency(),
+      approvalStore,
+    );
+
+    const cancel = await broker.execute(makeApproval(canaryCancelOrder));
+    expect(cancel).toMatchObject({ status: "executed", orderId: canaryCancelOrder.orderId });
+    const status = await broker.execute(makeApproval(canaryOrderStatus));
+    expect(status.status).toBe("executed");
+    expect(execute).toHaveBeenCalledTimes(2);
   });
 });

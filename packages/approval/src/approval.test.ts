@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -366,5 +366,34 @@ describe("ApprovalStore", () => {
 
     expect(() => store.approve(req.approvalId, "admin")).toThrow("not configured");
     expect(store.get(req.approvalId)?.state).toBe("pending");
+  });
+
+  it("treats only an explicit databasePath as live configured", () => {
+    const directory = mkdtempSync(join(tmpdir(), "approval-health-"));
+    const previousPath = process.env.APPROVAL_DB_PATH;
+    process.env.APPROVAL_DB_PATH = join(directory, "env-approvals.db");
+    const fallback = new ApprovalStore({ defaultTimeoutSeconds: 300 });
+    try {
+      expect(fallback.liveConfigured()).toBe(false);
+      expect(() => fallback.checkHealth()).toThrow("not explicitly configured");
+      expect(fallback.list()).toHaveLength(0);
+
+      const live = openStore({ defaultTimeoutSeconds: 300 });
+      expect(live.liveConfigured()).toBe(true);
+      const existing = live.create(baseParams);
+      live.checkHealth();
+      expect(live.list().map((request) => request.approvalId)).toEqual([existing.approvalId]);
+    } finally {
+      fallback.close();
+      if (previousPath === undefined) delete process.env.APPROVAL_DB_PATH;
+      else process.env.APPROVAL_DB_PATH = previousPath;
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("fails checkHealth when the sqlite connection is closed", () => {
+    const store = new ApprovalStore({ defaultTimeoutSeconds: 300, databasePath: ":memory:" });
+    store.close();
+    expect(() => store.checkHealth()).toThrow("Approval store is closed.");
   });
 });

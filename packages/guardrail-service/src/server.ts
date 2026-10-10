@@ -100,7 +100,7 @@ export function createGuardrailServer(
           sendJson(response, health.status === "ok" ? 200 : 503, health);
           return;
         }
-        if (path === "/evaluate") {
+        if (path === "/evaluate" || path === "/dry-run") {
           if (request.method !== "POST") {
             response.setHeader("allow", "POST");
             throw new HttpError(405, "Method not allowed.");
@@ -109,7 +109,14 @@ export function createGuardrailServer(
           if (!parsed.success) {
             throw new HttpError(400, "Invalid trading intent.");
           }
-          sendJson(response, 200, await service.evaluate(parsed.data, { correlationId }));
+          sendJson(
+            response,
+            200,
+            await service.evaluate(parsed.data, {
+              correlationId,
+              ...(path === "/dry-run" ? { dryRun: true as const } : {}),
+            }),
+          );
           return;
         }
         throw new HttpError(404, "Route not found.");

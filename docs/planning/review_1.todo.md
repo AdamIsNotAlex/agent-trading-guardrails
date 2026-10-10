@@ -229,16 +229,16 @@ No example strategy files exist in the repo.
 
 ### P2.3 — Implement live trading preflight gates (Phase 16)
 
-Most live trading safety gates are docs-only with no enforcement code.
+Canary launch gates and first-order closure are enforced in code. See `docs/live-trading-safety.md` for the operator protocol and credential verification limits.
 
-- [ ] Create `packages/broker/src/preflight.ts` with a `LiveModePreflightCheck` that validates before the first live trade:
-  - [ ] Audit log is healthy and writable (call `AuditWriter.write()` with a test event and verify).
-  - [ ] Kill switch is initialized and reachable.
-  - [ ] Human approval is configured and the approval store is accessible.
-- [ ] Add a `validateNoWithdrawalKey` check stub in `packages/binance-connector/src/validation.ts` — at minimum, document that this requires checking the Binance API key permissions endpoint (`GET /sapi/v1/account/apiRestrictions`), and implement the check if the endpoint is available.
-- [ ] Add an `ipAllowlist` config field to `BinanceConnector` config — validate that it is non-empty before enabling live mode.
-- [ ] Implement dry-run report: before the first live trade, execute the full pipeline (validate → review → policy → risk → broker revalidate) with `dryRun: true` and output a summary report without executing.
-- [ ] Implement post-trade reconciliation: after the first live trade, call `getOrderStatus` (from P1.8) and compare the execution result against the expected outcome, log any discrepancies.
+- [x] Create `packages/broker/src/preflight.ts` with a `LiveModePreflightCheck`, refreshed on canary attempts rather than cached at startup:
+  - [x] Audit log is healthy and writable: write a probe, verify readback/HMAC chain head and hash anchor.
+  - [x] Kill switch is initialized and reachable; non-boolean state/errors fail closed, including late reads before side effects.
+  - [x] Human approval storage is explicitly configured and passes an atomic write/read/delete probe.
+- [x] Implement `validateNoWithdrawalKey` in `packages/binance-connector/src/validation.ts` using signed `GET /sapi/v1/account/apiRestrictions`; unknown or enabled withdrawal permission blocks mainnet execution.
+- [x] Add `ipAllowlist` / `BINANCE_IP_ALLOWLIST`: require non-empty valid IP literals plus Binance `ipRestrict: true`; exact remote IP entries remain an operator check because the permissions response omits them.
+- [x] Implement full dry-run report (`pnpm start:canary-dry-run`): validate → review → risk → policy → broker revalidate, with purpose-separated signatures and no execution, approval consumption, or idempotency reservation. New canary orders require its fresh intent-bound receipt alongside a normal decision.
+- [x] Reconcile every live Binance order through `getOrderStatus`; persist acknowledgment, observation, and discrepancies in the result and terminal audit. Status lookup/audit replay failures never cause an accepted order to be resubmitted.
 - [x] Set futures-specific daily notional cap to USD 25 in `packages/policy/src/policy.json` — add a `futures_auto_max_daily_notional_usd: 25` field under `canary_live` limits and reference it in `escalation.rego` for `usdm_futures` actions.
 
 ### P2.4 — Strengthen red-team test assertions (Phase 17)

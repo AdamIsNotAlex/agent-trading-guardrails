@@ -4,6 +4,7 @@ import {
   BinanceRestClient,
   type BinanceRestConfig,
   BinanceRiskDataProvider,
+  validateIpAllowlist,
 } from "@guardrails/binance-connector";
 import { type ExecutionConnector, PaperExecutionConnector } from "@guardrails/broker";
 import { DEFAULT_CANARY_LIVE_LIMITS, RiskEngine } from "@guardrails/risk-engine";
@@ -33,6 +34,25 @@ function symbols(value: string | undefined, name: string): string[] {
     new Set(result).size !== result.length
   ) {
     throw new Error(`${name} must contain unique comma-separated BASE-USDT or BASE-USDC symbols.`);
+  }
+  return result;
+}
+
+function ipAllowlist(env: NodeJS.ProcessEnv, testnet: boolean): string[] {
+  if (testnet) return [];
+  const raw = env.BINANCE_IP_ALLOWLIST;
+  if (raw === undefined || raw.trim() === "") {
+    throw new Error("BINANCE_IP_ALLOWLIST is required for live Binance credentials.");
+  }
+  const result = raw.split(",").map((value) => value.trim());
+  if (result.some((value) => value.length === 0)) {
+    throw new Error(
+      "BINANCE_IP_ALLOWLIST must contain unique comma-separated literal IP addresses.",
+    );
+  }
+  const check = validateIpAllowlist(result);
+  if (!check.valid) {
+    throw new Error(`BINANCE_IP_ALLOWLIST: ${check.reason}`);
   }
   return result;
 }
@@ -77,6 +97,7 @@ export function loadBinanceRestConfig(
     allowedFuturesSymbols: accountMode === "usdm_futures" ? allowed : [],
     historySymbols,
     maxFuturesLeverage: leverage,
+    ipAllowlist: ipAllowlist(env, testnet),
   };
 }
 

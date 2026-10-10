@@ -2,6 +2,7 @@ import { createHmac } from "node:crypto";
 import type {
   BinanceAccountSnapshot,
   BinanceApiClient,
+  BinanceApiKeyPermissions,
   BinanceOrderResult,
   CancelOrderParams,
   FuturesMarginTypeParams,
@@ -19,8 +20,10 @@ import type {
   BinanceRiskSource,
   BinanceTrade,
 } from "./rest-types.js";
+import { validateIpAllowlist } from "./validation.js";
 
 const DAY_MS = 86_400_000;
+const MAINNET_SAPI_ORIGIN = "https://api.binance.com";
 const PAGE_SIZE = 1000;
 const ORDER_STATUSES: Record<string, true> = {
   NEW: true,
@@ -78,6 +81,10 @@ function side(value: unknown): "BUY" | "SELL" {
   if (value !== "BUY" && value !== "SELL") return invalid();
   return value;
 }
+function flag(value: unknown): boolean {
+  if (value !== true && value !== false) return invalid();
+  return value;
+}
 function stable(asset: string): boolean {
   return asset === "USDT" || asset === "USDC";
 }
@@ -114,6 +121,7 @@ export class BinanceRestClient implements BinanceApiClient, BinanceRiskSource {
   private readonly apiKey: string;
   private readonly apiSecret: string;
   private readonly allowedSymbols: readonly string[];
+  private readonly testnet: boolean;
   private readonly maxLeverage: number;
 
   constructor(config: BinanceRestConfig, options: BinanceRestOptions = {}) {
@@ -166,6 +174,11 @@ export class BinanceRestClient implements BinanceApiClient, BinanceRiskSource {
     this.allowedSymbols = Object.freeze([...allowed]);
     this.apiKey = config.apiKey;
     this.apiSecret = config.apiSecret;
+    this.testnet = config.testnet;
+    if (!config.testnet) {
+      const allowlist = validateIpAllowlist(config.ipAllowlist);
+      if (!allowlist.valid) throw new Error(allowlist.reason);
+    }
     this.maxLeverage = config.maxFuturesLeverage;
     this.fetcher = options.fetch ?? globalThis.fetch;
     this.now = options.now ?? Date.now;
@@ -205,6 +218,7 @@ export class BinanceRestClient implements BinanceApiClient, BinanceRiskSource {
     path: string,
     params: Params = {},
     signed = true,
+    origin = this.origin,
   ): Promise<unknown> {
     const query = new URLSearchParams();
     for (const [key, value] of Object.entries(params)) query.set(key, String(value));
@@ -219,7 +233,7 @@ export class BinanceRestClient implements BinanceApiClient, BinanceRiskSource {
     let response: Response;
     let value: unknown;
     try {
-      response = await this.fetcher(`${this.origin}${path}?${query}`, {
+      response = await this.fetcher(`${origin}${path}?${query}`, {
         method,
         headers: signed ? { "X-MBX-APIKEY": this.apiKey } : {},
         signal: AbortSignal.timeout(this.timeoutMs),
@@ -447,6 +461,21 @@ export class BinanceRestClient implements BinanceApiClient, BinanceRiskSource {
   }
   getOrderStatus(params: OrderStatusParams): Promise<BinanceOrderResult> {
     return this.orderById("GET", params);
+  }
+  async getApiKeyPermissions(): Promise<BinanceApiKeyPermissions> {
+    if (this.testnet) {
+      throw new Error("Binance API key permissions are not queried on testnet.");
+    }
+    const data = row(
+      await this.request("GET", "/sapi/v1/account/apiRestrictions", {}, true, MAINNET_SAPI_ORIGIN),
+    );
+    return {
+      ipRestrict: flag(data.ipRestrict),
+      enableWithdrawals: flag(data.enableWithdrawals),
+      enableReading: flag(data.enableReading),
+      enableSpotAndMarginTrading: flag(data.enableSpotAndMarginTrading),
+      enableFutures: flag(data.enableFutures),
+    };
   }
 
   private trade(data: Row, symbol: string): BinanceTrade {

@@ -6,6 +6,7 @@ export interface BinanceConfig {
   allowedSpotSymbols: string[];
   allowedFuturesSymbols: string[];
   maxFuturesLeverage: number;
+  ipAllowlist: string[];
 }
 
 export interface BinanceMarketData {
@@ -30,6 +31,14 @@ export interface BinanceOrderResult {
   avgPrice: number;
 }
 
+export interface BinanceApiKeyPermissions {
+  ipRestrict: boolean;
+  enableWithdrawals: boolean;
+  enableReading: boolean;
+  enableSpotAndMarginTrading: boolean;
+  enableFutures: boolean;
+}
+
 export interface BinanceApiClient {
   getPrice(symbol: string): Promise<BinanceMarketData>;
   getAccountSnapshot(account: string): Promise<BinanceAccountSnapshot>;
@@ -38,6 +47,7 @@ export interface BinanceApiClient {
   placeFuturesOrder(params: FuturesOrderParams): Promise<BinanceOrderResult>;
   cancelOrder(params: CancelOrderParams): Promise<BinanceOrderResult>;
   getOrderStatus(params: OrderStatusParams): Promise<BinanceOrderResult>;
+  getApiKeyPermissions(): Promise<BinanceApiKeyPermissions>;
 }
 
 export interface SpotOrderParams {
