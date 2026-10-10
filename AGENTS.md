@@ -118,3 +118,14 @@ reviewer output is advisory while policy and broker boundaries remain authoritat
   Guardrail environment contract at registration and forwards only allowed variables to Node.
 - A guarded simulation tool returns authorization, not a simulation receipt. Never use its intent
   id as proof that simulation executed or as an invented simulation result for signing.
+- Geth prestateTracer diffs are sparse: account fields present only in `pre` are unchanged
+  while the account survives, but storage keys present only in `pre` were cleared. Unchanged
+  contract bytecode in `pre` is not evidence of a code deletion.
+- ERC-20 balance effects need audited mapping slots and pinned pre/post `balanceOf` probes;
+  transfer logs alone do not attest balances. Built-in EVM simulation excludes gas fees,
+  while Solana account snapshots include the fee-payer debit.
+- Solana `minContextSlot` is a lower bound, not a pinned bank. Use finalized snapshots and
+  require exact simulation/snapshot slot equality; validate Token-2022 mint extensions in
+  both pre and post state, and observe program accounts as well as writable token accounts.
+- The canonical Token-2022 program is `TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb`;
+  the older fixture string ending in `BHN4VPgY6M` is not a valid public key.

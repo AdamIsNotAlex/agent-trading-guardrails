@@ -1,164 +1,282 @@
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { createServer } from "node:http";
+import type { OnchainSigningIntent } from "@guardrails/schemas";
+import { ethereumSepoliaSigning } from "@guardrails/schemas/fixtures";
+import {
+  type Address,
+  encodeAbiParameters,
+  encodeFunctionData,
+  erc20Abi,
+  keccak256,
+  toHex,
+} from "viem";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { EvmConnector } from "./connector.js";
 import { SepoliaRpcProvider } from "./sepolia-provider.js";
 
+const sender: Address = "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266";
+const recipient: Address = "0x70997970c51812dc3a010c7d01b50e0d17dc79c8";
+const token: Address = "0x5fbdb2315678afecb367f032d93f642f64180aa3";
+const stranger: Address = "0x1111111111111111111111111111111111111111";
+const senderSlot = "0x723077b8a1b173adc35e5f0e7e3662fd1208212cb629f9c128551ea7168da722";
+const recipientSlot = "0x14e04a66bf74771820a7400ff6cf065175b3d7eb25805a5bd1633b161af5d101";
+const zero = toHex(0n, { size: 32 });
+const word = (amount: bigint) => toHex(amount, { size: 32 });
+const data = encodeFunctionData({
+  abi: erc20Abi,
+  functionName: "transfer",
+  args: [recipient, 100n],
+});
+const nativeBalance = 1_000_000n;
+const blockHash = `0x${"ab".repeat(32)}`;
+interface TraceAccount {
+  balance?: string | number;
+  nonce?: number;
+  code?: string;
+  storage?: Record<string, string>;
+}
 let server: ReturnType<typeof createServer>;
 let rpcUrl: string;
 let chainId: string;
-let ethCallError: boolean;
-const calls: Array<{ method: string; params: unknown[] }> = [];
-
-async function readJson(
-  req: IncomingMessage,
-): Promise<{ method: string; params?: unknown[]; id?: number }> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of req) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-  }
-  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
-}
-
-function writeJson(res: ServerResponse, body: unknown) {
-  res.writeHead(200, { "content-type": "application/json" });
-  res.end(JSON.stringify(body));
-}
+let trace: { pre: Record<string, TraceAccount>; post: Record<string, TraceAccount> };
+let unsupportedTrace: boolean;
+let revert: boolean;
+let reorg: boolean;
+let wrongPreBalance: boolean;
+let wrongPostBalance: boolean;
+let malformedBalance: boolean;
+let pinnedStorage: Record<string, string>;
 
 beforeEach(async () => {
-  calls.length = 0;
   chainId = "0xaa36a7";
-  ethCallError = false;
+  unsupportedTrace = false;
+  revert = false;
+  reorg = false;
+  wrongPreBalance = false;
+  wrongPostBalance = false;
+  malformedBalance = false;
+  pinnedStorage = { [senderSlot]: word(1000n) };
+  // Canonical sparse prestateTracer shape captured from a real Geth-compatible EVM.
+  trace = {
+    pre: {
+      [sender]: { balance: toHex(nativeBalance), nonce: 1 },
+      [token]: { balance: "0x0", code: "0x6000", nonce: 1, storage: { [senderSlot]: word(1000n) } },
+    },
+    post: {
+      [sender]: { nonce: 2 },
+      [token]: { storage: { [senderSlot]: word(900n), [recipientSlot]: word(100n) } },
+    },
+  };
   server = createServer(async (req, res) => {
-    const body = await readJson(req);
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(Buffer.from(chunk));
+    const body = JSON.parse(Buffer.concat(chunks).toString());
     const params = body.params ?? [];
-    calls.push({ method: body.method, params });
-
-    if (body.method === "eth_chainId") {
-      writeJson(res, { jsonrpc: "2.0", id: body.id, result: chainId });
-      return;
+    let result: unknown;
+    if (body.method === "eth_chainId") result = chainId;
+    else if (body.method === "eth_getBlockByNumber")
+      result = {
+        number: "0x7b",
+        hash: reorg && params[0] !== "latest" ? `0x${"cd".repeat(32)}` : blockHash,
+      };
+    else if (body.method === "eth_blockNumber") result = "0x7b";
+    else if (body.method === "debug_traceCall" && !unsupportedTrace) {
+      result =
+        params[2].tracer === "callTracer"
+          ? {
+              from: params[0].from,
+              to: params[0].to,
+              gasUsed: "0xc350",
+              ...(revert ? { error: "execution reverted" } : {}),
+            }
+          : trace;
+    } else if (body.method === "eth_getBalance")
+      result = params[0] === sender ? toHex(nativeBalance) : "0x0";
+    else if (body.method === "eth_getStorageAt") result = pinnedStorage[params[1]] ?? zero;
+    else if (body.method === "eth_call") {
+      const account = `0x${params[0].data.slice(-40)}` as Address;
+      const slot = keccak256(
+        encodeAbiParameters([{ type: "address" }, { type: "uint256" }], [account, 0n]),
+      );
+      const after = params[2]?.[token]?.stateDiff;
+      let amount = BigInt(after?.[slot] ?? pinnedStorage[slot] ?? zero);
+      if (wrongPreBalance && !params[2] && account === sender) amount++;
+      if (wrongPostBalance && params[2] && account === sender) amount++;
+      result = malformedBalance ? "0x01" : word(amount);
     }
-    if (body.method === "eth_call") {
-      if (ethCallError) {
-        writeJson(res, {
-          jsonrpc: "2.0",
-          id: body.id,
-          error: { code: 3, message: "execution reverted" },
-        });
-        return;
-      }
-      writeJson(res, { jsonrpc: "2.0", id: body.id, result: "0x" });
-      return;
-    }
-    if (body.method === "eth_getBalance") {
-      writeJson(res, { jsonrpc: "2.0", id: body.id, result: "0xde0b6b3a7640000" });
-      return;
-    }
-    if (body.method === "eth_blockNumber") {
-      writeJson(res, { jsonrpc: "2.0", id: body.id, result: "0xbc614e" });
-      return;
-    }
-
-    writeJson(res, {
-      jsonrpc: "2.0",
-      id: body.id,
-      error: { code: -32601, message: `Unsupported method ${body.method}` },
-    });
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(
+      JSON.stringify(
+        result === undefined
+          ? { jsonrpc: "2.0", id: body.id, error: { code: -32601, message: "Unsupported RPC" } }
+          : { jsonrpc: "2.0", id: body.id, result },
+      ),
+    );
   });
-
-  await new Promise<void>((resolve) => {
-    server.listen(0, "127.0.0.1", resolve);
-  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
-  if (!address || typeof address === "string") throw new Error("HTTP server did not bind.");
+  if (!address || typeof address === "string") throw new Error("Missing RPC listener.");
   rpcUrl = `http://127.0.0.1:${address.port}`;
 });
-
 afterEach(async () => {
-  await new Promise<void>((resolve, reject) => {
-    server.close((err) => (err ? reject(err) : resolve()));
+  await new Promise<void>((resolve, reject) =>
+    server.close((error) => (error ? reject(error) : resolve())),
+  );
+});
+function config() {
+  return {
+    rpcUrl,
+    chainId: 11155111,
+    chainEnvironment: "sepolia" as const,
+    fromAddress: recipient,
+    allowedContracts: [token],
+    allowedFunctions: ["transfer"],
+    allowedTokens: [token],
+    allowedSpenders: [],
+    allowedRecipients: [recipient],
+    erc20Tokens: [{ address: token, asset: token, balanceSlot: "0" }],
+  };
+}
+function provider() {
+  return new SepoliaRpcProvider(config());
+}
+const request = { from: sender, to: token, data, observedAddresses: [recipient] };
+
+describe("SepoliaRpcProvider execution state evidence", () => {
+  it("attests ERC20 debit/credit and unchanged native balances from sparse state diffs", async () => {
+    const result = await provider().simulateTransaction(request);
+    expect(result.success && result.balanceChangesReliable).toBe(true);
+    expect(result.gasUsed).toBe(50000);
+    expect(result.balanceChanges).toEqual(
+      expect.arrayContaining([
+        { address: sender, asset: token, delta: "-100" },
+        { address: recipient, asset: token, delta: "100" },
+        { address: sender, asset: "ETH", delta: "0" },
+      ]),
+    );
+  });
+  it("attests native value movement to newly created accounts", async () => {
+    trace = {
+      pre: { [sender]: { balance: toHex(nativeBalance), nonce: 1 } },
+      post: {
+        [sender]: { balance: toHex(nativeBalance - 10n), nonce: 2 },
+        [recipient]: { balance: "0xa" },
+      },
+    };
+    const result = await new SepoliaRpcProvider({ rpcUrl }).simulateTransaction({
+      from: sender,
+      to: recipient,
+      value: "10",
+    });
+    expect(result.balanceChangesReliable).toBe(true);
+    expect(result.balanceChanges).toEqual(
+      expect.arrayContaining([
+        { address: sender, asset: "ETH", delta: "-10" },
+        { address: recipient, asset: "ETH", delta: "10" },
+      ]),
+    );
+  });
+  it("preserves token precision and treats a deleted storage slot as zero", async () => {
+    pinnedStorage[senderSlot] = word(9_007_199_254_740_993n);
+    trace.pre[token].storage = { [senderSlot]: pinnedStorage[senderSlot] };
+    trace.post[token].storage = { [recipientSlot]: pinnedStorage[senderSlot] };
+    const result = await provider().simulateTransaction(request);
+    expect(result.balanceChangesReliable).toBe(true);
+    expect(result.balanceChanges).toEqual(
+      expect.arrayContaining([
+        { address: sender, asset: token, delta: "-9007199254740993" },
+        { address: recipient, asset: token, delta: "9007199254740993" },
+      ]),
+    );
+  });
+  it.each([
+    "unsupported",
+    "revert",
+    "empty",
+    "unknown-storage",
+    "unobserved-account",
+    "pre-mismatch",
+    "post-mismatch",
+    "bad-word",
+    "unsafe-integer",
+    "reorg",
+    "wrong-chain",
+  ])("refuses %s evidence", async (mode) => {
+    if (mode === "unsupported") unsupportedTrace = true;
+    if (mode === "revert") revert = true;
+    if (mode === "empty") trace = { pre: {}, post: {} };
+    if (mode === "unknown-storage") trace.post[token].storage = { [word(7n)]: word(1n) };
+    if (mode === "unobserved-account")
+      trace.post[token].storage = {
+        [senderSlot]: word(900n),
+        [keccak256(
+          encodeAbiParameters([{ type: "address" }, { type: "uint256" }], [stranger, 0n]),
+        )]: word(100n),
+      };
+    if (mode === "pre-mismatch") wrongPreBalance = true;
+    if (mode === "post-mismatch") wrongPostBalance = true;
+    if (mode === "bad-word") malformedBalance = true;
+    if (mode === "unsafe-integer") trace.pre[sender].balance = Number.MAX_SAFE_INTEGER + 1;
+    if (mode === "reorg") reorg = true;
+    if (mode === "wrong-chain") chainId = "0x1";
+    const result = await provider().simulateTransaction(request);
+    expect(result.balanceChangesReliable).toBe(false);
+    expect(result.balanceChanges).toEqual([]);
+  });
+  it("does not guess an unconfigured token's storage layout", async () => {
+    const result = await new SepoliaRpcProvider({ rpcUrl }).simulateTransaction(request);
+    expect(result.balanceChangesReliable).toBe(false);
+  });
+  it("retains exact zero token observations for explicit unchanged-balance expectations", async () => {
+    trace = {
+      pre: { [sender]: { balance: toHex(nativeBalance), nonce: 1 } },
+      post: { [sender]: { nonce: 2 } },
+    };
+    const result = await provider().simulateTransaction(request);
+    expect(result.balanceChangesReliable).toBe(true);
+    expect(result.balanceChanges).toContainEqual({ address: sender, asset: token, delta: "0" });
+  });
+  it("returns balances and block numbers only on Sepolia", async () => {
+    await expect(provider().getBalance(sender)).resolves.toBe(nativeBalance.toString());
+    await expect(provider().getBlockNumber()).resolves.toBe(123);
+    chainId = "0x1";
+    await expect(provider().getBalance(sender)).rejects.toThrow();
+    await expect(provider().getBlockNumber()).rejects.toThrow();
   });
 });
 
-describe("SepoliaRpcProvider", () => {
-  it("simulates transactions with eth_call against the configured RPC URL", async () => {
-    const provider = new SepoliaRpcProvider({ rpcUrl });
-
-    const result = await provider.simulateTransaction({
-      to: "0x0000000000000000000000000000000000000001",
-      data: "0x1234",
-      value: "10",
+describe("built-in EVM provider signing boundary", () => {
+  function signing() {
+    const signAndBroadcast = vi.fn(async () => "accepted-by-signer");
+    const connector = new EvmConnector(config(), provider(), {
+      getAddress: () => sender,
+      signAndBroadcast,
     });
-
-    expect(result).toEqual({
-      success: true,
-      gasUsed: 0,
-      balanceChanges: [],
-      balanceChangesReliable: false,
-      error: null,
-    });
-    expect(calls).toContainEqual({
-      method: "eth_call",
-      params: [
-        {
-          data: "0x1234",
-          to: "0x0000000000000000000000000000000000000001",
-          value: "0xa",
-        },
-        "latest",
+    const intent: Extract<OnchainSigningIntent, { chain: "ethereum" }> = {
+      ...ethereumSepoliaSigning,
+      chain: "ethereum",
+      chainEnvironment: "sepolia",
+      to: token,
+      data,
+      expectedDeltas: [
+        { address: sender, asset: token, minDelta: "-100", maxDelta: "-100" },
+        { address: recipient, asset: token, minDelta: "100", maxDelta: "100" },
       ],
+    };
+    return { connector, intent, signAndBroadcast };
+  }
+  it("uses the real signer instead of the configured simulation account and reaches signing", async () => {
+    const { connector, intent, signAndBroadcast } = signing();
+    await expect(connector.execute(intent)).resolves.toEqual({
+      transactionHash: "accepted-by-signer",
     });
+    expect(signAndBroadcast).toHaveBeenCalledOnce();
   });
-
-  it("fails closed when simulation RPC calls fail", async () => {
-    ethCallError = true;
-    const provider = new SepoliaRpcProvider({ rpcUrl });
-
-    const result = await provider.simulateTransaction({
-      to: "0x0000000000000000000000000000000000000001",
-    });
-
-    expect(result.success).toBe(false);
-    expect(result.error).toContain("execution reverted");
-  });
-
-  it("fails closed when the configured RPC is not Sepolia", async () => {
-    chainId = "0x1";
-    const provider = new SepoliaRpcProvider({ rpcUrl });
-
-    const result = await provider.simulateTransaction({
-      to: "0x0000000000000000000000000000000000000001",
-    });
-
-    expect(result.success).toBe(false);
-    expect(result.error).toContain("expected Sepolia 11155111");
-    expect(calls.map((call) => call.method)).not.toContain("eth_call");
-  });
-
-  it("rejects balance and block requests when the configured RPC is not Sepolia", async () => {
-    chainId = "0x1";
-    const provider = new SepoliaRpcProvider({ rpcUrl });
-
-    await expect(provider.getBalance("0x0000000000000000000000000000000000000001")).rejects.toThrow(
-      "expected Sepolia 11155111",
-    );
-    await expect(provider.getBlockNumber()).rejects.toThrow("expected Sepolia 11155111");
-
-    expect(calls.map((call) => call.method)).not.toContain("eth_getBalance");
-    expect(calls.map((call) => call.method)).not.toContain("eth_blockNumber");
-  });
-
-  it("returns balances and block numbers from Sepolia RPC", async () => {
-    const provider = new SepoliaRpcProvider({ rpcUrl });
-
-    await expect(provider.getBalance("0x0000000000000000000000000000000000000001")).resolves.toBe(
-      "1000000000000000000",
-    );
-    await expect(provider.getBlockNumber()).resolves.toBe(12345678);
-
-    expect(calls.map((call) => call.method)).toEqual([
-      "eth_chainId",
-      "eth_getBalance",
-      "eth_chainId",
-      "eth_blockNumber",
-    ]);
+  it.each(["range", "unexpected-debit", "unreliable"])("never signs %s", async (mode) => {
+    const { connector, intent, signAndBroadcast } = signing();
+    if (mode === "range") intent.expectedDeltas[1].minDelta = "101";
+    if (mode === "unexpected-debit") intent.expectedDeltas.shift();
+    if (mode === "unreliable") unsupportedTrace = true;
+    await expect(connector.execute(intent)).rejects.toThrow();
+    expect(signAndBroadcast).not.toHaveBeenCalled();
   });
 });

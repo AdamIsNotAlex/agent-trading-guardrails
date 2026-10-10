@@ -4,6 +4,7 @@ import {
   type ExecutionConnector,
 } from "@guardrails/broker";
 import type { TradingIntent } from "@guardrails/schemas";
+import { NATIVE_SOL_ASSET } from "./account-state.js";
 import { compareSolanaBalanceDeltas, type ExpectedSolanaBalanceDelta } from "./balance-delta.js";
 import type {
   ParsedInstruction,
@@ -125,10 +126,13 @@ export class SolanaConnector implements ExecutionConnector {
 
     if (intent.action === "onchain.simulate_transaction") {
       this.expectedDeltas(intent);
-      const result = await this.provider.simulateTransaction(instructions);
+      const result = await this.provider.simulateTransaction(instructions, {
+        feePayer: this.signer?.getPublicKey(),
+      });
       if (!result.success) {
         throw new Error(`Simulation failed: ${result.error}`);
       }
+      this.assertAllowlistedSimulationAssets(result);
       this.assertExpectedDeltas(result, intent);
       return { simulationEvidence: { provider: `solana:${this.config.chainEnvironment}` } };
     }
@@ -140,10 +144,13 @@ export class SolanaConnector implements ExecutionConnector {
       if (this.expectedDeltas(intent).length === 0) {
         throw new Error("Solana expected balance deltas are required.");
       }
-      const result = await this.provider.simulateTransaction(instructions);
+      const result = await this.provider.simulateTransaction(instructions, {
+        feePayer: this.signer.getPublicKey(),
+      });
       if (!result.success) {
         throw new Error(`Simulation failed: ${result.error}`);
       }
+      this.assertAllowlistedSimulationAssets(result);
       this.assertExpectedDeltas(result, intent);
       beforeSideEffect?.();
       const txHash = await this.signer.signAndBroadcast(instructions);
@@ -151,6 +158,16 @@ export class SolanaConnector implements ExecutionConnector {
     }
 
     throw new Error("Solana connector does not execute this action.");
+  }
+
+  private assertAllowlistedSimulationAssets(result: SolanaSimulationResult): void {
+    if (!result.balanceChangesReliable) return;
+    for (const change of result.balanceChanges) {
+      if (change.asset === NATIVE_SOL_ASSET) continue;
+      if (!this.config.allowedTokenMints.includes(change.asset)) {
+        throw new Error(`Token mint ${change.asset} is not in the allowlist.`);
+      }
+    }
   }
 
   private assertExpectedDeltas(result: SolanaSimulationResult, intent: TradingIntent): void {
@@ -212,5 +229,5 @@ function isExpectedSolanaDelta(delta: unknown): delta is ExpectedSolanaBalanceDe
 
 function hasExactKeys(value: Record<string, unknown>, keys: string[]): boolean {
   const actualKeys = Object.keys(value);
-  return actualKeys.length === keys.length && keys.every((key) => Object.hasOwn(value, key));
+  return actualKeys.length === keys.length && keys.every((key) => actualKeys.includes(key));
 }

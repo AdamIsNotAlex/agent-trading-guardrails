@@ -20,8 +20,15 @@ export interface SolanaSimulationResult {
   error: string | null;
 }
 
+export interface SolanaSimulateTransactionOptions {
+  feePayer?: string;
+}
+
 export interface SolanaRpcProvider {
-  simulateTransaction(instructions: ParsedInstruction[]): Promise<SolanaSimulationResult>;
+  simulateTransaction(
+    instructions: ParsedInstruction[],
+    options?: SolanaSimulateTransactionOptions,
+  ): Promise<SolanaSimulationResult>;
   getBalance(address: string): Promise<number>;
   getSlot(): Promise<number>;
 }

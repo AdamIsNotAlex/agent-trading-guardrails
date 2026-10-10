@@ -100,6 +100,11 @@ across Guardrail/Broker restarts in shared SQLite; operators use `pnpm start:app
 and `approve`/`deny` from a separate process. See the
 [operator workflow and storage requirements](docs/deployment-profiles.md#cross-process-human-approval).
 
+The package-level Sepolia/devnet providers support state-backed balance checks before signing.
+See [RPC capabilities, audited token configuration, fee semantics, and signer requirements](docs/signing-backends.md#built-in-testnet-simulation-before-signing).
+This does not enable onchain broadcasting in default Compose or turn the `LocalDev*Signer`
+test doubles into real signing backends.
+
 ### OpenClaw and Hermes runtime plugins
 
 ```sh

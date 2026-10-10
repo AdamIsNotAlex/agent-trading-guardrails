@@ -10,8 +10,10 @@ export { LocalDevSigner } from "./dev-signer.js";
 export type {
   DecodedTransaction,
   EvmConfig,
+  EvmErc20TokenConfig,
   EvmRpcProvider,
   EvmSigner,
+  SimulateTransactionRequest,
   SimulationResult,
 } from "./interfaces.js";
 export type { SepoliaRpcProviderConfig } from "./sepolia-provider.js";

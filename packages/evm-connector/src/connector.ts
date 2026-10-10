@@ -109,6 +109,8 @@ export class EvmConnector implements ExecutionConnector {
         to: intent.to,
         data: "data" in intent ? intent.data : undefined,
         value: "value" in intent ? intent.value : undefined,
+        from: this.signer?.getAddress() ?? this.config.fromAddress,
+        observedAddresses: this.observedAddresses(intent),
       });
       if (!result.success) {
         throw new Error(`Simulation failed: ${result.error}`);
@@ -128,6 +130,8 @@ export class EvmConnector implements ExecutionConnector {
         to: intent.to,
         data: "data" in intent ? intent.data : undefined,
         value: "value" in intent ? intent.value : undefined,
+        from: this.signer.getAddress(),
+        observedAddresses: this.observedAddresses(intent),
       });
       if (!result.success) {
         throw new Error(`Simulation failed: ${result.error}`);
@@ -143,6 +147,15 @@ export class EvmConnector implements ExecutionConnector {
     }
 
     throw new Error(`Ethereum connector does not execute ${intent.action}.`);
+  }
+
+  private observedAddresses(intent: TradingIntent): string[] {
+    return [
+      ...this.expectedDeltas(intent).map((delta) => delta.address),
+      ...(this.config.observedAccounts ?? []),
+      ...(this.config.allowedRecipients ?? []),
+      ...this.config.allowedSpenders,
+    ];
   }
 
   private validateRecipient(

@@ -13,6 +13,7 @@ export type {
   SolanaConfig,
   SolanaRpcProvider,
   SolanaSigner,
+  SolanaSimulateTransactionOptions,
   SolanaSimulationResult,
 } from "./interfaces.js";
 export { getUniquePrograms, hasAuthorityChange, parseInstructions } from "./parser.js";

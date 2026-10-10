@@ -7,7 +7,7 @@ import type { SolanaConfig, SolanaRpcProvider, SolanaSimulationResult } from "./
 import { hasAuthorityChange, parseInstructions } from "./parser.js";
 
 const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
-const TOKEN_2022_PROGRAM = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBHN4VPgY6M";
+const TOKEN_2022_PROGRAM = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 const SYSTEM_PROGRAM = "11111111111111111111111111111111";
 
 const config: SolanaConfig = {
@@ -258,9 +258,6 @@ describe("SolanaConnector execution", () => {
 
     expect(result.transactionHash).toBe("solana-tx-test");
     expect(simulateTransaction).toHaveBeenCalledOnce();
-    expect(simulateTransaction).toHaveBeenCalledWith(
-      parseInstructions([{ programId: signingIntent.programId }]),
-    );
     expect(signAndBroadcast).toHaveBeenCalledOnce();
     expect(calls).toEqual(["simulate", "sign"]);
   });

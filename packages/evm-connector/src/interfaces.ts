@@ -1,3 +1,11 @@
+export interface EvmErc20TokenConfig {
+  address: string;
+  asset: string;
+  balanceSlot: bigint | number | string;
+  allowanceSlot?: bigint | number | string;
+  totalSupplySlot?: bigint | number | string;
+}
+
 export interface EvmConfig {
   rpcUrl: string;
   chainId: number;
@@ -7,6 +15,9 @@ export interface EvmConfig {
   allowedTokens: string[];
   allowedSpenders: string[];
   allowedRecipients?: string[];
+  fromAddress?: string;
+  observedAccounts?: string[];
+  erc20Tokens?: EvmErc20TokenConfig[];
 }
 
 export interface DecodedTransaction {
@@ -29,8 +40,16 @@ export interface SimulationResult {
   error: string | null;
 }
 
+export interface SimulateTransactionRequest {
+  to: string;
+  data?: string;
+  value?: string;
+  from?: string;
+  observedAddresses?: string[];
+}
+
 export interface EvmRpcProvider {
-  simulateTransaction(tx: { to: string; data?: string; value?: string }): Promise<SimulationResult>;
+  simulateTransaction(tx: SimulateTransactionRequest): Promise<SimulationResult>;
   getBalance(address: string): Promise<string>;
   getBlockNumber(): Promise<number>;
 }
