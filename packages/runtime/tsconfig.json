@@ -10,6 +10,7 @@
   "references": [
     { "path": "../approval" },
     { "path": "../audit" },
+    { "path": "../binance-connector" },
     { "path": "../broker" },
     { "path": "../evm-connector" },
     { "path": "../reviewer" },

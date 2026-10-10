@@ -25,7 +25,10 @@ const approvalSchema = z.discriminatedUnion("outcome", [
   }),
 ]);
 
-export function createBrokerServer(broker: ExecutionBroker) {
+export function createBrokerServer(
+  broker: ExecutionBroker,
+  executionMode: "paper" | "binance-testnet" | "binance-live",
+) {
   return createServer((request, response) => {
     let correlationId = randomUUID() as string;
     const handle = async () => {
@@ -40,7 +43,7 @@ export function createBrokerServer(broker: ExecutionBroker) {
           throw new HttpError(405, "Method not allowed.");
         }
         if (path === "/health") {
-          sendJson(response, 200, { status: "ok", executionMode: "paper" });
+          sendJson(response, 200, { status: "ok", executionMode });
           return;
         }
         const parsed = approvalSchema.safeParse(await readJsonBody(request));

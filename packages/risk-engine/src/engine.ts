@@ -55,17 +55,28 @@ export class RiskEngine {
       intent.action === "cex.place_order" && "symbol" in intent
         ? await this.provider.getMarketData(intent.symbol)
         : undefined;
+    const portfolioSnapshot =
+      intent.action === "cex.place_order"
+        ? await this.provider.getPortfolio(intent.account)
+        : undefined;
+    const lastOrderTimestamp =
+      intent.action === "cex.place_order"
+        ? await this.provider.getLastOrderTimestampMs(intent.account)
+        : undefined;
     const nowMs = Date.now();
+    if (new Date(nowMs).toISOString().slice(0, 10) !== today) {
+      throw new Error("Risk data collection crossed a UTC day boundary; evaluate again.");
+    }
 
     checks.push(checkMarketDataFreshness(intent, this.limits, nowMs, marketDataSnapshot));
     checks.push(checkPriceBand(intent, this.limits, nowMs, marketDataSnapshot));
-    checks.push(await checkPortfolioFreshness(this.provider, intent, this.limits, nowMs));
+    checks.push(checkPortfolioFreshness(portfolioSnapshot, intent, this.limits, nowMs));
     checks.push(checkPerOrderNotional(intent, this.limits));
     checks.push(checkDailyNotional(intent, this.limits, dailyStatsSnapshot));
     checks.push(checkDailyLoss(intent, this.limits, dailyStatsSnapshot));
     checks.push(checkSlippage(intent, this.limits));
-    checks.push(await checkPositionDelta(this.provider, intent, this.limits));
-    checks.push(await checkOrderFrequency(this.provider, intent, this.limits, nowMs));
+    checks.push(checkPositionDelta(portfolioSnapshot, intent, this.limits));
+    checks.push(checkOrderFrequency(lastOrderTimestamp, intent, this.limits, nowMs));
     checks.push(checkDailyOrderCount(intent, this.limits, dailyStatsSnapshot));
     checks.push(checkEvidenceReferences(intent));
     checks.push(checkReviewerConsistency(intent, reviewerVerdict));

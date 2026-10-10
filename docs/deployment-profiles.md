@@ -65,7 +65,7 @@ Rotation runs every minute, triggered at 10 MiB, retaining five network-log and 
 |----------|---------|----------|
 | Guardrail `GET /health` | No body | `service.health()`: 200 for `ok`, 503 for `degraded`; `opaHealthy` describes OPA reachability, not readiness of every external dependency |
 | Guardrail `POST /evaluate` | Raw `TradingIntent` JSON, `Content-Type: application/json` | 200 with `GuardrailDecision`; policy/risk denials are decisions, not HTTP transport failures |
-| Broker `GET /health` | No body | 200 with `status: ok`, `executionMode: paper` after successful dependency construction |
+| Broker `GET /health` | No body | 200 with `status: ok` and configured `executionMode: paper`, `binance-testnet`, or `binance-live`; not proof of exchange credentials or readiness |
 | Broker `POST /execute` | Signed decision fields plus the original `intent` | 200 with `BrokerExecutionResult`; the broker still verifies the HMAC, age, environment, kill switch, approval state, and idempotency before execution |
 | Signer `GET /health` (execution network only) | No body | 200 with `mode: offline-sepolia`, `chainId: 11155111`, and the persisted key's public address |
 | Signer `POST /sign` (execution network only) | `SigningRequest`: original allow approval plus bounded EIP-1559 envelope | 200 with `OfflineSignature`: signed bytes and their hash, **not a broadcast/execution result**; 403 for failed authorization/caps and 409 for reused/conflicting/reserved signing state |
@@ -145,7 +145,7 @@ Default caps are `SIGNER_MAX_GAS=1000000`, `SIGNER_MAX_FEE_PER_GAS=100000000000`
 
 `GUARDRAIL_AUDIT_DB_PATH` and `BROKER_AUDIT_DB_PATH` default to `./data/guardrail-audit.db` and `./data/broker-audit.db`; corresponding `*_AUDIT_HASH_ANCHOR_PATH` variables select separate anchors. Generic `AUDIT_DB_PATH`/`AUDIT_HASH_ANCHOR_PATH` remain usable when configuring just one process. Never point two processes at the same chain. `BROKER_IDEMPOTENCY_PATH` defaults to `./data/broker-idempotency.json`; preserve it across restarts. `BROKER_KILL_SWITCH=true` starts the broker with its global kill switch active.
 
-`RISK_DATA_PATH` defaults to `./data/risk/risk-snapshot.json`. Compose mounts the host `./data/risk` directory read-only into Guardrail. A trusted feed outside the agent must atomically replace this JSON file. Each evaluation reads one consistent snapshot and applies `DEFAULT_CANARY_LIVE_LIMITS`; missing, malformed, mismatched, future-dated, or stale facts fail closed. The runtime never substitutes intent prices for market data or synthesizes successful risk checks.
+`RISK_DATA_PROVIDER=file` is the default. `RISK_DATA_PATH` defaults to `./data/risk/risk-snapshot.json`. Compose fixes this backend and mounts the host `./data/risk` directory read-only into Guardrail. A trusted feed outside the agent must atomically replace this JSON file. Each evaluation reads one consistent snapshot and applies `DEFAULT_CANARY_LIVE_LIMITS`; missing, malformed, mismatched, future-dated, or stale facts fail closed. The runtime never substitutes intent prices for market data or synthesizes successful risk checks.
 
 Snapshot shape (illustrative values only; timestamp `0` is intentionally stale):
 
@@ -159,6 +159,111 @@ Snapshot shape (illustrative values only; timestamp `0` is intentionally stale):
 ```
 
 Positions have `{symbol, quantity, notionalUsd}`. `dailyStats.date` must match the current UTC date. An explicit `null` last-order timestamp means the trusted feed knows there were no previous orders; an absent account is unavailable, not an empty history. Refresh timestamps only when the underlying facts have actually been refreshed. The snapshot producer must incorporate execution activity; the reader is not an exchange feed or accounting writer.
+
+## Binance REST and exchange-backed risk
+
+The standalone runtime supports `RISK_DATA_PROVIDER=binance` and `BROKER_CONNECTOR=binance`.
+`BinanceRestClient` implements the existing connector interface; `BinanceRiskDataProvider`
+implements `RiskDataProvider` in `@guardrails/binance-connector`. Guardrail constructs a new
+provider for every evaluation, pinning portfolio/history facts within that evaluation only.
+Do the same when embedding the library; do not share a provider instance across decisions.
+
+Use a **dedicated Binance account/subaccount and one product per deployment**. The local
+`BINANCE_ACCOUNT` alias binds to its API key; it is not sent as an exchange account selector.
+Spot and USD-M have distinct order namespaces. `BINANCE_ACCOUNT_MODE` fixes prices, account
+data, cancellation, and status queries to the selected product. Deploy separate runtimes,
+aliases, and state directories for separate accounts/products. Use read-only USER_DATA keys
+for Guardrail and separate no-withdrawal trading keys for Broker, for the same account.
+
+After `pnpm install && pnpm build`, configure the trusted service/Broker environments:
+
+```dotenv
+GUARDRAIL_ENV=testnet
+RISK_DATA_PROVIDER=binance
+BROKER_CONNECTOR=binance
+BINANCE_TESTNET=true
+BINANCE_ACCOUNT=subaccount-1
+BINANCE_ACCOUNT_MODE=spot
+BINANCE_SYMBOLS=ETH-USDC
+BINANCE_HISTORY_SYMBOLS=ETH-USDC
+BINANCE_MAX_FUTURES_LEVERAGE=1
+BINANCE_API_KEY_FILE=/run/secrets/binance-api-key
+BINANCE_API_SECRET_FILE=/run/secrets/binance-api-secret
+BROKER_CANARY_LIVE_ENABLED=false
+```
+
+Set the existing non-development decision/audit secrets and separate audit anchors too;
+then run `pnpm start:service` and `pnpm start:broker`. `*_FILE` reads a secret-manager-injected
+UTF-8 credential at startup; alternatively use `BINANCE_API_KEY`/`BINANCE_API_SECRET` in the
+trusted process environment, never both forms for a credential. Rotation requires restart.
+No direct Vault lookup is implied by these settings. Agent must receive only its Guardrail URL,
+never these credentials or a copy of the service `.env`.
+
+For USD-M use `BINANCE_ACCOUNT_MODE=usdm_futures` and the appropriate `BASE-USDT`/`BASE-USDC`
+symbols. Configure **one-way positions and isolated margin** at Binance beforehand. The client
+verifies margin mode and the requested leverage; it sets leverage before submitting the order
+but never silently changes cross margin or hedge mode. Canary mainnet additionally requires
+`GUARDRAIL_ENV=canary_live`, `BINANCE_TESTNET=false`, and `BROKER_CANARY_LIVE_ENABLED=true`.
+Paper/dev cannot select real execution; testnet/mainnet mismatches fail startup. `production`
+execution remains unsupported. Policy, approvals, kill switch, signed decisions, and durable
+broker idempotency still apply; none are bypassed by selecting this connector.
+
+**Data and accounting contract:**
+
+- Symbols are canonical `BASE-USDT`/`BASE-USDC`. Amounts ending in `Usd` are USD-equivalent
+  assuming those stablecoins remain at par; there is no external USD/depeg oracle. Spot permits
+  only one quote pair per base asset to keep reconstructed cost basis unambiguous.
+- `BINANCE_SYMBOLS` is the new-order allowlist. `BINANCE_HISTORY_SYMBOLS` must be the exhaustive
+  lifetime trading universe, including symbols disabled for new orders; omission defaults to
+  `BINANCE_SYMBOLS`. Never omit old symbols to reduce reported turnover/loss. Do not trade other
+  symbols, other products, or externally alter inventory in this dedicated account. Spot REST
+  history is symbol-scoped: the adapter cannot discover a fully closed, unconfigured symbol.
+  Uncovered active assets/positions are rejected rather than omitted.
+- Spot ticker prices come from `/api/v3/ticker/price`; its timestamp is the request-start
+  observation time because the response has no event timestamp. USD-M quotes use
+  `/fapi/v2/ticker/price` and its exchange timestamp. Keep the host clock synchronized.
+  Spot account reads include free **and locked** balances. USD-M uses `/fapi/v3/account` and
+  `/fapi/v2/positionRisk`; short quantities/notionals retain their signs, without multiplying
+  exposure by leverage.
+- Daily boundaries are UTC. Executed turnover sums fill `quoteQty`, not submitted quantity
+  or leverage-adjusted notional. Daily order count includes unfilled/canceled orders from
+  `allOrders`; split fills do not multiply order count. Latest-order queries include prior
+  days within the exchange's retained history; a successful empty query means no retained
+  recent order, not proof of no lifetime orders. Exchange history is not a reservation for
+  concurrent approvals or future fills of already-open orders.
+- Spot reconstructs weighted-average acquisition cost from paginated `myTrades` starting at
+  `fromId=0`. Buy commissions are capitalized; sell commissions reduce proceeds or consume
+  extra base inventory. Daily realized loss sums losing sells without offsetting profitable
+  sells. Reconstructed inventory must reconcile to actual balances. Deposits/withdrawals,
+  unavailable historical basis, or incomplete history reject evaluation—not zero loss.
+  Only base-asset/USDT/USDC fees are valued; disable BNB fee payment for this account.
+- USD-M reads paginated `userTrades`, `allOrders`, and `income`. Loss sums negative non-transfer
+  income, including realized PnL, commissions, funding, and liquidation costs; profits do not
+  restore the daily loss budget. Trade commissions are not counted twice. Unvalued income
+  currencies reject evaluation. Old futures days outside complete canceled-order retention
+  are rejected.
+- Full pages are followed using ID/page cursors or split inclusive time windows. A saturated
+  single millisecond, non-advancing cursor, malformed response, permission/rate-limit failure,
+  timeout, collection older than 30 seconds, or UTC rollover fails closed. There is no stale
+  cache/zero-data fallback. A busy account or long backfill may therefore deny evaluation.
+  REST observations are not an atomic exchange snapshot; racing activity can cause safe denials.
+
+Endpoints are fixed to `testnet.binance.vision` / `demo-fapi.binance.com` or `api.binance.com` /
+`fapi.binance.com`; there is no configurable credential-forwarding URL. Signed requests use
+HMAC-SHA256, `X-MBX-APIKEY`, millisecond timestamps, a default 5000ms receive window and 10-second
+HTTP timeout, with redirects disabled. Errors exclude credentials, signed URLs, and exchange
+message bodies. There are **no automatic write retries**: timeouts/5xx can mean an order was
+accepted. Preserve the broker reservation and reconcile the deterministic client order ID
+before any operator recovery; never delete idempotency state and blindly resubmit.
+
+Default Compose explicitly remains `file` + `paper`, with no exchange egress. These standalone
+settings do not punch a hole in the Agent sandbox or turn that local stack into a live profile.
+For a real deployment, provision tightly allowlisted exchange TLS egress only for trusted
+Guardrail/Broker processes and keep their HTTP interfaces behind authenticated access control.
+
+API references: [Binance signing and timing security](https://developers.binance.com/en/docs/products/spot/rest-api#request-security),
+[official Spot REST specification](https://github.com/binance/binance-spot-api-docs/blob/master/rest-api.md),
+and [official USD-M endpoint definitions](https://github.com/binance/binance-futures-connector-python/blob/main/binance/um_futures/account.py).
 
 ## Single VPS
 

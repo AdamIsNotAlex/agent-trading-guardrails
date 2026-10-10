@@ -7,7 +7,6 @@ import {
   ExecutionBroker,
   FileBrokerIdempotencyStore,
   InMemoryKillSwitch,
-  PaperExecutionConnector,
 } from "@guardrails/broker";
 import { OpenAiLlmProvider, ReviewerAdapter } from "@guardrails/reviewer";
 import type { Environment } from "@guardrails/schemas";
@@ -18,8 +17,8 @@ import {
   OpaHttpPolicyEvaluator,
 } from "@guardrails/service";
 import Database from "better-sqlite3";
+import { createRuntimeConnector, createRuntimeRiskEngine } from "./binance-runtime.js";
 import { createBrokerServer } from "./broker-server.js";
-import { createFileRiskEngine } from "./risk-snapshot.js";
 
 export interface Runtime {
   server: Server;
@@ -81,7 +80,7 @@ export function createGuardrailRuntime(): Runtime {
     new OpenAiLlmProvider({ apiKey: process.env.OPENAI_API_KEY ?? "", model }),
   );
   const policy = new OpaHttpPolicyEvaluator({ opaUrl: config.opaUrl });
-  const risk = createFileRiskEngine(process.env.RISK_DATA_PATH ?? "./data/risk/risk-snapshot.json");
+  const risk = createRuntimeRiskEngine(config.environment);
   const { database, writer } = openAudit(config.environment, "guardrail");
   let approvals: ApprovalStore | undefined;
   try {
@@ -99,10 +98,9 @@ export function createGuardrailRuntime(): Runtime {
 
 export function createBrokerRuntime(): Runtime {
   const config = loadDevConfig();
-  // Never silently route a live/testnet intent into simulated execution.
-  if (config.environment !== "dev" && config.environment !== "paper") {
-    throw new Error("The standalone paper broker requires GUARDRAIL_ENV=dev or paper.");
-  }
+  const { connector, executionMode, canaryLiveEnabled } = createRuntimeConnector(
+    config.environment,
+  );
   const killSwitch = new InMemoryKillSwitch();
   const killSwitchSetting = process.env.BROKER_KILL_SWITCH ?? "false";
   if (killSwitchSetting !== "true" && killSwitchSetting !== "false") {
@@ -118,18 +116,18 @@ export function createBrokerRuntime(): Runtime {
     const broker = new ExecutionBroker(
       {
         environment: config.environment,
-        canaryLiveEnabled: false,
+        canaryLiveEnabled,
         decisionVerificationSecret: config.decisionSigningSecret,
         vaultAddr: config.vaultAddr,
       },
-      new PaperExecutionConnector(),
+      connector,
       killSwitch,
       writer,
       new FileBrokerIdempotencyStore(idempotencyPath),
       approvals,
     );
     return {
-      server: createBrokerServer(broker),
+      server: createBrokerServer(broker, executionMode),
       close: () => closeRuntime(database, approvals),
     };
   } catch (error) {

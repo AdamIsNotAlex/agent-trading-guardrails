@@ -31,6 +31,10 @@ Before any canary-live execution is permitted:
 - [ ] Audit log is enabled and healthy.
 - [ ] Kill switch is enabled and reachable.
 - [ ] Human approval is required unless policy explicitly allows no-human low-risk trades.
+- [ ] Dedicated account/product, exhaustive history symbols, supported fee currencies, and reconciled
+  Spot cost basis meet the [Binance data contract](deployment-profiles.md#binance-rest-and-exchange-backed-risk).
+- [ ] `BROKER_CONNECTOR=binance`, `BINANCE_TESTNET=false`, and `BROKER_CANARY_LIVE_ENABLED=true`
+  are explicitly configured only after testnet verification; default Compose remains paper-only.
 
 ## First Live Trade Protocol
 

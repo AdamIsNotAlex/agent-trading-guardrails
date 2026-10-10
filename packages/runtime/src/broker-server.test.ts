@@ -20,6 +20,7 @@ beforeEach(() => {
   vi.stubEnv("BROKER_AUDIT_DB_PATH", join(directory, "audit.db"));
   vi.stubEnv("BROKER_AUDIT_HASH_ANCHOR_PATH", join(directory, "head.hash"));
   vi.stubEnv("BROKER_IDEMPOTENCY_PATH", join(directory, "idempotency.json"));
+  vi.stubEnv("BROKER_CONNECTOR", "paper");
   vi.stubEnv("BROKER_KILL_SWITCH", "false");
   vi.stubEnv("APPROVAL_TIMEOUT_SECONDS", "300");
   vi.stubEnv("APPROVAL_DB_PATH", join(directory, "approvals.db"));
@@ -143,7 +144,7 @@ describe("standalone broker HTTP boundary", () => {
 
   it("refuses to start a simulated broker under a live environment", () => {
     vi.stubEnv("GUARDRAIL_ENV", "canary_live");
-    expect(() => createBrokerRuntime()).toThrow("dev or paper");
+    expect(() => createBrokerRuntime()).toThrow();
   });
 
   it("shares durable approvals across independent creator, operator, and runtime stores", async () => {

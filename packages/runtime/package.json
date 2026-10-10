@@ -14,6 +14,7 @@
   "dependencies": {
     "@guardrails/approval": "workspace:*",
     "@guardrails/audit": "workspace:*",
+    "@guardrails/binance-connector": "workspace:*",
     "@guardrails/broker": "workspace:*",
     "@guardrails/evm-connector": "workspace:*",
     "@guardrails/reviewer": "workspace:*",

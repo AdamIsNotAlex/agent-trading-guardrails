@@ -1,6 +1,6 @@
 import type { ReviewerVerdictSchema, RiskCheckResult, TradingIntent } from "@guardrails/schemas";
 import type { RiskLimits } from "./config.js";
-import type { DailyStats, MarketDataSnapshot, RiskDataProvider } from "./providers.js";
+import type { DailyStats, MarketDataSnapshot, PortfolioSnapshot } from "./providers.js";
 
 export function checkMarketDataFreshness(
   intent: TradingIntent,
@@ -50,16 +50,15 @@ export function checkMarketDataFreshness(
   };
 }
 
-export async function checkPortfolioFreshness(
-  provider: RiskDataProvider,
+export function checkPortfolioFreshness(
+  portfolio: PortfolioSnapshot | null | undefined,
   intent: TradingIntent,
   limits: RiskLimits,
   nowMs: number,
-): Promise<RiskCheckResult> {
+): RiskCheckResult {
   if (intent.action !== "cex.place_order" || !("account" in intent)) {
     return { check: "portfolio_freshness", status: "pass" };
   }
-  const portfolio = await provider.getPortfolio(intent.account);
   if (!portfolio) {
     return {
       check: "portfolio_freshness",
@@ -290,15 +289,14 @@ export function checkPriceBand(
   };
 }
 
-export async function checkPositionDelta(
-  provider: RiskDataProvider,
+export function checkPositionDelta(
+  portfolio: PortfolioSnapshot | null | undefined,
   intent: TradingIntent,
   limits: RiskLimits,
-): Promise<RiskCheckResult> {
+): RiskCheckResult {
   if (!("account" in intent) || !("symbol" in intent) || !("maxNotionalUsd" in intent)) {
     return { check: "position_delta", status: "pass" };
   }
-  const portfolio = await provider.getPortfolio(intent.account);
   if (!portfolio) {
     return { check: "position_delta", status: "unavailable", message: "Portfolio not available." };
   }
@@ -339,20 +337,19 @@ export async function checkPositionDelta(
   };
 }
 
-export async function checkOrderFrequency(
-  provider: RiskDataProvider,
+export function checkOrderFrequency(
+  lastTs: number | null | undefined,
   intent: TradingIntent,
   limits: RiskLimits,
   nowMs: number,
-): Promise<RiskCheckResult> {
+): RiskCheckResult {
   if (intent.action !== "cex.place_order" || !("account" in intent)) {
     return { check: "order_frequency", status: "pass" };
   }
-  const lastTs = await provider.getLastOrderTimestampMs(intent.account);
   if (lastTs === null) {
     return { check: "order_frequency", status: "pass" };
   }
-  const elapsed = nowMs - lastTs;
+  const elapsed = lastTs === undefined ? Number.NaN : nowMs - lastTs;
   if (!Number.isFinite(elapsed) || elapsed < 0) {
     return {
       check: "order_frequency",

@@ -1,6 +1,6 @@
 import type { ReviewerVerdictSchema } from "@guardrails/schemas";
 import { binanceOrderStatus, binanceSpotOrder } from "@guardrails/schemas/fixtures";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { RiskLimits } from "./config.js";
 import { RiskEngine } from "./engine.js";
 import type {
@@ -98,24 +98,67 @@ describe("RiskEngine", () => {
     expect(result.dailyStats).toEqual(defaults.dailyStats());
   });
 
-  it("reads market data once for priced orders", async () => {
-    let marketDataCalls = 0;
-    const provider = makeProvider();
+  it("uses the same portfolio for freshness and exposure instead of mixing observations", async () => {
+    let first = true;
     const engine = new RiskEngine(
       {
-        ...provider,
-        async getMarketData(symbol) {
-          marketDataCalls += 1;
-          return provider.getMarketData(symbol);
+        ...makeProvider(),
+        async getPortfolio() {
+          const notionalUsd = first ? 1 : 1000;
+          first = false;
+          return {
+            account: binanceSpotOrder.account,
+            timestampMs: Date.now(),
+            positions: [{ symbol: binanceSpotOrder.symbol, quantity: 1, notionalUsd }],
+          };
         },
       },
       limits,
     );
-
     const result = await engine.evaluate(binanceSpotOrder, makeVerdict());
+    expect(result.passed).toBe(false);
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ check: "position_delta", status: "fail" }),
+    );
+  });
 
-    expect(result.passed).toBe(true);
-    expect(marketDataCalls).toBe(1);
+  it("accepts a portfolio observed during asynchronous collection", async () => {
+    vi.useFakeTimers();
+    try {
+      const engine = new RiskEngine(
+        {
+          ...makeProvider(),
+          async getPortfolio() {
+            vi.setSystemTime(Date.now() + 100);
+            return { ...defaults.portfolio(), timestampMs: Date.now() };
+          },
+        },
+        limits,
+      );
+      expect((await engine.evaluate(binanceSpotOrder, makeVerdict())).passed).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not approve yesterday's daily budget when collection crosses UTC midnight", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-10-09T23:59:59.999Z"));
+      const engine = new RiskEngine(
+        {
+          ...makeProvider(),
+          async getLastOrderTimestampMs() {
+            vi.setSystemTime(new Date("2026-10-10T00:00:00.001Z"));
+            return null;
+          },
+        },
+        limits,
+      );
+      await expect(engine.evaluate(binanceSpotOrder, makeVerdict())).rejects.toThrow();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("accepts market data stamped during provider read", async () => {

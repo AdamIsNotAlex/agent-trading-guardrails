@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@guardrails/schemas": "workspace:*",
+    "@guardrails/risk-engine": "workspace:*",
     "@guardrails/broker": "workspace:*"
   },
   "devDependencies": {

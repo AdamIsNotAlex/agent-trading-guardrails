@@ -100,3 +100,13 @@ reviewer output is advisory while policy and broker boundaries remain authoritat
 - Operator CLI audit callbacks run under the approval database's immediate write transaction and
   open a fresh writer per event. Keep that CLI chain separate from Guardrail/Broker audit chains;
   all CLI writers for a chain must share the same approval database lock.
+- Binance REST clients bind one credential/account alias and one product; cancellation/status intents
+  have no accountMode, so never infer Spot vs USD-M from overlapping symbol/order IDs.
+- Binance risk providers are evaluation-scoped. Acquire all snapshots before computing risk-check
+  time, and reuse one portfolio for freshness/exposure; a pre-fetch clock rejects fresh live data.
+- Spot realized loss needs paginated lifetime fills and inventory reconciliation, not daily buys/sells
+  alone. Futures `userTrades` cannot combine `fromId` with time bounds; split saturated inclusive
+  windows without skipping equal-timestamp fills, and reject an unsplittable full millisecond.
+- Exchange-controlled strings used with static `Record<string, true>` allowlists require `=== true`
+  (or an own-property check); inherited names such as `constructor` must not classify as transfers
+  or supported USD assets and silently erase reported loss.

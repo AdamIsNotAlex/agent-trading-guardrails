@@ -89,9 +89,12 @@ Host-only `pnpm start:service`, `pnpm start:broker`, and `pnpm start:agent` rema
 but host processes do **not** inherit Compose's sandbox. Signer returns offline signed transactions;
 it does not broadcast them, and generated local keys must never be funded.
 
-The standalone broker performs **simulated execution in dev/paper only**. The HTTP APIs are
-unauthenticated development interfaces, loopback-published by default; use an authenticated
-gateway before remote deployment. See the [HTTP contract](docs/deployment-profiles.md#http-contract)
+The standalone broker defaults to **simulated dev/paper execution**. Explicit Binance configuration
+enables signed REST execution on testnet or opt-in canary mainnet, plus exchange-backed market,
+portfolio, and daily risk facts; see [Binance setup and accounting limits](docs/deployment-profiles.md#binance-rest-and-exchange-backed-risk).
+Default Compose remains isolated file-risk/paper execution. The HTTP APIs are unauthenticated
+development interfaces, loopback-published by default; use an authenticated gateway before remote
+deployment. See the [HTTP contract](docs/deployment-profiles.md#http-contract)
 for validation, correlation IDs, and startup configuration. Pending human approvals now persist
 across Guardrail/Broker restarts in shared SQLite; operators use `pnpm start:approval -- list`
 and `approve`/`deny` from a separate process. See the

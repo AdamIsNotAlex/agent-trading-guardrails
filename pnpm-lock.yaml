@@ -98,6 +98,9 @@ importers:
       '@guardrails/broker':
         specifier: workspace:*
         version: link:../broker
+      '@guardrails/risk-engine':
+        specifier: workspace:*
+        version: link:../risk-engine
       '@guardrails/schemas':
         specifier: workspace:*
         version: link:../schemas
@@ -207,6 +210,9 @@ importers:
       '@guardrails/audit':
         specifier: workspace:*
         version: link:../audit
+      '@guardrails/binance-connector':
+        specifier: workspace:*
+        version: link:../binance-connector
       '@guardrails/broker':
         specifier: workspace:*
         version: link:../broker
