@@ -8,6 +8,7 @@
   },
   "include": ["src"],
   "references": [
+    { "path": "../approval" },
     { "path": "../audit" },
     { "path": "../broker" },
     { "path": "../evm-connector" },

@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import type { Server } from "node:http";
 import { dirname } from "node:path";
+import { ApprovalStore } from "@guardrails/approval";
 import { AuditWriter } from "@guardrails/audit";
 import {
   ExecutionBroker,
@@ -25,6 +26,23 @@ export interface Runtime {
   close(): void;
 }
 
+function approvalDatabasePath() {
+  const path = process.env.APPROVAL_DB_PATH ?? "./data/approvals.db";
+  if (!path.trim()) throw new Error("Approval database path must not be empty.");
+  if (path === ":memory:") {
+    throw new Error("Runtime approval store requires a durable database path.");
+  }
+  return path;
+}
+
+function closeRuntime(database: Database.Database, approvals?: ApprovalStore) {
+  try {
+    approvals?.close();
+  } finally {
+    database.close();
+  }
+}
+
 function openAudit(environment: Environment, role: "guardrail" | "broker") {
   const prefix = role.toUpperCase();
   const path =
@@ -45,6 +63,14 @@ function openAudit(environment: Environment, role: "guardrail" | "broker") {
   }
 }
 
+function openApprovalStore(writer: AuditWriter, defaultTimeoutSeconds: number) {
+  return new ApprovalStore({
+    databasePath: approvalDatabasePath(),
+    defaultTimeoutSeconds,
+    audit: writer,
+  });
+}
+
 export function createGuardrailRuntime(): Runtime {
   const config = loadDevConfig();
   const provider = process.env.REVIEWER_PROVIDER ?? "openai";
@@ -57,11 +83,16 @@ export function createGuardrailRuntime(): Runtime {
   const policy = new OpaHttpPolicyEvaluator({ opaUrl: config.opaUrl });
   const risk = createFileRiskEngine(process.env.RISK_DATA_PATH ?? "./data/risk/risk-snapshot.json");
   const { database, writer } = openAudit(config.environment, "guardrail");
+  let approvals: ApprovalStore | undefined;
   try {
-    const service = new GuardrailService(config, reviewer, policy, risk, writer);
-    return { server: createGuardrailServer(service), close: () => database.close() };
+    approvals = openApprovalStore(writer, config.approvalTimeoutSeconds);
+    const service = new GuardrailService(config, reviewer, policy, risk, writer, approvals);
+    return {
+      server: createGuardrailServer(service),
+      close: () => closeRuntime(database, approvals),
+    };
   } catch (error) {
-    database.close();
+    closeRuntime(database, approvals);
     throw error;
   }
 }
@@ -81,7 +112,9 @@ export function createBrokerRuntime(): Runtime {
   const idempotencyPath = process.env.BROKER_IDEMPOTENCY_PATH ?? "./data/broker-idempotency.json";
   mkdirSync(dirname(idempotencyPath), { recursive: true, mode: 0o700 });
   const { database, writer } = openAudit(config.environment, "broker");
+  let approvals: ApprovalStore | undefined;
   try {
+    approvals = openApprovalStore(writer, config.approvalTimeoutSeconds);
     const broker = new ExecutionBroker(
       {
         environment: config.environment,
@@ -93,10 +126,14 @@ export function createBrokerRuntime(): Runtime {
       killSwitch,
       writer,
       new FileBrokerIdempotencyStore(idempotencyPath),
+      approvals,
     );
-    return { server: createBrokerServer(broker), close: () => database.close() };
+    return {
+      server: createBrokerServer(broker),
+      close: () => closeRuntime(database, approvals),
+    };
   } catch (error) {
-    database.close();
+    closeRuntime(database, approvals);
     throw error;
   }
 }

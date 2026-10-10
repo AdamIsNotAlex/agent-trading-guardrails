@@ -92,7 +92,10 @@ it does not broadcast them, and generated local keys must never be funded.
 The standalone broker performs **simulated execution in dev/paper only**. The HTTP APIs are
 unauthenticated development interfaces, loopback-published by default; use an authenticated
 gateway before remote deployment. See the [HTTP contract](docs/deployment-profiles.md#http-contract)
-for validation, correlation IDs, approval limitations, and startup configuration.
+for validation, correlation IDs, and startup configuration. Pending human approvals now persist
+across Guardrail/Broker restarts in shared SQLite; operators use `pnpm start:approval -- list`
+and `approve`/`deny` from a separate process. See the
+[operator workflow and storage requirements](docs/deployment-profiles.md#cross-process-human-approval).
 
 ## Security
 

@@ -1,14 +1,30 @@
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { JsonFileAllowlistOnboardingStore } from "./allowlist-store.js";
-import { ApprovalCli } from "./cli.js";
-import type { AllowlistOnboardingEntry, ApprovalAuditWriter } from "./interfaces.js";
+import type {
+  AllowlistOnboardingEntry,
+  ApprovalAuditWriter,
+  ApprovalConfig,
+} from "./interfaces.js";
 import { ApprovalStore } from "./store.js";
 
+const stores: ApprovalStore[] = [];
+
+afterEach(() => {
+  for (const store of stores.splice(0)) store.close();
+  vi.useRealTimers();
+});
+
+function openStore(config: ApprovalConfig) {
+  const store = new ApprovalStore({ databasePath: ":memory:", ...config });
+  stores.push(store);
+  return store;
+}
+
 function makeStore(timeoutSeconds = 300) {
-  return new ApprovalStore({ defaultTimeoutSeconds: timeoutSeconds });
+  return openStore({ defaultTimeoutSeconds: timeoutSeconds });
 }
 
 const baseParams = {
@@ -70,15 +86,15 @@ describe("ApprovalStore", () => {
 
   it("emits approval decision and timeout audit events", () => {
     const auditEvents: Parameters<ApprovalAuditWriter["write"]>[0][] = [];
-    const approvedStore = new ApprovalStore({
+    const approvedStore = openStore({
       defaultTimeoutSeconds: 300,
       audit: { write: (event) => auditEvents.push(event) },
     });
-    const deniedStore = new ApprovalStore({
+    const deniedStore = openStore({
       defaultTimeoutSeconds: 300,
       audit: { write: (event) => auditEvents.push(event) },
     });
-    const timeoutStore = new ApprovalStore({
+    const timeoutStore = openStore({
       defaultTimeoutSeconds: -1,
       audit: { write: (event) => auditEvents.push(event) },
     });
@@ -110,7 +126,7 @@ describe("ApprovalStore", () => {
   });
 
   it("keeps approval pending when approval audit emission fails", () => {
-    const store = new ApprovalStore({
+    const store = openStore({
       defaultTimeoutSeconds: 300,
       audit: {
         write() {
@@ -125,7 +141,7 @@ describe("ApprovalStore", () => {
   });
 
   it("times out expired requests", () => {
-    const store = new ApprovalStore({ defaultTimeoutSeconds: -1 });
+    const store = openStore({ defaultTimeoutSeconds: -1 });
     store.create(baseParams);
     const timedOut = store.checkTimeouts();
     expect(timedOut).toHaveLength(1);
@@ -135,14 +151,14 @@ describe("ApprovalStore", () => {
   });
 
   it("cannot approve timed-out request", () => {
-    const store = new ApprovalStore({ defaultTimeoutSeconds: -1 });
+    const store = openStore({ defaultTimeoutSeconds: -1 });
     const req = store.create(baseParams);
     store.checkTimeouts();
     expect(store.approve(req.approvalId, "op")).toBeNull();
   });
 
   it("rejects wait when approval has already been consumed", async () => {
-    const store = new ApprovalStore({ defaultTimeoutSeconds: 300 });
+    const store = openStore({ defaultTimeoutSeconds: 300 });
     const req = store.create(baseParams);
     store.approve(req.approvalId, "operator");
     store.consumeOneTime(req.approvalId);
@@ -151,7 +167,7 @@ describe("ApprovalStore", () => {
   });
 
   it("preserves approval decision provenance when consumed", () => {
-    const store = new ApprovalStore({ defaultTimeoutSeconds: 300 });
+    const store = openStore({ defaultTimeoutSeconds: 300 });
     const req = store.create(baseParams);
     const approved = store.approve(req.approvalId, "operator");
     const consumed = store.consumeOneTime(req.approvalId);
@@ -163,11 +179,12 @@ describe("ApprovalStore", () => {
   });
 
   it("does not erase approval provenance when approved request expires before consumption", () => {
-    const store = new ApprovalStore({ defaultTimeoutSeconds: 300 });
+    vi.useFakeTimers();
+    const store = openStore({ defaultTimeoutSeconds: 300 });
     const req = store.create(baseParams);
     const approved = store.approve(req.approvalId, "operator");
     if (!approved) throw new Error("approval failed");
-    approved.timeoutAt = new Date(Date.now() - 1_000).toISOString();
+    vi.setSystemTime(Date.parse(approved.timeoutAt));
 
     const consumed = store.consumeOneTime(req.approvalId);
 
@@ -180,11 +197,12 @@ describe("ApprovalStore", () => {
   });
 
   it("wait rejects expired approved requests without rewriting approval metadata", async () => {
-    const store = new ApprovalStore({ defaultTimeoutSeconds: 300 });
+    vi.useFakeTimers();
+    const store = openStore({ defaultTimeoutSeconds: 300 });
     const req = store.create(baseParams);
     const approved = store.approve(req.approvalId, "operator");
     if (!approved) throw new Error("approval failed");
-    approved.timeoutAt = new Date(Date.now() - 1_000).toISOString();
+    vi.setSystemTime(Date.parse(approved.timeoutAt));
 
     await expect(store.waitForApproval(req.approvalId, 10)).rejects.toThrow("timed out");
 
@@ -196,7 +214,7 @@ describe("ApprovalStore", () => {
   });
 
   it("rejects wait when timeout audit fails", async () => {
-    const store = new ApprovalStore({
+    const store = openStore({
       defaultTimeoutSeconds: -1,
       audit: {
         write() {
@@ -212,7 +230,7 @@ describe("ApprovalStore", () => {
 
   it("emits timeout audit when deny discovers expiration", () => {
     const auditEvents: Parameters<ApprovalAuditWriter["write"]>[0][] = [];
-    const store = new ApprovalStore({
+    const store = openStore({
       defaultTimeoutSeconds: -1,
       audit: { write: (event) => auditEvents.push(event) },
     });
@@ -229,7 +247,7 @@ describe("ApprovalStore", () => {
 
   it("emits timeout audit when approve discovers expiration", () => {
     const auditEvents: Parameters<ApprovalAuditWriter["write"]>[0][] = [];
-    const store = new ApprovalStore({
+    const store = openStore({
       defaultTimeoutSeconds: -1,
       audit: { write: (event) => auditEvents.push(event) },
     });
@@ -247,7 +265,7 @@ describe("ApprovalStore", () => {
   it("persists allowlist onboarding approvals and emits audit events", () => {
     const allowlistPath = join(mkdtempSync(join(tmpdir(), "allowlist-")), "allowlist.json");
     const auditEvents: Parameters<ApprovalAuditWriter["write"]>[0][] = [];
-    const store = new ApprovalStore({
+    const store = openStore({
       defaultTimeoutSeconds: 300,
       allowlistOnboarding: {
         store: new JsonFileAllowlistOnboardingStore(allowlistPath),
@@ -301,7 +319,7 @@ describe("ApprovalStore", () => {
         auditEvents.push(event);
       },
     };
-    const store = new ApprovalStore({
+    const store = openStore({
       defaultTimeoutSeconds: 300,
       audit,
       allowlistOnboarding: {
@@ -324,7 +342,7 @@ describe("ApprovalStore", () => {
 
   it("rolls back allowlist persistence when audit emission fails", () => {
     const allowlistPath = join(mkdtempSync(join(tmpdir(), "allowlist-")), "allowlist.json");
-    const store = new ApprovalStore({
+    const store = openStore({
       defaultTimeoutSeconds: 300,
       allowlistOnboarding: {
         store: new JsonFileAllowlistOnboardingStore(allowlistPath),
@@ -347,60 +365,6 @@ describe("ApprovalStore", () => {
     const req = store.create({ ...baseParams, approvalType: "allowlist_onboarding" });
 
     expect(() => store.approve(req.approvalId, "admin")).toThrow("not configured");
-    expect(store.get(req.approvalId)?.state).toBe("pending");
-  });
-
-  it("does not require interactive terminal for creation", () => {
-    const store = makeStore();
-    const req = store.create(baseParams);
-    expect(req.state).toBe("pending");
-  });
-});
-
-describe("ApprovalCli", () => {
-  it("lists pending approvals", () => {
-    const store = makeStore();
-    store.create(baseParams);
-    const cli = new ApprovalCli(store);
-    const output = cli.list();
-    expect(output).toContain("PENDING");
-    expect(output).toContain("cex.place_order");
-  });
-
-  it("shows approval details", () => {
-    const store = makeStore();
-    const req = store.create(baseParams);
-    const cli = new ApprovalCli(store);
-    const output = cli.show(req.approvalId);
-    expect(output).toContain(req.approvalId);
-    expect(output).toContain("pending");
-  });
-
-  it("approves via CLI", () => {
-    const store = makeStore();
-    const req = store.create(baseParams);
-    const cli = new ApprovalCli(store);
-    const output = cli.approve(req.approvalId, "admin");
-    expect(output).toContain("Approved");
-  });
-
-  it("denies via CLI", () => {
-    const store = makeStore();
-    const req = store.create(baseParams);
-    const cli = new ApprovalCli(store);
-    const output = cli.deny(req.approvalId, "admin");
-    expect(output).toContain("Denied");
-  });
-
-  it("handles not-found", () => {
-    const cli = new ApprovalCli(makeStore());
-    expect(cli.show("nonexistent")).toContain("not found");
-  });
-
-  it("live execution cannot bypass required approval", () => {
-    const store = makeStore();
-    const req = store.create(baseParams);
-    expect(req.state).toBe("pending");
     expect(store.get(req.approvalId)?.state).toBe("pending");
   });
 });

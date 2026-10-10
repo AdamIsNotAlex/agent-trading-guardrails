@@ -94,3 +94,9 @@ reviewer output is advisory while policy and broker boundaries remain authoritat
 - `viem` 2.48.8 signature recovery expects a concrete serialized transaction type (such as
   `TransactionSerializedEIP1559`), not generic `Hex`. Validate the response before narrowing;
   Node fetch JSON is `unknown` in the runtime's type environment.
+- `ApprovalStore` defaults to shared SQLite via `APPROVAL_DB_PATH`; returned requests are detached
+  snapshots. Tests explicitly select `:memory:` unless exercising persistence. Change expiry tests
+  with the clock, not by mutating a returned request. Runtime owners must close their stores.
+- Operator CLI audit callbacks run under the approval database's immediate write transaction and
+  open a fresh writer per event. Keep that CLI chain separate from Guardrail/Broker audit chains;
+  all CLI writers for a chain must share the same approval database lock.

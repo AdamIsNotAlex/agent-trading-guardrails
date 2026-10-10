@@ -50,6 +50,7 @@ volumes:
   guardrail-anchor:
   broker-data:
   broker-anchor:
+  approvals-data:
   signer-keys:
   signer-data:
   signer-anchor:
@@ -122,9 +123,13 @@ services:
       AUDIT_HASH_ANCHOR_PATH: /app/audit-anchor/head.hash
       RISK_DATA_PATH: /app/risk-data/risk-snapshot.json
       APPROVAL_TIMEOUT_SECONDS: ${APPROVAL_TIMEOUT_SECONDS:-300}
+      APPROVAL_DB_PATH: /app/approvals/approvals.db
+      APPROVAL_AUDIT_DB_PATH: /app/data/approval-audit.db
+      APPROVAL_AUDIT_HASH_ANCHOR_PATH: /app/audit-anchor/approval/head.hash
     volumes:
       - guardrail-data:/app/data
       - guardrail-anchor:/app/audit-anchor
+      - approvals-data:/app/approvals
       - ./data/risk:/app/risk-data:ro
     ports:
       - "127.0.0.1:3000:3000"
@@ -156,9 +161,14 @@ services:
       BROKER_IDEMPOTENCY_PATH: /app/data/idempotency.json
       BROKER_KILL_SWITCH: ${BROKER_KILL_SWITCH:-false}
       SIGNER_URL: http://172.30.30.20:3002
+      APPROVAL_TIMEOUT_SECONDS: ${APPROVAL_TIMEOUT_SECONDS:-300}
+      APPROVAL_DB_PATH: /app/approvals/approvals.db
+      APPROVAL_AUDIT_DB_PATH: /app/data/approval-audit.db
+      APPROVAL_AUDIT_HASH_ANCHOR_PATH: /app/audit-anchor/approval/head.hash
     volumes:
       - broker-data:/app/data
       - broker-anchor:/app/audit-anchor
+      - approvals-data:/app/approvals
     ports:
       - "127.0.0.1:3001:3001"
     networks:

@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto";
+import { closeSync, mkdirSync, openSync } from "node:fs";
+import { dirname } from "node:path";
 import type { Environment } from "@guardrails/schemas";
+import Database from "better-sqlite3";
 import type {
   AllowlistOnboardingEntry,
   ApprovalConfig,
@@ -7,17 +10,74 @@ import type {
   ApprovalState,
   ApprovalType,
 } from "./interfaces.js";
+import { approvalRequestSchema } from "./request-schema.js";
 
 type PendingApprovalRequest = Extract<ApprovalRequest, { state: "pending" }>;
-type ApprovedApprovalRequest = Extract<ApprovalRequest, { state: "approved" }>;
-type DeniedApprovalRequest = Extract<ApprovalRequest, { state: "denied" }>;
 type TimeoutApprovalRequest = Extract<ApprovalRequest, { state: "timeout" }>;
-type ConsumedApprovalRequest = Extract<ApprovalRequest, { state: "consumed" }>;
 
 export class ApprovalStore {
-  private requests = new Map<string, ApprovalRequest>();
+  private readonly database: Database.Database;
+  private readonly selectRequest: Database.Statement;
+  private readonly selectAll: Database.Statement;
+  private readonly selectState: Database.Statement;
+  private readonly selectExpired: Database.Statement;
+  private readonly insertRequest: Database.Statement;
+  private readonly updateRequest: Database.Statement;
+  private readonly deleteRequest: Database.Statement;
 
-  constructor(private config: ApprovalConfig) {}
+  constructor(private config: ApprovalConfig) {
+    const path = config.databasePath ?? process.env.APPROVAL_DB_PATH ?? "./data/approvals.db";
+    if (!path.trim()) throw new Error("Approval database path must not be empty.");
+    if (path !== ":memory:") {
+      mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+      closeSync(openSync(path, "a", 0o600));
+    }
+    this.database = new Database(path, { timeout: 5000 });
+    try {
+      this.database.pragma("journal_mode = WAL");
+      this.database.pragma("synchronous = FULL");
+      this.database.exec(`
+        CREATE TABLE IF NOT EXISTS approval_requests (
+          approval_id TEXT PRIMARY KEY NOT NULL,
+          request TEXT NOT NULL CHECK (json_valid(request)),
+          state TEXT GENERATED ALWAYS AS (json_extract(request, '$.state')) VIRTUAL NOT NULL
+            CHECK (state IN ('pending', 'approved', 'denied', 'timeout', 'consumed')),
+          timeout_at TEXT GENERATED ALWAYS AS (json_extract(request, '$.timeoutAt')) VIRTUAL NOT NULL,
+          CHECK (approval_id = json_extract(request, '$.approvalId'))
+        );
+        CREATE INDEX IF NOT EXISTS approval_requests_state_timeout
+          ON approval_requests (state, timeout_at);
+      `);
+      this.selectRequest = this.database.prepare(
+        "SELECT request FROM approval_requests WHERE approval_id = ?",
+      );
+      this.selectAll = this.database.prepare(
+        "SELECT request FROM approval_requests ORDER BY rowid",
+      );
+      this.selectState = this.database.prepare(
+        "SELECT request FROM approval_requests WHERE state = ? ORDER BY rowid",
+      );
+      this.selectExpired = this.database.prepare(
+        "SELECT approval_id FROM approval_requests WHERE state = 'pending' AND timeout_at <= ?",
+      );
+      this.insertRequest = this.database.prepare(
+        "INSERT INTO approval_requests (approval_id, request) VALUES (?, ?)",
+      );
+      this.updateRequest = this.database.prepare(
+        "UPDATE approval_requests SET request = ? WHERE approval_id = ?",
+      );
+      this.deleteRequest = this.database.prepare(
+        "DELETE FROM approval_requests WHERE approval_id = ?",
+      );
+    } catch (error) {
+      this.database.close();
+      throw error;
+    }
+  }
+
+  close(): void {
+    this.database.close();
+  }
 
   create(params: {
     intentId: string;
@@ -40,7 +100,7 @@ export class ApprovalStore {
       decidedBy: null,
       timeoutAt: new Date(now.getTime() + this.config.defaultTimeoutSeconds * 1000).toISOString(),
     };
-    this.requests.set(request.approvalId, request);
+    this.insertRequest.run(request.approvalId, JSON.stringify(request));
     return request;
   }
 
@@ -48,107 +108,110 @@ export class ApprovalStore {
     return new Promise((resolve, reject) => {
       const deadline = Date.now() + timeoutMs;
       const poll = () => {
-        const request = this.requests.get(approvalId);
-        if (!request) {
-          reject(new Error(`Approval request ${approvalId} was not found.`));
-          return;
-        }
-        if (new Date() > new Date(request.timeoutAt)) {
-          if (request.state === "pending") {
-            try {
-              this.timeout(request, new Date().toISOString());
-            } catch (err) {
-              reject(err);
-              return;
-            }
+        try {
+          const request = this.get(approvalId);
+          if (!request) throw new Error(`Approval request ${approvalId} was not found.`);
+          if (Date.now() >= Date.parse(request.timeoutAt)) {
+            if (request.state === "pending") this.expire(approvalId);
+            throw new Error(`Approval request ${approvalId} timed out.`);
           }
-          reject(new Error(`Approval request ${approvalId} timed out.`));
-          return;
+          if (request.state === "approved") {
+            resolve(request);
+            return;
+          }
+          if (request.state === "denied") {
+            throw new Error(`Approval request ${approvalId} was denied.`);
+          }
+          if (request.state === "timeout") {
+            throw new Error(`Approval request ${approvalId} timed out.`);
+          }
+          if (request.state === "consumed") {
+            throw new Error(`Approval request ${approvalId} was already used.`);
+          }
+          if (Date.now() >= deadline) {
+            throw new Error(`Timed out waiting for approval request ${approvalId}.`);
+          }
+          setTimeout(poll, pollMs);
+        } catch (error) {
+          reject(error);
         }
-        if (request.state === "approved") {
-          resolve(request);
-          return;
-        }
-        if (request.state === "denied") {
-          reject(new Error(`Approval request ${approvalId} was denied.`));
-          return;
-        }
-        if (request.state === "timeout") {
-          reject(new Error(`Approval request ${approvalId} timed out.`));
-          return;
-        }
-        if (request.state === "consumed") {
-          reject(new Error(`Approval request ${approvalId} was already used.`));
-          return;
-        }
-        if (Date.now() >= deadline) {
-          reject(new Error(`Timed out waiting for approval request ${approvalId}.`));
-          return;
-        }
-        setTimeout(poll, pollMs);
       };
       poll();
     });
   }
 
   get(approvalId: string): ApprovalRequest | undefined {
-    return this.requests.get(approvalId);
+    const row = this.selectRequest.get(approvalId) as { request: string } | undefined;
+    return row ? approvalRequestSchema.parse(JSON.parse(row.request)) : undefined;
   }
 
   delete(approvalId: string): boolean {
-    return this.requests.delete(approvalId);
+    return this.deleteRequest.run(approvalId).changes > 0;
   }
 
   list(filter?: { state?: ApprovalState }): ApprovalRequest[] {
-    const all = [...this.requests.values()];
-    if (filter?.state) return all.filter((r) => r.state === filter.state);
-    return all;
+    const rows = (filter?.state ? this.selectState.all(filter.state) : this.selectAll.all()) as {
+      request: string;
+    }[];
+    return rows.map((row) => approvalRequestSchema.parse(JSON.parse(row.request)));
   }
 
+  // Lock before reading state so only the winning process performs decision side effects.
   approve(approvalId: string, decidedBy: string): ApprovalRequest | null {
-    const request = this.requests.get(approvalId);
-    if (!request || request.state !== "pending") return null;
-    const decidedAt = new Date().toISOString();
-    if (new Date() > new Date(request.timeoutAt)) {
-      this.timeout(request, decidedAt);
-      return null;
-    }
-    let onboarding: { rollback(): void; entry: AllowlistOnboardingEntry } | null = null;
-    if (request.approvalType === "allowlist_onboarding") {
-      onboarding = this.applyAllowlistOnboarding(request, decidedBy, decidedAt);
-    }
-    try {
-      this.writeDecisionAudit(request, "approval.approved", decidedBy, decidedAt, "approved");
-    } catch (err) {
-      if (onboarding) {
-        onboarding.rollback();
-        this.writeAllowlistRollbackAudit(request, decidedBy, decidedAt, onboarding.entry);
-      }
-      throw err;
-    }
-    return this.approveRequest(request, decidedAt, decidedBy);
+    return this.database
+      .transaction(() => {
+        const request = this.get(approvalId);
+        if (!request || request.state !== "pending") return null;
+        const decidedAt = new Date().toISOString();
+        if (decidedAt >= request.timeoutAt) {
+          this.timeout(request, decidedAt);
+          return null;
+        }
+        let onboarding: { rollback(): void; entry: AllowlistOnboardingEntry } | null = null;
+        if (request.approvalType === "allowlist_onboarding") {
+          onboarding = this.applyAllowlistOnboarding(request, decidedBy, decidedAt);
+        }
+        try {
+          this.writeDecisionAudit(request, "approval.approved", decidedBy, decidedAt, "approved");
+          return this.save({ ...request, state: "approved", decidedAt, decidedBy });
+        } catch (err) {
+          if (onboarding) {
+            onboarding.rollback();
+            this.writeAllowlistRollbackAudit(request, decidedBy, decidedAt, onboarding.entry);
+          }
+          throw err;
+        }
+      })
+      .immediate();
   }
 
   deny(approvalId: string, decidedBy: string): ApprovalRequest | null {
-    const request = this.requests.get(approvalId);
-    if (!request || request.state !== "pending") return null;
-    const decidedAt = new Date().toISOString();
-    if (new Date() > new Date(request.timeoutAt)) {
-      this.timeout(request, decidedAt);
-      return null;
-    }
-    this.writeDecisionAudit(request, "approval.denied", decidedBy, decidedAt, "denied");
-    return this.denyRequest(request, decidedAt, decidedBy);
+    return this.database
+      .transaction(() => {
+        const request = this.get(approvalId);
+        if (!request || request.state !== "pending") return null;
+        const decidedAt = new Date().toISOString();
+        if (decidedAt >= request.timeoutAt) {
+          this.timeout(request, decidedAt);
+          return null;
+        }
+        this.writeDecisionAudit(request, "approval.denied", decidedBy, decidedAt, "denied");
+        return this.save({ ...request, state: "denied", decidedAt, decidedBy });
+      })
+      .immediate();
   }
 
   consumeOneTime(approvalId: string): ApprovalRequest | null {
-    const request = this.requests.get(approvalId);
-    if (!request || request.state !== "approved" || request.approvalType !== "one_time") {
-      return null;
-    }
-    const now = new Date();
-    if (now > new Date(request.timeoutAt)) return null;
-    return this.consumeRequest(request);
+    return this.database
+      .transaction(() => {
+        const request = this.get(approvalId);
+        if (!request || request.state !== "approved" || request.approvalType !== "one_time") {
+          return null;
+        }
+        if (Date.now() >= Date.parse(request.timeoutAt)) return null;
+        return this.save({ ...request, state: "consumed" });
+      })
+      .immediate();
   }
 
   private applyAllowlistOnboarding(
@@ -206,45 +269,23 @@ export class ApprovalStore {
 
   private timeout(request: PendingApprovalRequest, decidedAt: string): TimeoutApprovalRequest {
     this.writeDecisionAudit(request, "approval.timeout", null, decidedAt, "timeout");
-    return this.timeoutRequest(request, decidedAt);
+    return this.save({ ...request, state: "timeout", decidedAt, decidedBy: null });
   }
 
-  private approveRequest(
-    request: ApprovalRequest,
-    decidedAt: string,
-    decidedBy: string,
-  ): ApprovedApprovalRequest {
-    const approved = request as ApprovedApprovalRequest;
-    approved.state = "approved";
-    approved.decidedAt = decidedAt;
-    approved.decidedBy = decidedBy;
-    return approved;
+  private save<T extends ApprovalRequest>(request: T): T {
+    this.updateRequest.run(JSON.stringify(request), request.approvalId);
+    return request;
   }
 
-  private denyRequest(
-    request: ApprovalRequest,
-    decidedAt: string,
-    decidedBy: string,
-  ): DeniedApprovalRequest {
-    const denied = request as DeniedApprovalRequest;
-    denied.state = "denied";
-    denied.decidedAt = decidedAt;
-    denied.decidedBy = decidedBy;
-    return denied;
-  }
-
-  private timeoutRequest(request: ApprovalRequest, decidedAt: string): TimeoutApprovalRequest {
-    const timedOut = request as TimeoutApprovalRequest;
-    timedOut.state = "timeout";
-    timedOut.decidedAt = decidedAt;
-    timedOut.decidedBy = null;
-    return timedOut;
-  }
-
-  private consumeRequest(request: ApprovedApprovalRequest): ConsumedApprovalRequest {
-    const consumed = request as unknown as ConsumedApprovalRequest;
-    consumed.state = "consumed";
-    return consumed;
+  private expire(approvalId: string): TimeoutApprovalRequest | null {
+    return this.database
+      .transaction(() => {
+        const request = this.get(approvalId);
+        const now = new Date().toISOString();
+        if (!request || request.state !== "pending" || now < request.timeoutAt) return null;
+        return this.timeout(request, now);
+      })
+      .immediate();
   }
 
   private writeDecisionAudit(
@@ -300,12 +341,11 @@ export class ApprovalStore {
   }
 
   checkTimeouts(): ApprovalRequest[] {
-    const now = new Date();
+    const expired = this.selectExpired.all(new Date().toISOString()) as { approval_id: string }[];
     const timedOut: ApprovalRequest[] = [];
-    for (const request of this.requests.values()) {
-      if (request.state === "pending" && now > new Date(request.timeoutAt)) {
-        timedOut.push(this.timeout(request, now.toISOString()));
-      }
+    for (const row of expired) {
+      const request = this.expire(row.approval_id);
+      if (request) timedOut.push(request);
     }
     return timedOut;
   }

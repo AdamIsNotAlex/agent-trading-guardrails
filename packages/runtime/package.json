@@ -7,10 +7,12 @@
     "build": "tsc",
     "start:service": "node dist/service-main.js",
     "start:broker": "node dist/broker-main.js",
+    "start:approval": "node dist/approval-main.js",
     "start:signer": "node dist/signer-main.js",
     "start:sign": "node dist/sign-main.js"
   },
   "dependencies": {
+    "@guardrails/approval": "workspace:*",
     "@guardrails/audit": "workspace:*",
     "@guardrails/broker": "workspace:*",
     "@guardrails/evm-connector": "workspace:*",

@@ -80,9 +80,38 @@ Validation failures return JSON: 400 for malformed JSON/schema/correlation IDs, 
 
 `x-correlation-id` accepts 1–128 characters from `[A-Za-z0-9._:-]`; omission generates a UUID. Responses echo the HTTP request ID, including application errors. Evaluation carries it into audit events and the signed decision. **Cached `needs_human` decisions retain their original body `correlationId`, `approvalId`, and token** to preserve the human-approval binding; the response header identifies the new HTTP request. Broker never replaces a signed decision's ID with its transport request ID.
 
-For `/execute`, send `{intentId, correlationId, outcome, decidedAt, decisionToken, approvalId?, intent}` from the decision and original intent. Never generate tokens in the agent. `/evaluate` does not automatically execute. Human-approval resolution is not exposed over HTTP; process-local approval stores are not shared between standalone processes, so the broker rejects `needs_human` requests without an approved record. Use the existing in-process approval integration for that workflow.
+For `/execute`, send `{intentId, correlationId, outcome, decidedAt, decisionToken, approvalId?, intent}` from the decision and original intent. Never generate tokens in the agent. `/evaluate` does not automatically execute. Human-approval resolution is not exposed over HTTP; a trusted operator uses the standalone command below. After approval, submit the **original signed `needs_human` decision**, including its original correlation ID and approval ID, to Broker. Do not relabel it as `allow` or regenerate its token.
 
 The Agent entrypoint consumes raw intents, one JSON object per line, and prints one decision or `{error, message, correlationId?}` per nonblank line. It continues after invalid JSON/schema or failed HTTP requests and exits 1 if any submission failed; a policy denial is a successful submission, not a transport error. Requests time out after 30 seconds. EOF exits normally. This is an intent transport, not an autonomous strategy/LLM loop, and it never calls `/execute`.
+
+### Cross-process human approval
+
+Guardrail, Broker, and the operator command share `APPROVAL_DB_PATH` (default `./data/approvals.db`). Use the same absolute path when starting processes from different working directories, and a separate database for each deployment/environment. SQLite WAL requires a local filesystem shared by these processes, not an NFS-backed or cross-host database. Compose mounts `approvals-data` at `/app/approvals` in Guardrail and Broker only; Agent cannot access it.
+
+After `pnpm build`, run these commands as a trusted operator:
+
+```sh
+pnpm start:approval -- list --state pending
+pnpm start:approval -- show "$APPROVAL_ID"
+pnpm start:approval -- approve "$APPROVAL_ID" --by operator-1
+# Alternative decision: pnpm start:approval -- deny "$APPROVAL_ID" --by operator-1
+pnpm start:approval -- watch
+
+# --db overrides APPROVAL_DB_PATH for this invocation:
+pnpm start:approval -- list --db /absolute/path/approvals.db
+
+# Use Broker's operator audit chain consistently inside Compose:
+docker compose exec -T broker node packages/runtime/dist/approval-main.js list --state pending
+docker compose exec -T broker node packages/runtime/dist/approval-main.js approve "$APPROVAL_ID" --by operator-1
+```
+
+`list` prints complete approval IDs; `show` prints the persisted request and decision provenance. Commands exit 1 for invalid arguments, missing requests, expired/already-decided approvals, or storage/audit failures. `watch` refreshes every two seconds (`APPROVAL_WATCH_INTERVAL_MS` overrides the interval) and closes the database on SIGINT/SIGTERM. `--by` is an audit identity label, **not authentication**: protect filesystem/container access and never give Agent write access to approval state or operator audit secrets.
+
+Pending, approved, denied, timed-out, and consumed records survive process restarts. Each decision and one-time consumption acquires a SQLite write transaction before checking state, so concurrent operators cannot overwrite a decision and only one Broker can consume an approval. Polling waits read the shared database rather than a cached object. The deadline is fixed at creation by `APPROVAL_TIMEOUT_SECONDS`; reading/watching or attempting a decision expires overdue pending requests. Expired approved records retain their decision provenance but cannot be consumed. Returned library objects are snapshots, not mutable storage handles; explicitly close injected `ApprovalStore` instances when their owner shuts down. Standalone runtimes and CLI reject in-memory databases; tests may explicitly use `:memory:`.
+
+Operator decisions use a separate `APPROVAL_AUDIT_DB_PATH` (default `./data/approval-audit.db`) and `APPROVAL_AUDIT_HASH_ANCHOR_PATH` (default `./audit-anchor/approval/head.hash`). Never reuse a Guardrail/Broker audit database or anchor. Concurrent operator commands for one approval database must use the same operator audit database, anchor, and `AUDIT_HASH_SECRET`; do not reuse that chain for another approval database. The CLI opens a fresh audit writer inside the approval transaction, and an audit failure leaves the request pending. Non-development request environments enforce the existing audit secret/anchor requirements even when the CLI itself runs with development defaults.
+
+`APPROVAL_ALLOWLIST_PATH` optionally enables the existing allowlist-onboarding file update; without it, onboarding approvals fail closed. This file is separate from the pending-request database and does not automatically reload OPA policy. Preserve approval state across upgrades: use SQLite's online backup facilities or stop all writers before backing up; copying only the main database during active WAL writes is not a consistent backup. The service images pin the shared-volume owner to UID/GID 999; existing volumes owned by a different UID need an operator-managed ownership migration, not world-writable permissions. Requests held only in the old in-memory Map cannot be recovered after that process exits; re-evaluate those intents to create durable requests.
 
 ### Offline Signer and Broker-side CLI
 

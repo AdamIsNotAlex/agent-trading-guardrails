@@ -60,7 +60,16 @@ importers:
       '@guardrails/schemas':
         specifier: workspace:*
         version: link:../schemas
+      better-sqlite3:
+        specifier: ^12.9.0
+        version: 12.9.0
+      zod:
+        specifier: ^3.25.23
+        version: 3.25.76
     devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.13
+        version: 7.6.13
       '@types/node':
         specifier: ^25.6.0
         version: 25.6.0
@@ -192,6 +201,9 @@ importers:
 
   packages/runtime:
     dependencies:
+      '@guardrails/approval':
+        specifier: workspace:*
+        version: link:../approval
       '@guardrails/audit':
         specifier: workspace:*
         version: link:../audit

@@ -81,6 +81,7 @@ export interface ApprovalAuditWriter {
 
 export interface ApprovalConfig {
   defaultTimeoutSeconds: number;
+  databasePath?: string;
   audit?: ApprovalAuditWriter;
   allowlistOnboarding?: {
     store: AllowlistOnboardingStore;

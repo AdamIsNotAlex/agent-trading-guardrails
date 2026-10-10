@@ -9,9 +9,10 @@ RUN corepack enable && pnpm install --frozen-lockfile && pnpm build
 
 FROM node:22-slim AS runtime
 
-RUN groupadd -r guardrail && useradd -r -g guardrail -s /bin/false guardrail \
-    && mkdir -p /app/data /app/audit-anchor \
-    && chown -R guardrail:guardrail /app/data /app/audit-anchor
+RUN groupadd -r -g 999 guardrail && useradd -r -u 999 -g guardrail -s /bin/false guardrail \
+    && mkdir -p /app/data /app/audit-anchor /app/approvals \
+    && chmod 0700 /app/data /app/audit-anchor /app/approvals \
+    && chown -R guardrail:guardrail /app/data /app/audit-anchor /app/approvals
 
 WORKDIR /app
 

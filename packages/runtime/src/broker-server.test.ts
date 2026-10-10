@@ -2,6 +2,7 @@ import { once } from "node:events";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { ApprovalStore } from "@guardrails/approval";
 import { createGuardrailDecisionToken } from "@guardrails/broker";
 import { binanceSpotOrder } from "@guardrails/schemas/fixtures";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,6 +10,7 @@ import { createBrokerRuntime, type Runtime } from "./runtime.js";
 
 let directory: string;
 let runtime: Runtime | undefined;
+const extraStores: ApprovalStore[] = [];
 
 beforeEach(() => {
   directory = mkdtempSync(join(tmpdir(), "broker-http-"));
@@ -20,10 +22,12 @@ beforeEach(() => {
   vi.stubEnv("BROKER_IDEMPOTENCY_PATH", join(directory, "idempotency.json"));
   vi.stubEnv("BROKER_KILL_SWITCH", "false");
   vi.stubEnv("APPROVAL_TIMEOUT_SECONDS", "300");
+  vi.stubEnv("APPROVAL_DB_PATH", join(directory, "approvals.db"));
 });
 
 afterEach(async () => {
   await stop();
+  for (const store of extraStores.splice(0)) store.close();
   vi.unstubAllEnvs();
   rmSync(directory, { recursive: true, force: true });
 });
@@ -47,6 +51,15 @@ async function stop() {
   current.close();
 }
 
+function openStore() {
+  const store = new ApprovalStore({
+    databasePath: join(directory, "approvals.db"),
+    defaultTimeoutSeconds: 300,
+  });
+  extraStores.push(store);
+  return store;
+}
+
 function approval() {
   const intent = { ...binanceSpotOrder, environment: "dev" as const };
   const facts = {
@@ -54,6 +67,24 @@ function approval() {
     correlationId: "signed-decision-id",
     outcome: "allow" as const,
     decidedAt: new Date().toISOString(),
+  };
+  return {
+    ...facts,
+    intentId: intent.intentId,
+    decisionToken: createGuardrailDecisionToken({ ...facts, secret: "dev-decision-secret" }),
+  };
+}
+
+function needsHuman(
+  approvalId: string,
+  intent = { ...binanceSpotOrder, environment: "dev" as const },
+) {
+  const facts = {
+    intent,
+    correlationId: "signed-decision-id",
+    outcome: "needs_human" as const,
+    decidedAt: new Date().toISOString(),
+    approvalId,
   };
   return {
     ...facts,
@@ -113,5 +144,66 @@ describe("standalone broker HTTP boundary", () => {
   it("refuses to start a simulated broker under a live environment", () => {
     vi.stubEnv("GUARDRAIL_ENV", "canary_live");
     expect(() => createBrokerRuntime()).toThrow("dev or paper");
+  });
+
+  it("shares durable approvals across independent creator, operator, and runtime stores", async () => {
+    const intent = { ...binanceSpotOrder, environment: "dev" as const };
+    const creator = openStore();
+    const request = creator.create({
+      intentId: intent.intentId,
+      correlationId: "signed-decision-id",
+      principal: intent.principal,
+      action: intent.action,
+      resource: intent.resource,
+      environment: intent.environment,
+      escalationReason: "Needs human review.",
+      approvalType: "one_time",
+      intentData: intent,
+    });
+    creator.close();
+
+    const url = await start();
+    expect(await (await execute(url, needsHuman(request.approvalId, intent))).json()).toMatchObject(
+      {
+        status: "rejected",
+        revalidationPassed: false,
+      },
+    );
+
+    const operator = openStore();
+    expect(operator.get(request.approvalId)?.state).toBe("pending");
+    expect(operator.approve(request.approvalId, "operator")?.state).toBe("approved");
+    operator.close();
+
+    const executedResponse = await execute(url, needsHuman(request.approvalId, intent));
+    const executed = await executedResponse.json();
+    expect(executed).toMatchObject({
+      status: "executed",
+      executionKind: "cex_order",
+      orderId: expect.stringMatching(/^paper-/),
+      revalidationPassed: true,
+    });
+
+    await stop();
+
+    const reopened = openStore();
+    expect(reopened.get(request.approvalId)).toMatchObject({
+      state: "consumed",
+      decidedBy: "operator",
+    });
+    reopened.close();
+
+    const replayUrl = await start();
+    expect(await (await execute(replayUrl, needsHuman(request.approvalId, intent))).json()).toEqual(
+      executed,
+    );
+
+    const reuseIntent = { ...intent, idempotencyKey: "spot-order-consumed-reuse" };
+    expect(
+      await (await execute(replayUrl, needsHuman(request.approvalId, reuseIntent))).json(),
+    ).toMatchObject({
+      status: "rejected",
+      revalidationPassed: false,
+    });
   });
 });

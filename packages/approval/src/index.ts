@@ -8,7 +8,12 @@ export type {
 } from "./adapters.js";
 export { ConsoleNotifier } from "./adapters.js";
 export { JsonFileAllowlistOnboardingStore } from "./allowlist-store.js";
-export { ApprovalCli } from "./cli.js";
+export type {
+  ApprovalCliCommand,
+  ApprovalWatchErrorHandler,
+  ParsedApprovalArgs,
+} from "./cli.js";
+export { ApprovalCli, parseApprovalArgs, usage } from "./cli.js";
 export type {
   AllowlistOnboardingEntry,
   AllowlistOnboardingStore,
