@@ -66,21 +66,28 @@ pnpm typecheck
 Both test suites fail if no matching test files are discovered. `pnpm run ci` runs lint,
 typecheck, unit tests, and integration tests.
 
-### Standalone services
+### Isolated local deployment
 
 Set `OPENAI_API_KEY` in `.env` and configure the trusted risk snapshot described in
 [Deployment Profiles](docs/deployment-profiles.md#runtime-configuration-and-risk-data).
 
 ```sh
-docker compose up -d opa
-pnpm start:service  # terminal 1: GET /health, POST /evaluate on 127.0.0.1:3000
-pnpm start:broker   # terminal 2: GET /health, POST /execute on 127.0.0.1:3001
+mkdir -p data/risk
+docker compose up --build -d --wait
+node deploy/verify-local.mjs
+docker compose exec -T agent node packages/agent-adapters/dist/main.js < intents.jsonl
 ```
 
-Submit raw intent JSON Lines with `pnpm --silent start:agent < intents.jsonl`; the agent does not
-load `.env`, hold signing/reviewer secrets, or automatically execute decisions. For containers,
-use `docker compose up --build -d guardrail broker` and
-`docker compose run --rm -T agent < intents.jsonl`.
+The Linux Docker stack includes Agent, Guardrail, Broker, an offline Sepolia Signer, OPA, a
+fixed-route egress proxy, and firewall/DNS helpers. Agent can reach only the guarded intent API:
+direct exchange/RPC, metadata/private-network traffic, and external DNS are denied. DNS queries,
+packet drops, and proxy access logs persist in named volumes. See
+[deployment prerequisites and log operations](docs/deployment-profiles.md#local-docker-development).
+
+Agent does not load `.env`, hold signing/reviewer secrets, or automatically execute decisions.
+Host-only `pnpm start:service`, `pnpm start:broker`, and `pnpm start:agent` remain debugging tools,
+but host processes do **not** inherit Compose's sandbox. Signer returns offline signed transactions;
+it does not broadcast them, and generated local keys must never be funded.
 
 The standalone broker performs **simulated execution in dev/paper only**. The HTTP APIs are
 unauthenticated development interfaces, loopback-published by default; use an authenticated

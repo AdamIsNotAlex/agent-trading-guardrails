@@ -1,0 +1,19 @@
+FROM node:22-slim AS builder
+
+WORKDIR /app
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json ./
+COPY packages/ ./packages/
+RUN corepack enable && pnpm install --frozen-lockfile && pnpm build
+
+FROM node:22-slim AS runtime
+RUN groupadd -r signer && useradd -r -g signer -s /bin/false signer \
+    && mkdir -p /app/keys /app/data /app/audit-anchor \
+    && chmod 0700 /app/keys /app/data /app/audit-anchor \
+    && chown -R signer:signer /app/keys /app/data /app/audit-anchor
+WORKDIR /app
+COPY --from=builder /app ./
+USER signer
+ENV NODE_ENV=production
+ENV SIGNER_HOST=0.0.0.0
+EXPOSE 3002
+CMD ["node", "packages/runtime/dist/signer-main.js"]

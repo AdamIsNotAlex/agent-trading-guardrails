@@ -10,6 +10,7 @@
   "references": [
     { "path": "../audit" },
     { "path": "../broker" },
+    { "path": "../evm-connector" },
     { "path": "../reviewer" },
     { "path": "../risk-engine" },
     { "path": "../schemas" },

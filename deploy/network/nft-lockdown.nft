@@ -1,0 +1,22 @@
+#!/usr/sbin/nft -f
+# Applied before any allow path and again if a child dies.
+# inet family only: table ip6 can fail to load when IPv6 is disabled.
+add table inet guardrails
+delete table inet guardrails
+
+table inet guardrails {
+	chain input {
+		type filter hook input priority 0; policy drop;
+		meta nfproto ipv6 drop
+	}
+	chain forward {
+		type filter hook forward priority 0; policy drop;
+		meta nfproto ipv6 drop
+	}
+	# raw (-300) runs before Docker nat OUTPUT DNAT of 127.0.0.11 (-100).
+	chain output_early {
+		type filter hook output priority raw; policy drop;
+		meta nfproto ipv6 drop
+		ip daddr 127.0.0.11 drop
+	}
+}

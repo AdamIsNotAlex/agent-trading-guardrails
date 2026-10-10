@@ -1,0 +1,72 @@
+#!/usr/sbin/nft -f
+# Egress netns: Agent:8080, Guardrail:8081 in; Guardrail:3000, root DNS 1.1.1.1:53, public 443 out.
+# 127.0.0.11 is dropped on raw OUTPUT before Docker DNAT and before ct/loopback allows.
+# Public 443 is denied to nonglobal IPv4 (rebind / metadata / RFC1918).
+add table inet guardrails
+delete table inet guardrails
+
+table inet guardrails {
+	set nonglobal4 {
+		type ipv4_addr
+		flags interval
+		elements = {
+			0.0.0.0/8,
+			10.0.0.0/8,
+			100.64.0.0/10,
+			127.0.0.0/8,
+			169.254.0.0/16,
+			172.16.0.0/12,
+			192.0.0.0/24,
+			192.0.2.0/24,
+			192.88.99.0/24,
+			192.168.0.0/16,
+			198.18.0.0/15,
+			198.51.100.0/24,
+			203.0.113.0/24,
+			224.0.0.0/4,
+			240.0.0.0/4
+		}
+	}
+
+	chain input {
+		type filter hook input priority 0; policy drop;
+		meta nfproto ipv6 log prefix "blocked-ipv6 " group 1 snaplen 128 queue-threshold 1 drop
+		ct state established,related accept
+		ct state invalid drop
+		iif "lo" ip saddr 127.0.0.1 ip daddr 127.0.0.1 udp dport 53 accept
+		iif "lo" ip saddr 127.0.0.1 ip daddr 127.0.0.1 tcp dport 53 accept
+		iif "lo" ip saddr 127.0.0.1 ip daddr 127.0.0.1 udp sport 53 accept
+		iif "lo" ip saddr 127.0.0.1 ip daddr 127.0.0.1 tcp sport 53 accept
+		ip saddr 172.30.10.0/24 ip daddr 172.30.10.20 tcp dport 8080 accept
+		ip saddr 172.30.20.20 ip daddr 172.30.20.10 tcp dport 8081 accept
+		log prefix "blocked-ingress " group 1 snaplen 128 queue-threshold 1 drop
+	}
+
+	chain forward {
+		type filter hook forward priority 0; policy drop;
+		meta nfproto ipv6 log prefix "blocked-ipv6 " group 1 snaplen 128 queue-threshold 1 drop
+		log prefix "blocked-forward " group 1 snaplen 128 queue-threshold 1 drop
+	}
+
+	chain output_early {
+		type filter hook output priority raw; policy accept;
+		meta nfproto ipv6 log prefix "blocked-ipv6 " group 1 snaplen 128 queue-threshold 1 drop
+		ip daddr 127.0.0.11 log prefix "blocked-docker-dns " group 1 snaplen 128 queue-threshold 1 drop
+	}
+
+	chain output {
+		type filter hook output priority 0; policy drop;
+		ct state established,related accept
+		ct state invalid drop
+		ip saddr 127.0.0.1 ip daddr 127.0.0.1 udp dport 53 accept
+		ip saddr 127.0.0.1 ip daddr 127.0.0.1 tcp dport 53 accept
+		ip saddr 127.0.0.1 ip daddr 127.0.0.1 udp sport 53 accept
+		ip saddr 127.0.0.1 ip daddr 127.0.0.1 tcp sport 53 accept
+		ip daddr 172.30.20.20 tcp dport 3000 accept
+		meta skuid 0 ip daddr 1.1.1.1 udp dport 53 accept
+		meta skuid 0 ip daddr 1.1.1.1 tcp dport 53 accept
+		tcp dport 443 ip daddr @nonglobal4 log prefix "blocked-rebind " group 1 snaplen 128 queue-threshold 1 drop
+		tcp dport 443 accept
+		log prefix "blocked-egress " group 1 snaplen 128 queue-threshold 1 drop
+	}
+}

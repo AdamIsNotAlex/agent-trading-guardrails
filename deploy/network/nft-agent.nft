@@ -1,0 +1,44 @@
+#!/usr/sbin/nft -f
+# Agent netns: proxy TCP 172.30.10.20:8080 + loopback DNS 127.0.0.1:53 only.
+# 127.0.0.11 is dropped on raw OUTPUT before Docker DNAT and before ct/loopback allows.
+# Do not match sport 53: unprivileged processes can bind low ports in this netns.
+add table inet guardrails
+delete table inet guardrails
+
+table inet guardrails {
+	chain input {
+		type filter hook input priority 0; policy drop;
+		meta nfproto ipv6 log prefix "blocked-ipv6 " group 1 snaplen 128 queue-threshold 1 drop
+		ct state established,related accept
+		ct state invalid drop
+		iif "lo" ip saddr 127.0.0.1 ip daddr 127.0.0.1 udp dport 53 accept
+		iif "lo" ip saddr 127.0.0.1 ip daddr 127.0.0.1 tcp dport 53 accept
+		iif "lo" ip saddr 127.0.0.1 ip daddr 127.0.0.1 udp sport 53 accept
+		iif "lo" ip saddr 127.0.0.1 ip daddr 127.0.0.1 tcp sport 53 accept
+		log prefix "blocked-ingress " group 1 snaplen 128 queue-threshold 1 drop
+	}
+
+	chain forward {
+		type filter hook forward priority 0; policy drop;
+		meta nfproto ipv6 log prefix "blocked-ipv6 " group 1 snaplen 128 queue-threshold 1 drop
+		log prefix "blocked-forward " group 1 snaplen 128 queue-threshold 1 drop
+	}
+
+	chain output_early {
+		type filter hook output priority raw; policy accept;
+		meta nfproto ipv6 log prefix "blocked-ipv6 " group 1 snaplen 128 queue-threshold 1 drop
+		ip daddr 127.0.0.11 log prefix "blocked-docker-dns " group 1 snaplen 128 queue-threshold 1 drop
+	}
+
+	chain output {
+		type filter hook output priority 0; policy drop;
+		ct state established,related accept
+		ct state invalid drop
+		ip saddr 127.0.0.1 ip daddr 127.0.0.1 udp dport 53 accept
+		ip saddr 127.0.0.1 ip daddr 127.0.0.1 tcp dport 53 accept
+		ip saddr 127.0.0.1 ip daddr 127.0.0.1 udp sport 53 accept
+		ip saddr 127.0.0.1 ip daddr 127.0.0.1 tcp sport 53 accept
+		ip daddr 172.30.10.20 tcp dport 8080 accept
+		log prefix "blocked-egress " group 1 snaplen 128 queue-threshold 1 drop
+	}
+}

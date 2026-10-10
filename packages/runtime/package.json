@@ -6,17 +6,21 @@
   "scripts": {
     "build": "tsc",
     "start:service": "node dist/service-main.js",
-    "start:broker": "node dist/broker-main.js"
+    "start:broker": "node dist/broker-main.js",
+    "start:signer": "node dist/signer-main.js",
+    "start:sign": "node dist/sign-main.js"
   },
   "dependencies": {
     "@guardrails/audit": "workspace:*",
     "@guardrails/broker": "workspace:*",
+    "@guardrails/evm-connector": "workspace:*",
     "@guardrails/reviewer": "workspace:*",
     "@guardrails/risk-engine": "workspace:*",
     "@guardrails/schemas": "workspace:*",
     "@guardrails/secrets": "workspace:*",
     "@guardrails/service": "workspace:*",
     "better-sqlite3": "^12.9.0",
+    "viem": "^2.48.8",
     "zod": "^3.25.23"
   },
   "devDependencies": {

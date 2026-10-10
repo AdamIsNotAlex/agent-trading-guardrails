@@ -198,6 +198,9 @@ importers:
       '@guardrails/broker':
         specifier: workspace:*
         version: link:../broker
+      '@guardrails/evm-connector':
+        specifier: workspace:*
+        version: link:../evm-connector
       '@guardrails/reviewer':
         specifier: workspace:*
         version: link:../reviewer
@@ -216,6 +219,9 @@ importers:
       better-sqlite3:
         specifier: ^12.9.0
         version: 12.9.0
+      viem:
+        specifier: ^2.48.8
+        version: 2.48.8(bufferutil@4.1.0)(typescript@6.0.3)(utf-8-validate@6.0.6)(zod@3.25.76)
       zod:
         specifier: ^3.25.23
         version: 3.25.76

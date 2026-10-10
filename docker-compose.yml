@@ -1,27 +1,119 @@
+# Linux Docker Engine: nftables + NFLOG are required; no host firewall mutations.
+x-hardened: &hardened
+  init: true
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  pids_limit: 128
+  mem_limit: 512m
+  logging:
+    driver: local
+    options:
+      max-size: "10m"
+      max-file: "5"
+
+x-network-sandbox: &network-sandbox
+  <<: *hardened
+  build:
+    context: .
+    dockerfile: deploy/docker/Dockerfile.network
+  cap_add: [NET_ADMIN, NET_BIND_SERVICE, SETGID]
+  tmpfs: [/run, /tmp]
+  sysctls:
+    net.ipv4.ip_forward: "0"
+    net.ipv6.conf.all.disable_ipv6: "1"
+  healthcheck:
+    test: ["CMD", "/usr/local/bin/network-healthcheck"]
+    interval: 5s
+    timeout: 3s
+    retries: 6
+
 networks:
   agent-net:
-    driver: bridge
     internal: true
-  broker-net:
-    driver: bridge
+    ipam:
+      config: [{subnet: 172.30.10.0/24}]
   guardrail-net:
-    driver: bridge
+    internal: true
+    ipam:
+      config: [{subnet: 172.30.20.0/24}]
+  execution-net:
+    internal: true
+    ipam:
+      config: [{subnet: 172.30.30.0/24}]
+  egress-net:
+    ipam:
+      config: [{subnet: 172.30.40.0/24}]
 
 volumes:
   guardrail-data:
   guardrail-anchor:
   broker-data:
   broker-anchor:
+  signer-keys:
+  signer-data:
+  signer-anchor:
+  agent-network-logs:
+  egress-network-logs:
+  proxy-logs:
 
 services:
+  agent-sandbox:
+    <<: *network-sandbox
+    environment:
+      NETWORK_ROLE: agent
+    volumes:
+      - agent-network-logs:/var/log/guardrails/network
+    networks:
+      agent-net:
+        ipv4_address: 172.30.10.10
+
+  egress-sandbox:
+    <<: *network-sandbox
+    environment:
+      NETWORK_ROLE: egress
+    volumes:
+      - egress-network-logs:/var/log/guardrails/network
+    networks:
+      agent-net:
+        ipv4_address: 172.30.10.20
+      guardrail-net:
+        ipv4_address: 172.30.20.10
+      egress-net:
+        ipv4_address: 172.30.40.10
+        gw_priority: 1
+
+  egress-proxy:
+    <<: *hardened
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.egress
+    network_mode: service:egress-sandbox
+    tmpfs: [/tmp]
+    volumes:
+      - proxy-logs:/var/log/nginx
+      - ./deploy/network/resolv.conf:/etc/resolv.conf:ro
+    depends_on:
+      egress-sandbox:
+        condition: service_healthy
+      guardrail:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "nginx -t -q && kill -0 $$(cat /tmp/nginx.pid)"]
+      interval: 5s
+      timeout: 3s
+      retries: 6
+
   guardrail:
+    <<: *hardened
     build:
       context: .
       dockerfile: deploy/docker/Dockerfile.service
     environment:
       GUARDRAIL_ENV: ${GUARDRAIL_ENV:-dev}
-      OPA_URL: http://opa:8181
+      OPA_URL: http://172.30.20.30:8181
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: http://172.30.20.10:8081/v1
       REVIEWER_PROVIDER: ${REVIEWER_PROVIDER:-openai}
       REVIEWER_MODEL: ${REVIEWER_MODEL:-gpt-5.5}
       GUARDRAIL_DECISION_SECRET: ${GUARDRAIL_DECISION_SECRET:-dev-decision-secret}
@@ -37,21 +129,21 @@ services:
     ports:
       - "127.0.0.1:3000:3000"
     networks:
-      - agent-net
-      - guardrail-net
+      guardrail-net:
+        ipv4_address: 172.30.20.20
     depends_on:
-      - opa
+      opa:
+        condition: service_healthy
+      egress-sandbox:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s
       timeout: 6s
       retries: 3
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
 
   broker:
+    <<: *hardened
     build:
       context: .
       dockerfile: deploy/docker/Dockerfile.broker
@@ -63,44 +155,73 @@ services:
       AUDIT_HASH_ANCHOR_PATH: /app/audit-anchor/head.hash
       BROKER_IDEMPOTENCY_PATH: /app/data/idempotency.json
       BROKER_KILL_SWITCH: ${BROKER_KILL_SWITCH:-false}
+      SIGNER_URL: http://172.30.30.20:3002
     volumes:
       - broker-data:/app/data
       - broker-anchor:/app/audit-anchor
     ports:
       - "127.0.0.1:3001:3001"
     networks:
-      - broker-net
+      execution-net:
+        ipv4_address: 172.30.30.10
+    depends_on:
+      signer:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s
       timeout: 6s
       retries: 3
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
+
+  signer:
+    <<: *hardened
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.signer
+    environment:
+      GUARDRAIL_ENV: ${GUARDRAIL_ENV:-dev}
+      GUARDRAIL_DECISION_SECRET: ${GUARDRAIL_DECISION_SECRET:-dev-decision-secret}
+      AUDIT_HASH_SECRET: ${AUDIT_HASH_SECRET:-dev-audit-hash-secret}
+      SIGNER_KEY_PATH: /app/keys/sepolia.key
+      SIGNER_AUDIT_DB_PATH: /app/data/audit.db
+      SIGNER_AUDIT_HASH_ANCHOR_PATH: /app/audit-anchor/head.hash
+      SIGNER_MAX_GAS: ${SIGNER_MAX_GAS:-1000000}
+      SIGNER_MAX_FEE_PER_GAS: ${SIGNER_MAX_FEE_PER_GAS:-100000000000}
+      SIGNER_MAX_TOTAL_FEE_WEI: ${SIGNER_MAX_TOTAL_FEE_WEI:-10000000000000000}
+    volumes:
+      - signer-keys:/app/keys
+      - signer-data:/app/data
+      - signer-anchor:/app/audit-anchor
+    networks:
+      execution-net:
+        ipv4_address: 172.30.30.20
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3002/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 6s
+      retries: 3
 
   agent:
+    <<: *hardened
     build:
       context: .
       dockerfile: deploy/docker/Dockerfile.agent
     environment:
-      GUARDRAIL_URL: http://guardrail:3000
+      GUARDRAIL_URL: http://egress-proxy:8080
     stdin_open: true
-    profiles:
-      - agent
-    networks:
-      - agent-net
+    network_mode: service:agent-sandbox
+    volumes:
+      - ./deploy/network/resolv.conf:/etc/resolv.conf:ro
     depends_on:
+      agent-sandbox:
+        condition: service_healthy
+      egress-proxy:
+        condition: service_healthy
       guardrail:
         condition: service_healthy
-    read_only: true
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
 
   opa:
+    <<: *hardened
     image: openpolicyagent/opa:1.16.1-static@sha256:637ffdb793e146e50ec45cc023ee78fc5bc52c11816ce7adee41ce20e46e5ed8
     command: ["run", "--server", "--addr=0.0.0.0:8181", "/policies"]
     volumes:
@@ -108,21 +229,33 @@ services:
     ports:
       - "127.0.0.1:8181:8181"
     networks:
-      - guardrail-net
-    read_only: true
+      guardrail-net:
+        ipv4_address: 172.30.20.30
+    healthcheck:
+      test: ["CMD", "/opa", "eval", "--fail", "http.send({\"method\":\"GET\",\"url\":\"http://127.0.0.1:8181/health\"}).status_code == 200"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   vault:
+    <<: *hardened
     image: hashicorp/vault:1.19
-    command: ["server", "-dev", "-dev-root-token-id=dev-only-token"]
+    user: vault
+    command: ["server", "-dev", "-dev-no-store-token", "-dev-root-token-id=dev-only-token"]
     environment:
       VAULT_DEV_ROOT_TOKEN_ID: dev-only-token
+      SKIP_CHOWN: "1"
+      SKIP_SETCAP: "1"
     ports:
       - "127.0.0.1:8200:8200"
     networks:
-      - broker-net
-    cap_drop:
-      - ALL
-    cap_add:
-      - IPC_LOCK
-    profiles:
-      - dev
+      execution-net:
+        ipv4_address: 172.30.30.30
+    cap_add: [IPC_LOCK]
+    tmpfs: [/tmp, /vault/file, /vault/logs]
+    profiles: [dev]
+    healthcheck:
+      test: ["CMD", "vault", "status", "-address=http://127.0.0.1:8200"]
+      interval: 5s
+      timeout: 3s
+      retries: 6

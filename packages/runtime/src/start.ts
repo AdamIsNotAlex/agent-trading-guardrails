@@ -2,12 +2,13 @@ import { once } from "node:events";
 import { redactSecrets } from "@guardrails/secrets";
 import type { Runtime } from "./runtime.js";
 
-export async function startRuntime(role: "guardrail" | "broker", create: () => Runtime) {
+export async function startRuntime(role: "guardrail" | "broker" | "signer", create: () => Runtime) {
   let runtime: Runtime | undefined;
   try {
     process.umask(0o077);
-    const prefix = role === "guardrail" ? "GUARDRAIL" : "BROKER";
-    const port = Number(process.env[`${prefix}_PORT`] ?? (role === "guardrail" ? 3000 : 3001));
+    const prefix = role.toUpperCase();
+    const defaultPort = role === "guardrail" ? 3000 : role === "broker" ? 3001 : 3002;
+    const port = Number(process.env[`${prefix}_PORT`] ?? defaultPort);
     if (!Number.isInteger(port) || port < 0 || port > 65535) {
       throw new Error(`${prefix}_PORT must be an integer from 0 to 65535.`);
     }

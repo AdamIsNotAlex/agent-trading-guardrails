@@ -272,11 +272,11 @@ No findings document exists from the red-team exercise.
 
 ### P2.7 — Add DNS logging to egress proxy (Phase 13)
 
-DNS-level logging is completely absent. HTTP access logs write to ephemeral tmpfs only.
+Implemented in local Compose: controlled dnsmasq resolvers, namespace nftables/NFLOG, and persistent rotated DNS, packet-drop, and proxy logs. `node deploy/verify-local.mjs` exercises the deployed boundary.
 
-- [ ] Add a DNS logging sidecar or configure the egress proxy's DNS resolution to log queries (e.g., use `dnsmasq` as a local resolver with query logging, or a CoreDNS sidecar).
-- [ ] Mount a persistent volume or configure log shipping for nginx access/error logs (currently writing to `/tmp` tmpfs in the container).
-- [ ] Update `deploy/docker/nginx-egress.conf` or `docker-compose.yml` accordingly.
+- [x] Add DNS logging with controlled dnsmasq resolvers in the network helpers.
+- [x] Mount persistent named volumes for nginx access/error logs and namespace DNS/packet logs.
+- [x] Update `docker-compose.yml`, `deploy/network/*`, and `deploy/proxy/nginx.conf` with enforced routes and logging.
 
 ### P2.8 — Extend integration coverage (Phases 1, 7, 12)
 
@@ -382,10 +382,10 @@ No testnet/sandbox test flow exists.
 
 ### P2.20 — Add LLM provider and data source entries to nginx egress config (Phase 13)
 
-Only the guardrail service is allowlisted in `deploy/docker/nginx-egress.conf`.
+Local Compose chooses an intent-only Agent with no direct LLM route. Guardrail's reviewer has a fixed OpenAI proxy listener; external market-data sources are not allowlisted.
 
 - [ ] If agents need direct LLM access: add `upstream` entries for OpenAI (`api.openai.com`) and Anthropic (`api.anthropic.com`) with corresponding `location` blocks.
-- [ ] If agents do NOT need direct LLM access (routed through guardrail): document this architectural decision explicitly in `docs/security-boundaries.md`.
+- [x] If agents do NOT need direct LLM access (routed through guardrail): document this architectural decision explicitly in `docs/security-boundaries.md`.
 - [ ] For approved data sources: add template `location` blocks with comments showing where price feed / market data API upstreams would go.
 
 ---

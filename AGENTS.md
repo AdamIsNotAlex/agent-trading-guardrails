@@ -77,3 +77,20 @@ reviewer output is advisory while policy and broker boundaries remain authoritat
 - `pnpm run ci` does not run dependency audits. Verify both `pnpm audit --audit-level=high --prod`
   and `pnpm audit --audit-level=high` after dependency fixes: development-only paths can fail
   `CI / security` even when the production audit passes.
+- Docker's embedded DNS uses OUTPUT DNAT. Block `127.0.0.11` in a separate raw-priority
+  nftables hook; evaluate `ct state established,related` in the later filter hook, after
+  conntrack. Replace only the sandbox-owned table, not Docker's namespace rules.
+- Internal Docker bridges omit a default route, so public/metadata `connect()` attempts can
+  fail before OUTPUT/NFLOG. The Agent helper installs a bridge-gateway route only after
+  lockdown, retaining both default-deny nftables and the internal bridge while logging drops.
+- Debian dnsmasq 2.90 calls `setgroups` even with `user=root`/`group=root`: its trusted helper
+  needs `SETGID` as well as `NET_ADMIN`/`NET_BIND_SERVICE`; the Agent still drops every cap.
+  NFLOG's proc entry may appear only after ulogd binds and the kernel autoloads the module.
+- Read-only Debian Nginx needs explicit `/tmp` paths for proxy, client-body, FastCGI, uWSGI,
+  and SCGI temporary files, even when the latter protocols are unused. Read-only dev Vault
+  runs as `vault` with `SKIP_CHOWN`, `SKIP_SETCAP`, and `-dev-no-store-token`.
+- OpenAI SDK 6.36.0 reads `OPENAI_BASE_URL` even when constructed with only `apiKey`;
+  Compose routes the existing reviewer through its fixed proxy without exposing the key to Agent.
+- `viem` 2.48.8 signature recovery expects a concrete serialized transaction type (such as
+  `TransactionSerializedEIP1559`), not generic `Hex`. Validate the response before narrowing;
+  Node fetch JSON is `unknown` in the runtime's type environment.

@@ -1,0 +1,46 @@
+FROM debian:bookworm-slim
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        nftables \
+        iproute2 \
+        dnsmasq \
+        ulogd2 \
+        logrotate \
+        procps \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /etc/guardrails /var/log/guardrails/network /run \
+    && PLUGINDIR="$(dirname "$(find /usr -name ulogd_inppkt_NFLOG.so | head -n 1)")" \
+    && test -n "$PLUGINDIR" \
+    && test -f "$PLUGINDIR/ulogd_output_LOGEMU.so" \
+    && test -f "$PLUGINDIR/ulogd_filter_PRINTPKT.so" \
+    && test -f "$PLUGINDIR/ulogd_raw2packet_BASE.so"
+
+COPY deploy/network/nft-lockdown.nft /etc/guardrails/nft-lockdown.nft
+COPY deploy/network/nft-agent.nft /etc/guardrails/nft-agent.nft
+COPY deploy/network/nft-egress.nft /etc/guardrails/nft-egress.nft
+COPY deploy/network/dnsmasq-agent.conf /etc/guardrails/dnsmasq-agent.conf
+COPY deploy/network/dnsmasq-egress.conf /etc/guardrails/dnsmasq-egress.conf
+COPY deploy/network/ulogd.conf /etc/guardrails/ulogd.conf
+COPY deploy/network/logrotate.conf /etc/guardrails/logrotate.conf
+COPY deploy/network/resolv.conf /etc/guardrails/resolv.conf
+COPY deploy/network/entrypoint.sh /usr/local/bin/network-entrypoint
+COPY deploy/network/healthcheck.sh /usr/local/bin/network-healthcheck
+
+RUN PLUGINDIR="$(dirname "$(find /usr -name ulogd_inppkt_NFLOG.so | head -n 1)")" \
+    && sed "s|@PLUGINDIR@|${PLUGINDIR}|g" /etc/guardrails/ulogd.conf > /etc/ulogd.conf \
+    && grep -q "$PLUGINDIR" /etc/ulogd.conf \
+    && chmod 0755 /usr/local/bin/network-entrypoint /usr/local/bin/network-healthcheck \
+    && chmod 0644 /etc/ulogd.conf \
+        /etc/guardrails/nft-lockdown.nft \
+        /etc/guardrails/nft-agent.nft \
+        /etc/guardrails/nft-egress.nft \
+        /etc/guardrails/dnsmasq-agent.conf \
+        /etc/guardrails/dnsmasq-egress.conf \
+        /etc/guardrails/ulogd.conf \
+        /etc/guardrails/logrotate.conf \
+        /etc/guardrails/resolv.conf
+
+# Root is required for nft + NFLOG. Agent/proxy processes in the shared netns stay unprivileged.
+STOPSIGNAL SIGTERM
+ENTRYPOINT ["sh", "/usr/local/bin/network-entrypoint"]
