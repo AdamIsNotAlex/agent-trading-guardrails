@@ -41,6 +41,11 @@ export interface GuardrailEvaluateClientOptions {
   timeoutMs?: number;
 }
 
+export interface GuardrailRequestOptions {
+  correlationId?: string;
+  signal?: AbortSignal;
+}
+
 export class GuardrailEvaluateClient {
   private readonly baseUrl: URL;
   private readonly timeoutMs: number;
@@ -64,7 +69,7 @@ export class GuardrailEvaluateClient {
 
   async evaluate(
     intent: TradingIntent,
-    options: { correlationId?: string; signal?: AbortSignal } = {},
+    options: GuardrailRequestOptions = {},
   ): Promise<EvaluateHttpResult> {
     const correlationId = options.correlationId ?? randomUUID();
     if (options.signal?.aborted) {
@@ -91,6 +96,7 @@ export class GuardrailEvaluateClient {
         },
         body: JSON.stringify(intent),
         signal: controller.signal,
+        redirect: "error",
       });
 
       const header = response.headers.get(CORRELATION_ID_HEADER);
@@ -200,6 +206,31 @@ function readGuardrailDecision(value: unknown): GuardrailDecision | undefined {
     return undefined;
   }
   if (!("decidedAt" in value) || typeof value.decidedAt !== "string") return undefined;
+  if (
+    !CORRELATION_ID_PATTERN.test(value.correlationId) ||
+    !Number.isFinite(Date.parse(value.decidedAt))
+  ) {
+    return undefined;
+  }
+  if (value.outcome !== "deny") {
+    if (
+      !("decisionToken" in value) ||
+      typeof value.decisionToken !== "string" ||
+      !/^[a-f0-9]{64}$/.test(value.decisionToken)
+    ) {
+      return undefined;
+    }
+    if (
+      value.outcome === "needs_human" &&
+      (!("approvalId" in value) ||
+        typeof value.approvalId !== "string" ||
+        !value.approvalId ||
+        !value.requiresHumanApproval)
+    ) {
+      return undefined;
+    }
+    if (value.outcome === "allow" && value.requiresHumanApproval) return undefined;
+  }
 
   const reasons: GuardrailDecision["reasons"] = [];
   for (const item of value.reasons) {

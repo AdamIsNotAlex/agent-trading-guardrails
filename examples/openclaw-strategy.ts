@@ -1,5 +1,4 @@
-import { OpenClawAdapter } from "@guardrails/agent-adapters";
-import type { GuardrailService } from "@guardrails/service";
+import { GuardrailEvaluateClient, OpenClawAdapter } from "@guardrails/agent-adapters";
 
 export type OpenClawStrategySignal = {
   id: string;
@@ -7,11 +6,12 @@ export type OpenClawStrategySignal = {
   observedAt: string;
 };
 
-export async function runOpenClawStrategy(
-  guardrail: GuardrailService,
-  signal: OpenClawStrategySignal,
-) {
-  const adapter = new OpenClawAdapter(guardrail, "agent.openclaw.strategy-alpha", "canary_live");
+export async function runOpenClawStrategy(guardrailUrl: string, signal: OpenClawStrategySignal) {
+  const adapter = new OpenClawAdapter(
+    new GuardrailEvaluateClient({ baseUrl: guardrailUrl }),
+    "agent.openclaw.strategy-alpha",
+    "canary_live",
+  );
 
   const result = await adapter.executeTool("propose_order", {
     exchange: "binance",

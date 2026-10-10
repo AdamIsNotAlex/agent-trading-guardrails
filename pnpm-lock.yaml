@@ -50,10 +50,16 @@ importers:
       '@guardrails/service':
         specifier: workspace:*
         version: link:../guardrail-service
+      zod-to-json-schema:
+        specifier: ^3.24.5
+        version: 3.25.2(zod@3.25.76)
     devDependencies:
       '@types/node':
         specifier: ^25.6.0
         version: 25.6.0
+      esbuild:
+        specifier: 0.28.1
+        version: 0.28.1
 
   packages/approval:
     dependencies:

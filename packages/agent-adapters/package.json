@@ -13,13 +13,16 @@
   },
   "scripts": {
     "build": "tsc",
-    "start": "node dist/main.js"
+    "start": "node dist/main.js",
+    "package:plugins": "node scripts/package-plugins.mjs"
   },
   "dependencies": {
     "@guardrails/schemas": "workspace:*",
-    "@guardrails/service": "workspace:*"
+    "@guardrails/service": "workspace:*",
+    "zod-to-json-schema": "^3.24.5"
   },
   "devDependencies": {
-    "@types/node": "^25.6.0"
+    "@types/node": "^25.6.0",
+    "esbuild": "0.28.1"
   }
 }

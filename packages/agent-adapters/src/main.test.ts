@@ -34,6 +34,7 @@ function decisionFor(intentId: string, correlationId: string) {
     policyOutput: null,
     riskResult: null,
     decidedAt: "2026-05-04T12:00:00.000Z",
+    decisionToken: "a".repeat(64),
   };
 }
 

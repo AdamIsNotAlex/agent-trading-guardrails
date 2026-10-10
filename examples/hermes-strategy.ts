@@ -1,15 +1,21 @@
-import { HermesAgentAdapter } from "@guardrails/agent-adapters";
-import type { GuardrailService } from "@guardrails/service";
+import { GuardrailEvaluateClient, HermesAgentAdapter } from "@guardrails/agent-adapters";
 
 export type HermesStrategySignal = {
   id: string;
   simulationIntentId: string;
   signingIntentId: string;
   observedAt: string;
+  // Supplied only after the trusted execution layer has performed the real simulation.
+  simulationId?: string;
+  simulationEvidence?: string;
 };
 
-export async function runHermesStrategy(guardrail: GuardrailService, signal: HermesStrategySignal) {
-  const adapter = new HermesAgentAdapter(guardrail, "agent.hermes.strategy-beta", "testnet");
+export async function runHermesStrategy(guardrailUrl: string, signal: HermesStrategySignal) {
+  const adapter = new HermesAgentAdapter(
+    new GuardrailEvaluateClient({ baseUrl: guardrailUrl }),
+    "agent.hermes.strategy-beta",
+    "testnet",
+  );
   const tokenProgram = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 
   const simulation = await adapter.executeTool("simulate_transaction", {
@@ -53,6 +59,13 @@ export async function runHermesStrategy(guardrail: GuardrailService, signal: Her
     };
   }
 
+  if (!signal.simulationId || !signal.simulationEvidence) {
+    return {
+      status: "awaiting_simulation_execution" as const,
+      authorization: simulation,
+    };
+  }
+
   const signing = await adapter.executeTool("request_signature", {
     chain: "solana",
     chainEnvironment: "devnet",
@@ -64,7 +77,7 @@ export async function runHermesStrategy(guardrail: GuardrailService, signal: Her
         type: "transfer",
       },
     ],
-    simulationId: simulation.intentId,
+    simulationId: signal.simulationId,
     expectedDeltas: [
       {
         account: "So11111111111111111111111111111111111111112",
@@ -73,8 +86,8 @@ export async function runHermesStrategy(guardrail: GuardrailService, signal: Her
         maxDelta: "0",
       },
     ],
-    rationale: "Request a signature only after the guarded simulation step succeeds.",
-    evidence: [simulation.intentId],
+    rationale: "Request signature authorization against the trusted simulation report.",
+    evidence: [signal.simulationEvidence],
     idempotencyKey: `${signal.id}:hermes:solana-signing`,
     intentId: signal.signingIntentId,
     requestedAt: signal.observedAt,

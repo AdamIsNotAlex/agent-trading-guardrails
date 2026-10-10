@@ -100,6 +100,20 @@ across Guardrail/Broker restarts in shared SQLite; operators use `pnpm start:app
 and `approve`/`deny` from a separate process. See the
 [operator workflow and storage requirements](docs/deployment-profiles.md#cross-process-human-approval).
 
+### OpenClaw and Hermes runtime plugins
+
+```sh
+pnpm package:plugins
+```
+
+This builds standalone, dependency-bundled plugin directories under
+`packages/agent-adapters/dist/plugins/openclaw` and `packages/agent-adapters/dist/plugins/hermes`.
+OpenClaw registers native optional tools; Hermes registers Python handlers backed by the same
+Node HTTP adapter. Both contact only Guardrail `/evaluate`, bind identity from operator config,
+and return authorization—not exchange execution, RPC simulation, or signatures.
+See [installation, configuration, and security boundaries](docs/deployment-profiles.md#openclaw-and-hermes-runtime-plugins).
+
+
 ## Security
 
 **Real API keys, wallet private keys, seed phrases, and other secrets must never be committed to this repository.** Use the `env.example` file as a template and store actual secrets in `.env` (gitignored) or a secret manager.

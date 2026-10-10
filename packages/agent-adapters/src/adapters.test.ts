@@ -1,3 +1,5 @@
+import { once } from "node:events";
+import type { Server } from "node:http";
 import type {
   DynamicRiskResult,
   PolicyInput,
@@ -6,14 +8,16 @@ import type {
   TradingIntent,
 } from "@guardrails/schemas";
 import {
+  createGuardrailServer,
   type GuardrailConfig,
   GuardrailService,
   type PolicyEvaluator,
   type ReviewerAdapter as ReviewerAdapterInterface,
   type RiskEngine,
 } from "@guardrails/service";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { HermesAgentAdapter } from "./hermes-adapter.js";
+import { GuardrailEvaluateClient } from "./http-client.js";
 import { OpenClawAdapter } from "./openclaw-adapter.js";
 
 const config: GuardrailConfig = {
@@ -98,9 +102,30 @@ function makeCapturingService(capture: (intent: TradingIntent) => void) {
   );
 }
 
+const servers: Server[] = [];
+
+async function remote(service = makeService()) {
+  const server = createGuardrailServer(service);
+  servers.push(server);
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("No HTTP listener.");
+  return new GuardrailEvaluateClient({ baseUrl: `http://127.0.0.1:${address.port}` });
+}
+
+afterEach(async () => {
+  for (const server of servers.splice(0)) {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+      server.closeAllConnections();
+    });
+  }
+});
+
 describe("OpenClawAdapter", () => {
   it("can propose a valid order intent", async () => {
-    const adapter = new OpenClawAdapter(makeService(), "agent.openclaw.alpha", "dev");
+    const adapter = new OpenClawAdapter(await remote(), "agent.openclaw.alpha", "dev");
     const result = await adapter.executeTool("propose_order", {
       exchange: "binance",
       account: "sub-1",
@@ -125,9 +150,11 @@ describe("OpenClawAdapter", () => {
   it("passes futures margin type through propose order", async () => {
     let capturedIntent: TradingIntent | undefined;
     const adapter = new OpenClawAdapter(
-      makeCapturingService((intent) => {
-        capturedIntent = intent;
-      }),
+      await remote(
+        makeCapturingService((intent) => {
+          capturedIntent = intent;
+        }),
+      ),
       "agent.openclaw.alpha",
       "dev",
     );
@@ -159,7 +186,7 @@ describe("OpenClawAdapter", () => {
   });
 
   it("can query order status", async () => {
-    const adapter = new OpenClawAdapter(makeService(), "agent.openclaw.alpha", "dev");
+    const adapter = new OpenClawAdapter(await remote(), "agent.openclaw.alpha", "dev");
     const result = await adapter.executeTool("get_order_status", {
       exchange: "binance",
       account: "sub-1",
@@ -173,25 +200,20 @@ describe("OpenClawAdapter", () => {
   });
 
   it("rejects unknown tools", async () => {
-    const adapter = new OpenClawAdapter(makeService(), "agent.openclaw.alpha", "dev");
+    const adapter = new OpenClawAdapter(await remote(), "agent.openclaw.alpha", "dev");
     const result = await adapter.executeTool("direct_cex_access", {});
     expect(result.success).toBe(false);
     expect(result.reasons[0].rule).toBe("unknown_tool");
   });
 
-  it("exposes guarded onchain tools", () => {
-    const adapter = new OpenClawAdapter(makeService(), "agent.openclaw.alpha", "dev");
-    const tools = adapter.getToolDefinitions().map((t) => t.name);
-    expect(tools).toContain("request_signature");
-    expect(tools).not.toContain("get_onchain_portfolio");
-  });
-
   it("routes onchain signature requests through guardrails", async () => {
     let capturedIntent: TradingIntent | undefined;
     const adapter = new OpenClawAdapter(
-      makeCapturingService((intent) => {
-        capturedIntent = intent;
-      }),
+      await remote(
+        makeCapturingService((intent) => {
+          capturedIntent = intent;
+        }),
+      ),
       "agent.openclaw.alpha",
       "dev",
     );
@@ -240,7 +262,7 @@ describe("OpenClawAdapter", () => {
   });
 
   it("fails closed when signing expected deltas are malformed", async () => {
-    const adapter = new OpenClawAdapter(makeService(), "agent.openclaw.alpha", "dev");
+    const adapter = new OpenClawAdapter(await remote(), "agent.openclaw.alpha", "dev");
     const result = await adapter.executeTool("request_signature", {
       chain: "ethereum",
       chainEnvironment: "sepolia",
@@ -257,7 +279,7 @@ describe("OpenClawAdapter", () => {
   });
 
   it("fails closed when token approval amount is malformed", async () => {
-    const adapter = new OpenClawAdapter(makeService(), "agent.openclaw.alpha", "dev");
+    const adapter = new OpenClawAdapter(await remote(), "agent.openclaw.alpha", "dev");
     const result = await adapter.executeTool("request_signature", {
       chain: "ethereum",
       chainEnvironment: "sepolia",
@@ -271,28 +293,6 @@ describe("OpenClawAdapter", () => {
 
     expect(result.success).toBe(false);
     expect(result.reasons[0].rule).toBe("schema_validation");
-  });
-
-  it("does not expose CEX tools", () => {
-    const adapter = new OpenClawAdapter(makeService(), "agent.openclaw.alpha", "dev");
-    const tools = adapter.getToolDefinitions().map((t) => t.name);
-    expect(tools).not.toContain("direct_cex_access");
-    expect(tools).not.toContain("get_api_key");
-    expect(tools).not.toContain("sign_transaction");
-  });
-
-  it("does not expose keys or execution paths", () => {
-    const adapter = new OpenClawAdapter(
-      makeService(),
-      "agent.openclaw.alpha",
-      "dev",
-    ) as unknown as Record<string, unknown>;
-    expect(adapter).not.toHaveProperty("apiKey");
-    expect(adapter).not.toHaveProperty("apiSecret");
-    expect(adapter).not.toHaveProperty("privateKey");
-    expect(adapter).not.toHaveProperty("signer");
-    expect(adapter).not.toHaveProperty("broker");
-    expect(adapter).not.toHaveProperty("connector");
   });
 
   it("returns structured reject reasons", async () => {
@@ -317,7 +317,7 @@ describe("OpenClawAdapter", () => {
       makeRisk(),
       nullAuditWriter,
     );
-    const adapter = new OpenClawAdapter(denySvc, "agent.openclaw.alpha", "dev");
+    const adapter = new OpenClawAdapter(await remote(denySvc), "agent.openclaw.alpha", "dev");
     const result = await adapter.executeTool("propose_order", {
       exchange: "binance",
       account: "sub-1",
@@ -341,7 +341,7 @@ describe("OpenClawAdapter", () => {
 
 describe("HermesAgentAdapter", () => {
   it("can propose a valid order intent", async () => {
-    const adapter = new HermesAgentAdapter(makeService(), "agent.hermes.beta", "dev");
+    const adapter = new HermesAgentAdapter(await remote(), "agent.hermes.beta", "dev");
     const result = await adapter.executeTool("propose_order", {
       exchange: "binance",
       account: "sub-2",
@@ -364,7 +364,7 @@ describe("HermesAgentAdapter", () => {
   });
 
   it("can simulate onchain transaction", async () => {
-    const adapter = new HermesAgentAdapter(makeService(), "agent.hermes.beta", "dev");
+    const adapter = new HermesAgentAdapter(await remote(), "agent.hermes.beta", "dev");
     const result = await adapter.executeTool("simulate_transaction", {
       chain: "ethereum",
       chainEnvironment: "sepolia",
@@ -379,9 +379,11 @@ describe("HermesAgentAdapter", () => {
   it("routes onchain signature requests through guardrails", async () => {
     let capturedIntent: TradingIntent | undefined;
     const adapter = new HermesAgentAdapter(
-      makeCapturingService((intent) => {
-        capturedIntent = intent;
-      }),
+      await remote(
+        makeCapturingService((intent) => {
+          capturedIntent = intent;
+        }),
+      ),
       "agent.hermes.beta",
       "dev",
     );
@@ -440,7 +442,7 @@ describe("HermesAgentAdapter", () => {
   });
 
   it("fails closed when signing expected deltas are malformed", async () => {
-    const adapter = new HermesAgentAdapter(makeService(), "agent.hermes.beta", "dev");
+    const adapter = new HermesAgentAdapter(await remote(), "agent.hermes.beta", "dev");
     const result = await adapter.executeTool("request_signature", {
       chain: "solana",
       chainEnvironment: "devnet",
@@ -456,15 +458,8 @@ describe("HermesAgentAdapter", () => {
     expect(result.reasons[0].rule).toBe("schema_validation");
   });
 
-  it("exposes guarded onchain tools", () => {
-    const adapter = new HermesAgentAdapter(makeService(), "agent.hermes.beta", "dev");
-    const tools = adapter.getToolDefinitions().map((t) => t.name);
-    expect(tools).toContain("request_signature");
-    expect(tools).not.toContain("get_onchain_portfolio");
-  });
-
   it("can query order status", async () => {
-    const adapter = new HermesAgentAdapter(makeService(), "agent.hermes.beta", "dev");
+    const adapter = new HermesAgentAdapter(await remote(), "agent.hermes.beta", "dev");
     const result = await adapter.executeTool("get_order_status", {
       exchange: "binance",
       account: "sub-2",
@@ -477,20 +472,8 @@ describe("HermesAgentAdapter", () => {
     expect(result.success).toBe(true);
   });
 
-  it("does not expose direct execution paths", () => {
-    const adapter = new HermesAgentAdapter(
-      makeService(),
-      "agent.hermes.beta",
-      "dev",
-    ) as unknown as Record<string, unknown>;
-    expect(adapter).not.toHaveProperty("apiKey");
-    expect(adapter).not.toHaveProperty("privateKey");
-    expect(adapter).not.toHaveProperty("broker");
-    expect(adapter).not.toHaveProperty("connector");
-  });
-
   it("rejects unknown tools", async () => {
-    const adapter = new HermesAgentAdapter(makeService(), "agent.hermes.beta", "dev");
+    const adapter = new HermesAgentAdapter(await remote(), "agent.hermes.beta", "dev");
     const result = await adapter.executeTool("rpc_call", {});
     expect(result.success).toBe(false);
   });

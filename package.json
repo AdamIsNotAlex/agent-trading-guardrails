@@ -7,6 +7,7 @@
   },
   "scripts": {
     "build": "tsc -b",
+    "package:plugins": "pnpm build && pnpm --filter @guardrails/agent-adapters package:plugins",
     "start:service": "node --env-file-if-exists=.env packages/runtime/dist/service-main.js",
     "start:broker": "node --env-file-if-exists=.env packages/runtime/dist/broker-main.js",
     "start:approval": "node --env-file-if-exists=.env packages/runtime/dist/approval-main.js",

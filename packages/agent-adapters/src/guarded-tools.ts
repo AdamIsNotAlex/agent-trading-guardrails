@@ -1,5 +1,7 @@
-import type { TradingIntent } from "@guardrails/schemas";
-import type { GuardrailDecision, GuardrailService } from "@guardrails/service";
+import { TradingIntent } from "@guardrails/schemas";
+import type { GuardrailDecision } from "@guardrails/service";
+import type { GuardrailEvaluateClient, GuardrailRequestOptions } from "./http-client.js";
+import { isGuardedToolName } from "./tool-definitions.js";
 
 export interface GuardedToolResult {
   success: boolean;
@@ -23,26 +25,18 @@ type GuardedEnvelopeFields = {
   requestedAt?: string;
 };
 
-const guardedToolDefinitions = [
-  { name: "propose_order", description: "Propose a CEX order through guardrails" },
-  { name: "cancel_order", description: "Cancel a CEX order through guardrails" },
-  { name: "simulate_transaction", description: "Simulate an onchain transaction" },
-  { name: "request_signature", description: "Request an onchain signature through guardrails" },
-  { name: "get_order_status", description: "Query order status (read-only)" },
-] as const;
-
-export function getGuardedToolDefinitions(): Array<{ name: string; description: string }> {
-  return [...guardedToolDefinitions];
-}
-
 export async function executeGuardedTool(
   tools: GuardedToolSurface,
   context: GuardedAgentContext,
   toolName: string,
   params: Record<string, unknown>,
 ): Promise<GuardedToolResult> {
-  if (!guardedToolDefinitions.some((tool) => tool.name === toolName)) {
+  if (!isGuardedToolName(toolName)) {
     return rejectToolCall("unknown_tool", `Tool ${toolName} is not available.`);
+  }
+
+  if (!params || typeof params !== "object" || Array.isArray(params)) {
+    return rejectToolCall("schema_validation", "Tool arguments must be an object.");
   }
 
   if (params.idempotencyKey == null || String(params.idempotencyKey).length === 0) {
@@ -134,7 +128,10 @@ function rejectToolCall(rule: string, message: string): GuardedToolResult {
 }
 
 export class GuardedToolSurface {
-  constructor(private guardrail: GuardrailService) {}
+  constructor(
+    private readonly guardrail: GuardrailEvaluateClient,
+    private readonly options: GuardrailRequestOptions = {},
+  ) {}
 
   async proposeOrder(
     params: {
@@ -164,7 +161,7 @@ export class GuardedToolSurface {
       resource: `cex:${params.exchange}:${params.account}:${params.symbol}`,
       requestedAt: params.requestedAt ?? new Date().toISOString(),
     };
-    return this.toResult(await this.guardrail.evaluate(intent), intent as TradingIntent);
+    return this.evaluateIntent(intent);
   }
 
   async proposeCancelOrder(
@@ -187,7 +184,7 @@ export class GuardedToolSurface {
       resource: `cex:${params.exchange}:${params.account}:${params.symbol}`,
       requestedAt: params.requestedAt ?? new Date().toISOString(),
     };
-    return this.toResult(await this.guardrail.evaluate(intent), intent as TradingIntent);
+    return this.evaluateIntent(intent);
   }
 
   async proposeSimulation(
@@ -214,7 +211,7 @@ export class GuardedToolSurface {
       resource: `onchain:${params.chain}:${params.chainEnvironment}:${params.to}`,
       requestedAt: params.requestedAt ?? new Date().toISOString(),
     };
-    return this.toResult(await this.guardrail.evaluate(intent), intent as TradingIntent);
+    return this.evaluateIntent(intent);
   }
 
   async requestSignature(
@@ -243,7 +240,7 @@ export class GuardedToolSurface {
       resource: `onchain:${params.chain}:${params.chainEnvironment}:${params.to}`,
       requestedAt: params.requestedAt ?? new Date().toISOString(),
     };
-    return this.toResult(await this.guardrail.evaluate(intent), intent as TradingIntent);
+    return this.evaluateIntent(intent);
   }
 
   async queryOrderStatus(
@@ -266,7 +263,26 @@ export class GuardedToolSurface {
       resource: `cex:${params.exchange}:${params.account}:${params.symbol}`,
       requestedAt: params.requestedAt ?? new Date().toISOString(),
     };
-    return this.toResult(await this.guardrail.evaluate(intent), intent as TradingIntent);
+    return this.evaluateIntent(intent);
+  }
+
+  private async evaluateIntent(input: unknown): Promise<GuardedToolResult> {
+    const parsed = TradingIntent.safeParse(input);
+    if (!parsed.success) {
+      return rejectToolCall(
+        "schema_validation",
+        "Tool arguments do not form a valid TradingIntent.",
+      );
+    }
+    const result = await this.guardrail.evaluate(parsed.data, this.options);
+    if (!result.ok) {
+      return {
+        ...rejectToolCall(result.error, result.message),
+        intentId: parsed.data.intentId,
+        correlationId: result.correlationId,
+      };
+    }
+    return this.toResult(result.decision, parsed.data);
   }
 
   private toResult(decision: GuardrailDecision, intent: TradingIntent): GuardedToolResult {

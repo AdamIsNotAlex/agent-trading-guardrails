@@ -160,6 +160,166 @@ Snapshot shape (illustrative values only; timestamp `0` is intentionally stale):
 
 Positions have `{symbol, quantity, notionalUsd}`. `dailyStats.date` must match the current UTC date. An explicit `null` last-order timestamp means the trusted feed knows there were no previous orders; an absent account is unavailable, not an empty history. Refresh timestamps only when the underlying facts have actually been refreshed. The snapshot producer must incorporate execution activity; the reader is not an exchange feed or accounting writer.
 
+## OpenClaw and Hermes runtime plugins
+
+The native plugins use remote `POST /evaluate`; neither runs `GuardrailService` in the framework
+process. Verified hosts: **OpenClaw 2026.9.9** (Node 24.18.0) and **Hermes Agent 0.17.0**
+(Python 3.11). OpenClaw's plugin API is experimental: pin the host and smoke-test upgrades.
+The bridge/bundles require Node 22+; the OpenClaw host itself requires Node 24.16+ or 26.1+.
+
+### Build portable artifacts
+
+```sh
+pnpm install
+pnpm package:plugins
+```
+
+Outputs:
+
+- `packages/agent-adapters/dist/plugins/openclaw/`: `package.json`, `openclaw.plugin.json`,
+  and bundled `index.mjs`. The manifest declares tool ownership, optional-tool metadata,
+  and a strict configuration schema. No workspace packages or host SDK copies are needed
+  in the installed plugin.
+- `packages/agent-adapters/dist/plugins/hermes/`: `plugin.yaml`, Python `__init__.py`,
+  bundled `bridge.mjs`, and generated `tools.json`. Copy the **whole directory**, not only
+  the Python entry point. No pip dependencies are required by this plugin.
+
+Both artifacts derive parameter schemas from the existing intent schemas and exclude the
+operator-bound `principal`, `environment`, `action`, and `resource` fields. Build output is
+ignored by Git; rebuild after source/schema changes before installation.
+
+### Install into OpenClaw
+
+Pack the generated directory and install through the native managed package path:
+
+```sh
+npm pack ./packages/agent-adapters/dist/plugins/openclaw --pack-destination /tmp
+openclaw plugins install npm-pack:/tmp/guardrails-openclaw-trading-0.0.1.tgz \
+  --force --no-enable --accept-capabilities
+```
+
+Review the artifact before accepting capabilities. `--force` acknowledges the local archive
+outside ClawHub trust metadata and can replace an existing installation. The native plugin id
+is **`trading-guardrails`**, not the npm package name `@guardrails/openclaw-trading`.
+
+Merge this into the selected OpenClaw profile's `openclaw.json`; preserve unrelated settings:
+
+```json
+{
+  "plugins": {
+    "allow": ["trading-guardrails"],
+    "entries": {
+      "trading-guardrails": {
+        "enabled": true,
+        "config": {
+          "guardrailUrl": "http://127.0.0.1:3000",
+          "principal": "agent.openclaw.strategy-alpha",
+          "environment": "paper",
+          "timeoutMs": 30000
+        }
+      }
+    }
+  },
+  "tools": { "allow": ["trading-guardrails"] }
+}
+```
+
+The tools are optional: plugin enablement alone does not expose them to a model; the tool
+allowlist must also permit them. This example deliberately selects only the guarded plugin.
+Use an agent-scoped tool allowlist when sharing a Gateway, or separate profiles/processes for
+different policy principals. Restart the Gateway after configuration changes, then inspect:
+
+```sh
+openclaw plugins inspect trading-guardrails --runtime --json
+```
+
+Expect `status: loaded`, five tool names, `optional: true`, and no missing dependencies or
+registration diagnostics. This inspection proves registration, not Guardrail readiness.
+OpenClaw's invocation `AbortSignal` is forwarded to the HTTP client, including pre-call cancellation.
+
+### Install into Hermes
+
+Hermes 0.17 uses the native directory-plugin loader and `ctx.register_tool(...)`. It does not
+provide the newer `ctx.get_config()` API; this plugin intentionally uses an explicit, small
+environment contract rather than importing or patching framework internals.
+
+```sh
+mkdir -p "${HERMES_HOME:-$HOME/.hermes}/plugins/trading-guardrails"
+cp -a ./packages/agent-adapters/dist/plugins/hermes/. \
+  "${HERMES_HOME:-$HOME/.hermes}/plugins/trading-guardrails/"
+
+export GUARDRAIL_URL=http://127.0.0.1:3000
+export GUARDRAIL_PRINCIPAL=agent.hermes.strategy-beta
+export GUARDRAIL_ENV=paper
+export GUARDRAIL_TIMEOUT_MS=30000
+# Optional when Node is not on PATH:
+# export GUARDRAIL_NODE_BINARY=/absolute/path/to/node
+
+hermes plugins enable trading-guardrails
+hermes plugins list
+hermes
+```
+
+For a service/gateway, inject the same variables into its service environment and restart it.
+Do **not** source the repository's full `.env` into Hermes. The plugin binds configuration at
+registration, declares its tools in `plugin.yaml`, and registers the `trading_guardrails` toolset.
+Each invocation runs the packaged Node bridge with argv/stdin, never a shell; this reuses the
+same TypeScript intent conversion and HTTP decision validation as OpenClaw. The child receives
+only the Guardrail settings, PATH/platform temp variables, and optional `NODE_EXTRA_CA_CERTS`,
+not model/exchange/signing secrets or `NODE_OPTIONS`. The HTTP deadline defaults to 30 seconds
+and is configurable from 1–60000ms; Python kills a stalled child after that deadline plus five
+seconds. There are no persistent child workers or automatic retries.
+
+### Tool results and identity boundary
+
+| Native tool | Submitted intent action |
+|-------------|-------------------------|
+| `guardrails_propose_order` | `cex.place_order` |
+| `guardrails_cancel_order` | `cex.cancel_order` |
+| `guardrails_get_order_status` | `cex.get_order_status` |
+| `guardrails_simulate_transaction` | `onchain.simulate_transaction` |
+| `guardrails_request_signature` | `onchain.request_signature` |
+
+Tool parameter schemas require the intent's business fields, rationale/evidence, a UUID
+`intentId`, ISO `requestedAt`, and `idempotencyKey`. Keep these identifiers and all business
+fields unchanged when repeating a submission. Do not generate new envelope timestamps for a
+retry of the same approved action. The embedding adapters still generate omitted UUID/time
+fields for callers that are not using the framework's advertised schema.
+
+`success: true`/`outcome: allow` means **authorized**, not filled/canceled/simulated/signed.
+`needs_human` has `success: false` and includes the approval id and original signed decision
+binding. Preserve the body correlation id/token even if the HTTP response header identifies
+a different retry request. A trusted operator/execution process handles approval and Broker
+submission; neither plugin ever calls `/execute` or `/sign`. In particular, a simulation intent
+id is not a simulation result id. The Hermes example waits for real simulation evidence before
+requesting signature authorization.
+
+Unavailable services, timeouts, HTTP errors/redirects, malformed decisions, unsigned allows,
+and invalid tool arguments return fail-closed results without approval tokens. Native framework
+settings select the endpoint and identity; tool arguments cannot rebind them. These settings
+are **not authentication**: protect configuration from the agent and use a trusted authenticated
+gateway to bind callers to policy identities outside local development. The standalone HTTP
+service remains unauthenticated. Do not expose it to an untrusted network.
+
+Installing a plugin does not sandbox its host or disable other terminal/network tools. Keep
+exchange credentials, signer keys, decision secrets, and Broker connectivity outside the agent
+process. Apply the existing network/container controls to the actual framework host; the default
+Compose Agent remains the JSONL entrypoint, not an automatically installed OpenClaw/Hermes app.
+
+For direct TypeScript embedding, replace the old in-process-service constructor argument:
+
+```typescript
+import { GuardrailEvaluateClient, OpenClawAdapter } from "@guardrails/agent-adapters";
+
+const client = new GuardrailEvaluateClient({ baseUrl: "http://127.0.0.1:3000" });
+const adapter = new OpenClawAdapter(client, "agent.openclaw.strategy-alpha", "paper");
+// HermesAgentAdapter has the same remote-client constructor contract.
+```
+
+Host contracts: [OpenClaw native plugins](https://docs.openclaw.ai/plugins/building-plugins),
+[OpenClaw manifests](https://docs.openclaw.ai/plugins/manifest), and
+[Hermes native plugins](https://hermes-agent.nousresearch.com/docs/developer-guide/plugins).
+
 ## Binance REST and exchange-backed risk
 
 The standalone runtime supports `RISK_DATA_PROVIDER=binance` and `BROKER_CONNECTOR=binance`.

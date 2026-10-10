@@ -110,3 +110,11 @@ reviewer output is advisory while policy and broker boundaries remain authoritat
 - Exchange-controlled strings used with static `Record<string, true>` allowlists require `=== true`
   (or an own-property check); inherited names such as `constructor` must not classify as transfers
   or supported USD assets and silently erase reported loss.
+- Native plugin artifacts are built by `pnpm package:plugins`; bundle workspace dependencies so
+  OpenClaw's managed npm install and Hermes's copied plugin directory need no repository links.
+- OpenClaw 2026.9.9 requires `contracts.tools`, optional-tool metadata, and explicit capability
+  consent for local npm-pack installs. Configuration uses the manifest id, not the npm package name.
+- Hermes 0.17.0 has `ctx.register_tool` but no `ctx.get_config`; the native plugin binds its small
+  Guardrail environment contract at registration and forwards only allowed variables to Node.
+- A guarded simulation tool returns authorization, not a simulation receipt. Never use its intent
+  id as proof that simulation executed or as an invented simulation result for signing.

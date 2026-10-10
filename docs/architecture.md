@@ -8,7 +8,14 @@ The Agent Trading Guardrails framework uses a Sidecar Guardrail Service + Policy
 
 ### Agent Adapter Layer
 
-Provides a common interface for OpenClaw and Hermes Agent. Exposes only safe, guarded tools. Converts agent output into strict schema-validated trading intents.
+OpenClaw's native `registerTool` plugin and Hermes's Python `register(ctx)` plugin expose five
+namespaced authorization tools. Both use the TypeScript adapters and `GuardrailEvaluateClient`
+to submit schema-validated intents to remote `POST /evaluate`; neither embeds `GuardrailService`.
+Hermes invokes a bundled Node bridge with a restricted environment. Principal, environment,
+and service URL come from operator configuration, never tool arguments. The tools return
+authorization decisions only: an allow is not an execution/simulation/signature result.
+Installable standalone packages are built by `pnpm package:plugins`; see the
+[framework installation guide](deployment-profiles.md#openclaw-and-hermes-runtime-plugins).
 
 ### Intent Normalizer
 
@@ -38,10 +45,11 @@ The only component allowed to call CEX APIs or signing services. Revalidates sta
 
 Standalone composition lives in `packages/runtime`. Guardrail exposes `GET /health` and
 `POST /evaluate`; the broker exposes `GET /health` and `POST /execute`. The Agent JSONL
-entrypoint submits intents over HTTP but never executes automatically. The standalone broker
-uses simulated execution for `dev`/`paper`; live connectors remain in-process integrations.
-The runtime risk provider reads one trusted file snapshot per evaluation, never request-supplied
-market facts. Guardrail and broker own separate audit chains, and broker idempotency is durable.
+entrypoint and native framework plugins submit intents over HTTP but never execute automatically.
+The standalone broker defaults to simulated `dev`/`paper` execution; explicit Binance configuration
+selects testnet or opt-in canary execution. Risk data comes from an operator-owned file snapshot
+or the exchange-backed Binance provider, never request-supplied market facts. Guardrail and
+broker own separate audit chains, and broker idempotency is durable.
 
 ### Secret and Signing Boundary
 
