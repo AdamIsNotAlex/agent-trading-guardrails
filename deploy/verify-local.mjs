@@ -2,6 +2,11 @@
 // Run against an already-started local Compose project. No real orders or broadcasts.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
+
+const witness = process.argv.includes("--witness");
+assert.ok(process.argv.slice(2).every((arg) => arg === "--witness"), "Unknown verifier argument");
+const nonce = randomUUID();
 
 function compose(args, input) {
   const result = spawnSync("docker", ["compose", ...args], {
@@ -17,11 +22,51 @@ function compose(args, input) {
   return result.stdout;
 }
 
-async function verifyAgent() {
+const logLocations = {
+  dns: ["agent-sandbox", "/var/log/guardrails/network/dns.log"],
+  denied: ["agent-sandbox", "/var/log/guardrails/network/blocked-egress.log"],
+  proxy: ["egress-proxy", "/var/log/nginx/access.log"],
+};
+function readLog([service, path]) {
+  return compose(["exec", "-T", service, "cat", path]);
+}
+const before = Object.fromEntries(Object.entries(logLocations).map(([key, location]) => [key, readLog(location)]));
+function freshLog(key) {
+  const current = readLog(logLocations[key]);
+  assert.ok(current.startsWith(before[key]), `${key} log rotated during verification; rerun against a quiet stack`);
+  return current.slice(before[key].length);
+}
+
+async function verifyWitness(nonce) {
+  const assert = (await import("node:assert/strict")).default;
+  const { createSocket } = await import("node:dgram");
+  const response = await fetch("http://172.30.10.250:9090", { signal: AbortSignal.timeout(3000) });
+  assert.equal(await response.text(), "acceptance-witness");
+  const socket = createSocket("udp4");
+  try {
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("Control UDP witness timed out")), 3000);
+      socket.once("close", () => clearTimeout(timer));
+      socket.once("error", reject);
+      socket.once("message", (data) => {
+        try { assert.equal(data.toString(), nonce); resolve(); } catch (error) { reject(error); }
+      });
+      socket.send(nonce, 9091, "172.30.10.250");
+    });
+  } finally { socket.close(); }
+}
+function control() {
+  if (witness) compose(["exec", "-T", "egress-control", "node", "--input-type=module", "-"],
+    `await (${verifyWitness.toString()})(${JSON.stringify(nonce)});`);
+}
+control();
+
+async function verifyAgent(witness, nonce) {
   const { default: assert } = await import("node:assert/strict");
   const { Resolver, lookup } = await import("node:dns/promises");
   const { readFileSync, existsSync } = await import("node:fs");
   const { createConnection } = await import("node:net");
+  const { createSocket } = await import("node:dgram");
   const base = process.env.GUARDRAIL_URL;
   const health = await fetch(`${base}/health`, { signal: AbortSignal.timeout(5000) });
   assert.equal(health.status, 200, "Guardrail through fixed proxy must work");
@@ -55,6 +100,7 @@ async function verifyAgent() {
     deniedDns("127.0.0.1", "subdomain.egress-proxy"),
     deniedDns("127.0.0.11", "example.com"),
     deniedDns("1.1.1.1", "example.com"),
+    deniedDns("127.0.0.1", `${nonce}.invalid`),
   ]);
   const targets = [
     ["public TLS / direct IP", "1.1.1.1", 443],
@@ -73,6 +119,7 @@ async function verifyAgent() {
     ["IPv6 internet", "2606:4700:4700::1111", 443],
     ["IPv4 mapped IPv6", "::ffff:169.254.169.254", 80],
   ];
+  if (witness) targets.push(["controlled TCP witness", "172.30.10.250", 9090]);
   await Promise.all(targets.map(([label, host, port]) => new Promise((resolve, reject) => {
     const socket = createConnection({ host, port });
     socket.once("connect", () => {
@@ -82,6 +129,18 @@ async function verifyAgent() {
     socket.once("error", resolve);
     socket.setTimeout(700, () => { socket.destroy(); resolve(); });
   })));
+  if (witness) {
+    const socket = createSocket("udp4");
+    try {
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(resolve, 700);
+        socket.once("close", () => clearTimeout(timer));
+        socket.once("error", reject);
+        socket.once("message", () => reject(new Error("Isolation bypass: controlled UDP witness")));
+        socket.send(nonce, 9091, "172.30.10.250");
+      });
+    } finally { socket.close(); }
+  }
   assert.match(readFileSync("/proc/self/status", "utf8"), /CapEff:\s+0+\n/);
   assert.equal(existsSync("/var/run/docker.sock"), false);
   for (const key of ["OPENAI_API_KEY", "GUARDRAIL_DECISION_SECRET", "AUDIT_HASH_SECRET", "VAULT_TOKEN"]) {
@@ -91,7 +150,9 @@ async function verifyAgent() {
 }
 
 console.log(compose(["exec", "-T", "agent", "node", "--input-type=module", "-"],
-  `await (${verifyAgent.toString()})();` ).trim());
+  `await (${verifyAgent.toString()})(${witness}, ${JSON.stringify(nonce)});`).trim());
+control();
+if (witness) console.log("Live same-bridge TCP/UDP witness reachable before and after blocked Agent probes");
 
 // The actual JSONL entrypoint, not just a synthetic HTTP probe.
 const environment = compose(["exec", "-T", "broker", "node", "-p", "process.env.GUARDRAIL_ENV"]).trim();
@@ -111,16 +172,31 @@ assert.equal(decision.outcome, "deny");
 assert.ok(decision.reasons.some((reason) => reason.rule === "prompt_injection_detected"));
 console.log("Agent JSONL -> fixed proxy -> Guardrail: real fail-closed decision received");
 
-// Host-admin inspection; the Agent never mounts these volumes.
-await new Promise((resolve) => setTimeout(resolve, 1500));
-const dns = compose(["exec", "-T", "agent-sandbox", "cat", "/var/log/guardrails/network/dns.log"]);
-assert.match(dns, /api\.binance\.com/);
-const denied = compose(["exec", "-T", "agent-sandbox", "cat", "/var/log/guardrails/network/blocked-egress.log"]);
-assert.match(denied, /169\.254\.169\.254/);
-const proxy = compose(["exec", "-T", "egress-proxy", "cat", "/var/log/nginx/access.log"]);
-assert.match(proxy, /"path":"\/execute","status":403/);
-assert.match(proxy, /"path":"\/evaluate","status":200/);
-console.log("Persistent named-volume logs: denied DNS, blocked metadata packet, rejected proxy route and evaluation recorded");
+// Host-admin inspection of this run's output only; historical drops cannot satisfy acceptance.
+// NFLOG/nginx flush in other namespaces: poll for actual evidence, not a guessed fixed sleep.
+// The deadline uses the platform clock because a fake JS clock cannot drive those processes.
+const logDeadline = Date.now() + 5000;
+for (;;) {
+  try {
+    const dns = freshLog("dns");
+    assert.ok(dns.includes(`${nonce}.invalid`), "This run's denied DNS query was not logged");
+    const denied = freshLog("denied");
+    assert.match(denied, /blocked-egress .*DST=169\.254\.169\.254 /);
+    assert.match(denied, /blocked-docker-dns /);
+    if (witness) {
+      assert.match(denied, /blocked-egress .*DST=172\.30\.10\.250 .*PROTO=TCP .*DPT=9090/);
+      assert.match(denied, /blocked-egress .*DST=172\.30\.10\.250 .*PROTO=UDP .*DPT=9091/);
+    }
+    const proxy = freshLog("proxy");
+    assert.match(proxy, /"path":"\/execute","status":403/);
+    assert.match(proxy, /"path":"\/evaluate","status":200/);
+    break;
+  } catch (error) {
+    if (Date.now() >= logDeadline) throw error;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+}
+console.log("Fresh named-volume logs: denied DNS, namespace packet drops, rejected proxy route and evaluation recorded");
 
 async function verifyTrustedServices() {
   const assert = (await import("node:assert/strict")).default;

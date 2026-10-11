@@ -36,6 +36,19 @@ jobs:
       - run: pnpm build
       - run: pnpm test
       - run: pnpm test:integration
+      - name: Discover opt-in sandbox tests (no testnet credentials in CI)
+        run: pnpm test:sandbox
+
+  container-acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Verify real container isolation and bypass detection
+        run: node deploy/test-containers.mjs
 
   opa-policy-test:
     runs-on: ubuntu-latest

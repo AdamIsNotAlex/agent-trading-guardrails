@@ -19,6 +19,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:integration": "vitest run -c vitest.integration.config.ts",
+    "test:sandbox": "vitest run -c vitest.sandbox.config.ts",
+    "test:containers": "node deploy/test-containers.mjs",
     "lint": "biome check .",
     "lint:fix": "biome check --fix .",
     "format": "biome format --write .",

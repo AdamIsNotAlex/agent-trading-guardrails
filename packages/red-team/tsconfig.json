@@ -11,6 +11,7 @@
     { "path": "../approval" },
     { "path": "../schemas" },
     { "path": "../guardrail-service" },
-    { "path": "../broker" }
+    { "path": "../broker" },
+    { "path": "../runtime" }
   ]
 }

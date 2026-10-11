@@ -280,10 +280,12 @@ Implemented in local Compose: controlled dnsmasq resolvers, namespace nftables/N
 
 ### P2.8 — Extend integration coverage (Phases 1, 7, 12)
 
-Four integration test files now cover OPA HTTP evaluation, Rego output transformation, EVM Sepolia, and Solana devnet. Both `pnpm run ci` and GitHub Actions invoke the integration suite; unit tests exclude integration files, and both Vitest configurations fail on empty discovery. See [current coverage and prerequisite details](handoff-2026-08-07.md#8-remaining-integration-coverage-gaps). Remaining work is the Binance and agent-adapter coverage below.
+The integration suite covers OPA HTTP evaluation/Rego transformation, EVM/Solana HTTP RPC providers, durable approvals, Binance HTTP connector flows, and Agent/HTTP red-team scenarios against actual standalone Guardrail/Broker processes. OpenAI and OPA infrastructure are local HTTP fixtures, not class-level service mocks. `pnpm run ci` and GitHub Actions invoke integration tests; unit, integration, and opt-in sandbox discovery are separate and fail on empty file discovery. See [acceptance commands and prerequisites](../deployment-profiles.md#automated-cross-component-acceptance).
 
-- [ ] Create `packages/binance-connector/src/binance.integration.test.ts` with mocked Binance REST API (HTTP-level mocking, not class-level mocks) testing the full connector flow.
-- [ ] Create `packages/agent-adapters/src/adapters.integration.test.ts` testing adapters against a real (mocked-infrastructure) guardrail service stack — not just class-level mocks.
+- [x] Create `packages/binance-connector/src/binance.integration.test.ts` with a stateful HTTP exchange testing real signed REST placement, reconciliation, status, cancellation, credential/product boundaries and fail-closed responses.
+- [x] Create `packages/agent-adapters/src/adapters.integration.test.ts` against actual standalone Guardrail/Broker entrypoints, with real reviewer/risk/audit/approval components and mocked HTTP infrastructure.
+- [x] Add `packages/red-team/src/red-team.integration.test.ts` for HTTP attacks, framing/body limits, upstream failure, stale risk facts and broker token forgery/rebinding.
+- [x] Add `pnpm test:containers` and a separate CI job for actual namespace egress enforcement, live TCP/UDP controls, fresh denial logs and intentional-bypass detection.
 - [x] Add provider integration tests using local HTTP RPC mocks: `packages/evm-connector/src/sepolia-provider.integration.test.ts` and `packages/solana-connector/src/devnet-provider.integration.test.ts` (P1.1, P1.2).
 
 ### P2.9 — Add missing kill switch tests (Phase 15)
@@ -368,11 +370,12 @@ Implemented the Node HTTP transport and independent runtime assembly in `package
 
 ### P2.18 — Add Binance sandbox/testnet tests (Phase 7)
 
-No testnet/sandbox test flow exists.
+The opt-in flow is implemented; live exchange acceptance still requires dedicated Spot testnet credentials. Missing credentials produce an explicit skipped test, never evidence that a real order/cancel passed.
 
-- [ ] Create `packages/binance-connector/src/binance.sandbox.test.ts` gated behind an env variable (e.g., `BINANCE_TESTNET_API_KEY`).
-- [ ] Test spot order placement and cancellation against Binance testnet (`testnet.binance.vision`).
-- [ ] Skip gracefully when env var is not set (CI skips, local dev can opt-in).
+- [x] Create `packages/binance-connector/src/binance.sandbox.test.ts`, gated by dedicated testnet key/secret and discovered only by `pnpm test:sandbox`.
+- [x] Test Spot placement, observed status and confirmed cancellation against `testnet.binance.vision`, capped at 25 USDT test funds with scoped cleanup.
+- [x] Skip gracefully when neither credential is set; fail partial configuration before HTTP. Ordinary unit/integration runs cannot activate trading merely because credentials exist.
+- [ ] Record a successful real testnet order/cancel run with dedicated credentials (not available in this execution environment).
 
 ### P2.19 — Add position delta failure-path test (Phase 5)
 

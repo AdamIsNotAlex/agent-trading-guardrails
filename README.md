@@ -52,19 +52,27 @@ cp env.example .env
 # Build workspace packages before running tests
 pnpm build
 
-# Run unit tests (excludes *.integration.test.ts)
+# Run unit tests (excludes integration and opt-in sandbox tests)
 pnpm test
 
 # Run integration tests
 pnpm test:integration
+
+# Real Spot testnet order/cancel; visibly skips without dedicated testnet credentials
+pnpm test:sandbox
+
+# Disposable real Linux Docker stack, live egress controls and bypass detection
+pnpm test:containers
 
 # Lint and typecheck
 pnpm lint
 pnpm typecheck
 ```
 
-Both test suites fail if no matching test files are discovered. `pnpm run ci` runs lint,
-typecheck, unit tests, and integration tests.
+All Vitest configurations fail on empty file discovery. `pnpm run ci` runs lint,
+typecheck, unit tests, and offline HTTP integration tests. GitHub Actions also runs
+the container acceptance job and discovers the opt-in sandbox test without credentials.
+See [acceptance prerequisites and safety limits](docs/deployment-profiles.md#automated-cross-component-acceptance).
 
 ### Isolated local deployment
 

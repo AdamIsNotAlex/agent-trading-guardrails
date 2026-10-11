@@ -2,7 +2,7 @@
 
 ## Scope
 
-This document summarizes the Phase 17 red-team regression coverage in `packages/red-team/src/red-team.test.ts` and the payload fixtures in `packages/red-team/src/fixtures.ts`.
+Coverage includes the in-process regressions in `packages/red-team/src/red-team.test.ts`, HTTP acceptance in `packages/red-team/src/red-team.integration.test.ts`, and payloads in `packages/red-team/src/fixtures.ts`. The HTTP suite starts actual Guardrail and paper Broker entrypoints with real reviewer SDK, policy HTTP client, risk engine, SQLite audit and approval components; only OpenAI/OPA infrastructure uses local HTTP fixtures. `pnpm test:containers` separately exercises the real Linux Docker network boundary.
 
 ## Attack vectors tested
 
@@ -20,6 +20,10 @@ This document summarizes the Phase 17 red-team regression coverage in `packages/
 | Runtime fail-closed paths | OPA unavailable, malformed input, connector failure, and stale market/risk failure paths are covered. | Service/broker return deny or failed/rejected results. |
 | Kill switch | Global and per-agent kill switch behavior is covered. | Broker rejects execution when matching kill switch is active. |
 | Hallucinated market/account claims | Fake price, balance, and position claims are embedded in intent rationale. | GuardrailService denies with `hallucinated_data_detected`. |
+| HTTP framing and schema attacks | Malformed JSON, invalid intents, wrong media type, declared and chunked bodies above 1 MiB. | HTTP 400/415/413; invalid requests never enter the service/audit path. |
+| Advisory approval versus policy/risk | Approving reviewer with policy denial, malformed/unavailable OPA, or stale trusted risk snapshots. | Deny; no execution token or human approval is granted. |
+| Signed decision forgery/rebinding | Actual service-signed approval is altered before and after legitimate paper execution. | Broker rejects forged tokens and modified intents, including cached execution attempts. |
+| Real container egress | Live same-bridge TCP/UDP listener, separate reachable control peer, Agent probes and fresh NFLOG/DNS/proxy logs. | Agent path is blocked; intentionally opening the test TCP path must make the verifier fail. |
 
 ## Gaps found and fixed
 
@@ -34,17 +38,28 @@ This document summarizes the Phase 17 red-team regression coverage in `packages/
 - Added regression tests for previously unused prompt-injection and hallucination fixtures.
 - Added log-exfiltration regression coverage that checks both deny behavior and captured output.
 - Added explicit hallucinated balance and position rejection tests.
+- Added HTTP/service-stack acceptance with real process startup, isolated temporary databases, correlation-bound approval replay, and paper execution through an independent Broker.
+- Added response, durable audit and child-process log scans for seeded secrets on HTTP attack paths.
+- Added disposable container acceptance and CI coverage with live positive controls and an intentional-bypass check; historical logs cannot count as this run's evidence.
+
+## Verification record (2026-10-11)
+
+- `pnpm build`: passed; unit suite: 741 passed; integration suite: 93 passed, one skipped because host `opa` is absent.
+- Independent Node smoke: actual JSONL Agent → standalone Guardrail → paper Broker executed; forged token and HTTP injection denied; replayed human approval consumed through shared SQLite. Real Binance connector/signed HTTP transport placed, reconciled and canceled against a loopback exchange.
+- Real Docker acceptance: live TCP/UDP control peer reachable, Agent denied, fresh namespace/proxy/DNS evidence present, paper/offline signing paths working, intentional TCP bypass detected. Disposable project resources were removed.
+- Spot testnet: one explicit skip because dedicated credentials are absent; a separate partial-credential probe failed before HTTP as required. **No real Binance testnet order/cancel result is claimed.**
 
 ## Residual risks
 
 - The prompt-injection detector is pattern-based and should not be treated as comprehensive natural-language security analysis.
 - Secret-leak tests cover representative result/audit serialization paths, not every possible logger or external sink.
 - Hallucination checks cover known fixture phrasing; broader unsupported-claim detection still depends on risk-engine evidence and live data checks.
-- Red-team tests use in-process mocks for reviewer, policy, risk, and broker dependencies. Separate integration tests should cover HTTP/service-stack wiring and external connector boundaries.
+- Unit red-team tests still use in-process dependency mocks. The additional HTTP suites exercise real service components but mock the OpenAI and OPA HTTP infrastructure; they do not establish live model quality, real-Rego correctness or Binance testnet execution. The OPA suites and opt-in Spot sandbox test remain separate gates.
+- Container acceptance requires rootful Linux Docker, nftables/NFLOG and non-overlapping fixed subnets. It tests the deployed namespace boundary, not protection against a compromised host or authenticated production caller identity.
 
 ## Recommended future hardening
 
 - Expand prompt-injection fixtures with obfuscation, multilingual instructions, markdown/tool-call wrappers, and indirect instructions from retrieved content.
-- Add integration tests that run red-team payloads through the HTTP service layer once it exists.
-- Capture and scan structured logs from the production logger implementation, not only test-local audit/result objects.
+- Keep HTTP and real-container acceptance in CI alongside unit regressions; a skipped external-prerequisite test is not a passed live boundary.
+- Extend the current real audit/child-process log scan to additional production logging sinks and remote log collectors when deployed.
 - Add coverage for chained attacks that combine prompt injection with stale data, malformed reviewer output, or human-approval escalation.

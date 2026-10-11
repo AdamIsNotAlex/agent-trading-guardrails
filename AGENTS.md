@@ -139,3 +139,11 @@ reviewer output is advisory while policy and broker boundaries remain authoritat
   immediate insert/read/delete transaction; keep `AuditWriter.write()`'s void callback contract.
 - `generate:json-schema` emits plain pretty JSON. Run Biome formatting on `packages/schemas/json-schema`
   afterward to preserve repository formatting before linting.
+- Cross-component HTTP acceptance starts compiled Guardrail/Broker/Agent entrypoints; mock only
+  remote OpenAI/OPA HTTP infrastructure, not service classes. Adapter/red-team test projects
+  reference runtime so its shared test harness is built before their tests.
+- Container egress failures alone do not prove filtering: use an actually reachable same-bridge
+  TCP/UDP witness and this run's NFLOG/log suffix, then prove the verifier detects a scoped bypass.
+  Disposable Compose `down --rmi local` already removes the generated Agent image tag.
+- Keep `*.sandbox.test.ts` out of ordinary unit/integration discovery. Dedicated testnet credentials
+  plus an explicit sandbox command opt into orders; no credentials means skipped, never live proof.

@@ -43,6 +43,45 @@ For unconfined host-only API debugging after `pnpm install && pnpm build`, run `
 
 `SIGINT`/`SIGTERM` stop HTTP listeners, let in-flight requests finish, and close audit databases. Configuration/listen failures exit nonzero. The service factory remains `createGuardrailServer(service)` in `@guardrails/service`; it returns an unbound Node `http.Server` and never listens on import.
 
+### Automated cross-component acceptance
+
+Build first (`pnpm build`), then run `pnpm test:integration`. The Binance connector uses
+a stateful loopback HTTP exchange that verifies signed requests, not a mocked client class.
+Adapter and HTTP red-team tests start the actual Guardrail and paper Broker entrypoints on
+ephemeral ports, using the real OpenAI SDK/reviewer, policy HTTP client, file-backed risk
+engine, separate SQLite audit chains, and a shared durable approval database. Only the
+OpenAI and OPA HTTP infrastructure is mocked. This proves service boundaries, not live LLM
+quality or real-Rego behavior; the separate OPA suites retain their own prerequisites.
+
+`pnpm test:sandbox` is separate from unit/integration discovery. Explicitly export
+`BINANCE_TESTNET_API_KEY` and `BINANCE_TESTNET_API_SECRET` from a secret manager or a private
+shell environment before invoking it; tests do not load `.env`. Both missing means a visible
+skip, not a pass against Binance. Supplying only one fails before any HTTP request.
+The test hardcodes `https://testnet.binance.vision`, BTC-USDT Spot, a limit buy below the best
+bid, and a **25 USDT maximum in test funds**. It checks exchange price/lot/notional filters
+and available test balance, refuses to expand the ceiling, observes the order, cancels it,
+and verifies cancellation. A moving market can still fill before cancellation. Cleanup
+uses only this run's client order ID, including after an ambiguous placement response;
+unconfirmed cleanup fails visibly and reports the ID for manual testnet inspection.
+Never inject these credentials into Agent or reuse production keys.
+
+`pnpm test:containers` requires the same rootful Linux Docker/nftables/NFLOG prerequisites
+as local Compose. It builds the real deployment into a unique disposable project, publishes
+no host ports, ignores `.env`, and supplies synthetic dev-only secrets. No live reviewer
+request, real exchange order or transaction broadcast is needed. The fixed deployment
+subnets must be free; Docker rejects overlap rather than reusing another stack.
+
+The runner proves TCP/UDP reachability from a control peer to a live forbidden listener on
+the same bridge, then requires Agent's probes to fail with fresh NFLOG evidence. It also
+checks DNS bypasses, metadata/direct-service/public-IP probes, allowed and rejected proxy
+routes, the real JSONL denial path, paper execution and offline signing. Historical log
+entries cannot satisfy the checks. Finally it intentionally opens only the test listener's
+TCP path in the disposable namespace and requires the verifier to detect that bypass.
+Owned containers, networks, volumes and image tags are removed on completion; operator
+stacks and their durable state are not reused or removed. Run through the workstation's
+resource gate when required by local policy. CI runs this as a separate Linux Docker job.
+
+
 ### Persistent network logs
 
 | Named volume | Container and path | Contents |
