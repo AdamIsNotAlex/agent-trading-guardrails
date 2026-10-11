@@ -417,6 +417,57 @@ describe("SolanaConnector execution", () => {
   });
 });
 
+describe("SolanaConnector mainnet boundaries", () => {
+  const mainnetConfig: SolanaConfig = { ...config, chainEnvironment: "mainnet" };
+
+  it.each([
+    "dev",
+    "paper",
+    "testnet",
+  ] as const)("refuses mainnet signing from %s before simulation or signing", async (environment) => {
+    const provider = makeMockProvider();
+    const simulate = vi.spyOn(provider, "simulateTransaction");
+    const signAndBroadcast = vi.fn();
+    const connector = new SolanaConnector(mainnetConfig, provider, {
+      getPublicKey: () => config.allowedAccounts[0],
+      signAndBroadcast,
+    });
+    await expect(
+      connector.execute({
+        ...signingIntent,
+        chainEnvironment: "mainnet",
+        resource: `onchain:solana:mainnet:${TOKEN_PROGRAM}`,
+        environment,
+      }),
+    ).rejects.toThrow("live environment");
+    expect(simulate).not.toHaveBeenCalled();
+    expect(signAndBroadcast).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "devnet",
+    "mainnet",
+  ] as const)("refuses intents from another cluster on a %s connector", async (network) => {
+    if (solanaDevnetSimulation.chain !== "solana") throw new Error("Expected Solana fixture.");
+    const provider = makeMockProvider();
+    const simulate = vi.spyOn(provider, "simulateTransaction");
+    const connector = new SolanaConnector(
+      network === "mainnet" ? mainnetConfig : config,
+      provider,
+      null,
+    );
+    const chainEnvironment = network === "mainnet" ? "devnet" : "mainnet";
+    await expect(
+      connector.execute({
+        ...solanaDevnetSimulation,
+        chainEnvironment,
+        resource: `onchain:solana:${chainEnvironment}:${TOKEN_PROGRAM}`,
+      }),
+    ).rejects.toThrow("does not match connector");
+    expect(simulate).not.toHaveBeenCalled();
+  });
+});
+
 describe("LocalDevSolanaSigner", () => {
   it("returns configured public key", () => {
     const signer = new LocalDevSolanaSigner("test-key", config);

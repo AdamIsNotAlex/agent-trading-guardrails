@@ -4,8 +4,9 @@ import { solanaDevnetSigning } from "@guardrails/schemas/fixtures";
 import { Keypair, PublicKey, SystemProgram, TransactionInstruction } from "@solana/web3.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SolanaConnector } from "./connector.js";
-import { DevnetSolanaRpcProvider } from "./devnet-provider.js";
+import type { SolanaConfig } from "./interfaces.js";
 import { parseInstructions } from "./parser.js";
+import { SolanaJsonRpcProvider } from "./rpc-provider.js";
 
 const key = (seed: number) => Keypair.fromSeed(new Uint8Array(32).fill(seed)).publicKey;
 const payer = key(1);
@@ -16,6 +17,8 @@ const mint = key(5);
 const SYSTEM = SystemProgram.programId.toBase58();
 const TOKEN = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 const TOKEN_2022 = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
+const DEVNET_GENESIS = "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG";
+const MAINNET_GENESIS = "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d";
 interface RpcAccount {
   lamports: number;
   owner: string;
@@ -86,7 +89,7 @@ let pre: Map<string, RpcAccount | null>;
 let post: Map<string, RpcAccount | null>;
 
 beforeEach(async () => {
-  genesis = "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG";
+  genesis = DEVNET_GENESIS;
   simulationSlot = 12345;
   simulationError = null;
   missingPost = false;
@@ -153,8 +156,8 @@ afterEach(async () => {
     server.close((error) => (error ? reject(error) : resolve())),
   );
 });
-function provider() {
-  return new DevnetSolanaRpcProvider({ rpcUrl, feePayer: payer.toBase58() });
+function provider(chainEnvironment: SolanaConfig["chainEnvironment"]) {
+  return new SolanaJsonRpcProvider({ rpcUrl, chainEnvironment, feePayer: payer.toBase58() });
 }
 function setupTokens(program = TOKEN) {
   const large = 9_007_199_254_740_993n;
@@ -167,9 +170,21 @@ function setupTokens(program = TOKEN) {
   post.set(payer.toBase58(), account(999_995_000));
 }
 
-describe("DevnetSolanaRpcProvider balance evidence", () => {
+describe("SolanaJsonRpcProvider balance evidence", () => {
   it("attests native movement including fees and observed unchanged balances", async () => {
-    const result = await provider().simulateTransaction(parseInstructions([transfer]));
+    const result = await provider("devnet").simulateTransaction(parseInstructions([transfer]));
+    expect(result.success && result.balanceChangesReliable).toBe(true);
+    expect(result.balanceChanges).toEqual(
+      expect.arrayContaining([
+        { account: payer.toBase58(), asset: "SOL", delta: "-5100" },
+        { account: recipient.toBase58(), asset: "SOL", delta: "100" },
+        { account: SYSTEM, asset: "SOL", delta: "0" },
+      ]),
+    );
+  });
+  it("attests native movement on mainnet only for mainnet-beta genesis", async () => {
+    genesis = MAINNET_GENESIS;
+    const result = await provider("mainnet").simulateTransaction(parseInstructions([transfer]));
     expect(result.success && result.balanceChangesReliable).toBe(true);
     expect(result.balanceChanges).toEqual(
       expect.arrayContaining([
@@ -181,7 +196,7 @@ describe("DevnetSolanaRpcProvider balance evidence", () => {
   });
   it.each([TOKEN, TOKEN_2022])("attests precise raw token balances for %s", async (program) => {
     setupTokens(program);
-    const result = await provider().simulateTransaction(
+    const result = await provider("devnet").simulateTransaction(
       parseInstructions([tokenTransfer(program)]),
     );
     expect(result.balanceChangesReliable).toBe(true);
@@ -197,7 +212,9 @@ describe("DevnetSolanaRpcProvider balance evidence", () => {
     setupTokens();
     pre.set(destination.toBase58(), null);
     post.set(source.toBase58(), null);
-    const result = await provider().simulateTransaction(parseInstructions([tokenTransfer()]));
+    const result = await provider("devnet").simulateTransaction(
+      parseInstructions([tokenTransfer()]),
+    );
     expect(result.balanceChangesReliable).toBe(true);
     expect(result.balanceChanges).toEqual(
       expect.arrayContaining([
@@ -214,7 +231,9 @@ describe("DevnetSolanaRpcProvider balance evidence", () => {
     Buffer.from(tokenAccount(100n).data[0], "base64").copy(data);
     data[2] = 1;
     post.set(destination.toBase58(), account(2_039_280, data, TOKEN));
-    const result = await provider().simulateTransaction(parseInstructions([tokenTransfer()]));
+    const result = await provider("devnet").simulateTransaction(
+      parseInstructions([tokenTransfer()]),
+    );
     expect(result.balanceChangesReliable).toBe(false);
     expect(result.balanceChanges).toEqual([]);
   });
@@ -237,8 +256,22 @@ describe("DevnetSolanaRpcProvider balance evidence", () => {
       post.set(payer.toBase58(), { ...account(1), data: ["!invalid", "base64"] });
     if (mode === "unsupported-rpc") unsupportedSnapshot = true;
     if (mode === "revert") simulationError = { InstructionError: [0, "Custom"] };
-    if (mode === "wrong-chain") genesis = "not-devnet";
-    const result = await provider().simulateTransaction(parseInstructions([transfer]));
+    if (mode === "wrong-chain") genesis = MAINNET_GENESIS;
+    const result = await provider("devnet").simulateTransaction(parseInstructions([transfer]));
+    expect(result.balanceChangesReliable).toBe(false);
+    expect(result.balanceChanges).toEqual([]);
+  });
+  it.each([
+    ["devnet", MAINNET_GENESIS],
+    ["mainnet", DEVNET_GENESIS],
+    ["devnet", "not-a-solana-genesis"],
+    ["mainnet", "not-a-solana-genesis"],
+  ] as const)("fails closed when %s config observes genesis %s", async (chainEnvironment, observedGenesis) => {
+    genesis = observedGenesis;
+    const result = await provider(chainEnvironment).simulateTransaction(
+      parseInstructions([transfer]),
+    );
+    expect(result.success).toBe(false);
     expect(result.balanceChangesReliable).toBe(false);
     expect(result.balanceChanges).toEqual([]);
   });
@@ -257,39 +290,59 @@ describe("DevnetSolanaRpcProvider balance evidence", () => {
       (target === "mint" ? mint : destination).toBase58(),
       account(original.lamports, data, TOKEN_2022),
     );
-    const result = await provider().simulateTransaction(
+    const result = await provider("devnet").simulateTransaction(
       parseInstructions([tokenTransfer(TOKEN_2022)]),
     );
     expect(result.balanceChangesReliable).toBe(false);
     expect(result.balanceChanges).toEqual([]);
   });
-  it("returns balances and slots only for devnet", async () => {
-    await expect(provider().getBalance(payer.toBase58())).resolves.toBe(1_000_000_000);
-    await expect(provider().getSlot()).resolves.toBe(12345);
-    genesis = "not-devnet";
-    await expect(provider().getBalance(payer.toBase58())).rejects.toThrow();
-    await expect(provider().getSlot()).rejects.toThrow();
+  it("returns balances and slots only for the configured cluster genesis", async () => {
+    await expect(provider("devnet").getBalance(payer.toBase58())).resolves.toBe(1_000_000_000);
+    await expect(provider("devnet").getSlot()).resolves.toBe(12345);
+    genesis = MAINNET_GENESIS;
+    await expect(provider("mainnet").getBalance(payer.toBase58())).resolves.toBe(1_000_000_000);
+    await expect(provider("mainnet").getSlot()).resolves.toBe(12345);
+    await expect(provider("devnet").getBalance(payer.toBase58())).rejects.toThrow();
+    await expect(provider("devnet").getSlot()).rejects.toThrow();
+    genesis = DEVNET_GENESIS;
+    await expect(provider("mainnet").getBalance(payer.toBase58())).rejects.toThrow();
+    await expect(provider("mainnet").getSlot()).rejects.toThrow();
+    genesis = "not-a-solana-genesis";
+    await expect(provider("devnet").getBalance(payer.toBase58())).rejects.toThrow();
+    await expect(provider("mainnet").getSlot()).rejects.toThrow();
+  });
+  it("rejects unsupported chain environments before contacting RPC", () => {
+    expect(
+      () =>
+        new SolanaJsonRpcProvider({
+          rpcUrl,
+          chainEnvironment: "mainnet-beta" as never,
+          feePayer: payer.toBase58(),
+        }),
+    ).toThrow("Unsupported Solana chain environment mainnet-beta.");
   });
 });
 
 describe("built-in Solana provider signing boundary", () => {
-  function signing() {
+  function signing(chainEnvironment: SolanaConfig["chainEnvironment"]) {
     const signAndBroadcast = vi.fn(async () => "accepted-by-signer");
     const connector = new SolanaConnector(
       {
         rpcUrl,
-        chainEnvironment: "devnet",
+        chainEnvironment,
         allowedPrograms: [SYSTEM],
         allowedTokenMints: [],
         allowedAccounts: [payer.toBase58(), recipient.toBase58()],
       },
-      provider(),
+      provider(chainEnvironment),
       { getPublicKey: () => payer.toBase58(), signAndBroadcast },
     );
     const intent: Extract<OnchainSigningIntent, { chain: "solana" }> = {
       ...solanaDevnetSigning,
       chain: "solana",
-      chainEnvironment: "devnet",
+      chainEnvironment,
+      environment: chainEnvironment === "mainnet" ? "production" : "testnet",
+      resource: `onchain:solana:${chainEnvironment}:${SYSTEM}`,
       to: SYSTEM,
       programId: SYSTEM,
       instructions: [transfer],
@@ -301,7 +354,17 @@ describe("built-in Solana provider signing boundary", () => {
     return { connector, signAndBroadcast, intent };
   }
   it("reaches signing only for reliable deltas bound to the actual fee payer", async () => {
-    const { connector, intent, signAndBroadcast } = signing();
+    const { connector, intent, signAndBroadcast } = signing("devnet");
+    await expect(connector.execute(intent)).resolves.toEqual({
+      transactionHash: "accepted-by-signer",
+    });
+    expect(signAndBroadcast).toHaveBeenCalledOnce();
+  });
+  it("reaches signing on the production mainnet fixture when RPC reports mainnet-beta genesis", async () => {
+    genesis = MAINNET_GENESIS;
+    const { connector, intent, signAndBroadcast } = signing("mainnet");
+    expect(intent.environment).toBe("production");
+    expect(intent.resource).toBe(`onchain:solana:mainnet:${SYSTEM}`);
     await expect(connector.execute(intent)).resolves.toEqual({
       transactionHash: "accepted-by-signer",
     });
@@ -316,12 +379,22 @@ describe("built-in Solana provider signing boundary", () => {
     if (mode === "unreliable") simulationSlot++;
     if (mode === "unexpected-program-balance")
       post.set(SYSTEM, { ...account(2), executable: true });
-    const { connector, intent, signAndBroadcast } = signing();
+    const { connector, intent, signAndBroadcast } = signing("devnet");
+    await expect(connector.execute(intent)).rejects.toThrow();
+    expect(signAndBroadcast).not.toHaveBeenCalled();
+  });
+  it.each([
+    ["devnet", MAINNET_GENESIS],
+    ["mainnet", DEVNET_GENESIS],
+    ["mainnet", "not-a-solana-genesis"],
+  ] as const)("never signs %s config against genesis %s", async (chainEnvironment, observedGenesis) => {
+    genesis = observedGenesis;
+    const { connector, intent, signAndBroadcast } = signing(chainEnvironment);
     await expect(connector.execute(intent)).rejects.toThrow();
     expect(signAndBroadcast).not.toHaveBeenCalled();
   });
   it("rejects a simulation payer different from the signer", async () => {
-    const result = await provider().simulateTransaction(parseInstructions([transfer]), {
+    const result = await provider("devnet").simulateTransaction(parseInstructions([transfer]), {
       feePayer: recipient.toBase58(),
     });
     expect(result.success).toBe(false);

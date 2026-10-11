@@ -88,9 +88,10 @@ hard_deny_reasons contains {"rule": "unsupported_chain_environment_pair", "messa
 	not supported_chain_environment_pair
 }
 
-hard_deny_reasons contains {"rule": "mainnet_onchain_denied", "message": "Mainnet onchain signing is not permitted."} if {
+hard_deny_reasons contains {"rule": "mainnet_requires_live_environment", "message": "Mainnet signing requires a live environment."} if {
 	input.action == "onchain.request_signature"
 	input.chainEnvironment == "mainnet"
+	not input.environment in {"canary_live", "production"}
 }
 
 hard_deny_reasons contains {"rule": "unknown_contract_denied", "message": "Interaction with unknown contracts is not permitted."} if {

@@ -19,7 +19,17 @@ export class EvmConnector implements ExecutionConnector {
     private config: EvmConfig,
     private provider: EvmRpcProvider,
     private signer: EvmSigner | null,
-  ) {}
+  ) {
+    const expectedChainId =
+      config.chainEnvironment === "mainnet"
+        ? 1
+        : config.chainEnvironment === "sepolia"
+          ? 11155111
+          : undefined;
+    if (expectedChainId === undefined || config.chainId !== expectedChainId) {
+      throw new Error("Ethereum chain ID does not match the configured network.");
+    }
+  }
 
   async revalidate(intent: TradingIntent): Promise<{ passed: boolean; reason?: string }> {
     if (
@@ -36,6 +46,14 @@ export class EvmConnector implements ExecutionConnector {
       intent.chainEnvironment !== this.config.chainEnvironment
     ) {
       return { passed: false, reason: "Intent Ethereum environment does not match connector." };
+    }
+    if (
+      intent.action === "onchain.request_signature" &&
+      intent.chainEnvironment === "mainnet" &&
+      intent.environment !== "canary_live" &&
+      intent.environment !== "production"
+    ) {
+      return { passed: false, reason: "Mainnet signing requires a live environment." };
     }
     if (!("to" in intent)) {
       return { passed: false, reason: "Intent missing 'to' address." };

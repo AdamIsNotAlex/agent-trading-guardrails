@@ -6,8 +6,6 @@ export {
 } from "./balance-delta.js";
 export { SolanaConnector } from "./connector.js";
 export { LocalDevSolanaSigner } from "./dev-signer.js";
-export type { DevnetSolanaRpcProviderConfig } from "./devnet-provider.js";
-export { DevnetSolanaRpcProvider } from "./devnet-provider.js";
 export type {
   ParsedInstruction,
   SolanaConfig,
@@ -17,6 +15,8 @@ export type {
   SolanaSimulationResult,
 } from "./interfaces.js";
 export { getUniquePrograms, hasAuthorityChange, parseInstructions } from "./parser.js";
+export type { SolanaJsonRpcProviderConfig } from "./rpc-provider.js";
+export { SolanaJsonRpcProvider } from "./rpc-provider.js";
 export {
   validateAccounts,
   validateAuthorityChange,

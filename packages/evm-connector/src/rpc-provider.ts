@@ -1,5 +1,5 @@
-import { type Address, createPublicClient, type Hex, http, toHex } from "viem";
-import { sepolia } from "viem/chains";
+import { type Address, type Chain, createPublicClient, type Hex, http, toHex } from "viem";
+import { mainnet, sepolia } from "viem/chains";
 import type {
   EvmConfig,
   EvmRpcProvider,
@@ -14,19 +14,31 @@ import {
   parseQuantity,
 } from "./trace-balances.js";
 
-export type SepoliaRpcProviderConfig = Pick<EvmConfig, "rpcUrl"> &
+const CHAINS: Record<EvmConfig["chainEnvironment"], Chain> = {
+  mainnet,
+  sepolia,
+};
+
+export type EvmJsonRpcProviderConfig = Pick<EvmConfig, "rpcUrl" | "chainEnvironment"> &
   Partial<
     Pick<
       EvmConfig,
-      "fromAddress" | "observedAccounts" | "allowedRecipients" | "allowedSpenders" | "erc20Tokens"
+      | "chainId"
+      | "fromAddress"
+      | "observedAccounts"
+      | "allowedRecipients"
+      | "allowedSpenders"
+      | "erc20Tokens"
     >
   >;
 
-export class SepoliaRpcProvider implements EvmRpcProvider {
+export class EvmJsonRpcProvider implements EvmRpcProvider {
   private client;
+  private chain;
 
-  constructor(private config: SepoliaRpcProviderConfig) {
-    this.client = createPublicClient({ chain: sepolia, transport: http(config.rpcUrl) });
+  constructor(private config: EvmJsonRpcProviderConfig) {
+    this.chain = resolveChain(config);
+    this.client = createPublicClient({ chain: this.chain, transport: http(config.rpcUrl) });
   }
 
   async simulateTransaction(tx: SimulateTransactionRequest): Promise<SimulationResult> {
@@ -46,7 +58,7 @@ export class SepoliaRpcProvider implements EvmRpcProvider {
         ),
       ];
       const tokens = this.config.erc20Tokens ?? [];
-      await this.assertSepoliaChain();
+      await this.assertConfiguredChain();
       const block = pinnedBlock(await this.rpc("eth_getBlockByNumber", ["latest", false]));
       // Effect deltas exclude execution fees; the signing backend must independently cap fees.
       const call = {
@@ -156,27 +168,41 @@ export class SepoliaRpcProvider implements EvmRpcProvider {
   }
 
   async getBalance(account: string): Promise<string> {
-    await this.assertSepoliaChain();
+    await this.assertConfiguredChain();
     return (await this.client.getBalance({ address: account as Address })).toString();
   }
 
   async getBlockNumber(): Promise<number> {
-    await this.assertSepoliaChain();
+    await this.assertConfiguredChain();
     return Number(await this.client.getBlockNumber());
   }
 
-  private async assertSepoliaChain(): Promise<void> {
+  private async assertConfiguredChain(): Promise<void> {
     const chainId = await this.client.getChainId();
-    if (chainId !== sepolia.id)
+    if (chainId !== this.chain.id) {
       throw new Error(
-        `Configured EVM RPC returned chain ID ${chainId}; expected Sepolia ${sepolia.id}.`,
+        `Configured EVM RPC returned chain ID ${chainId}; expected ${this.config.chainEnvironment} ${this.chain.id}.`,
       );
+    }
   }
 
   private rpc(method: string, params: unknown[]): Promise<unknown> {
     // viem's default schema omits Geth debug methods; validate their responses at this boundary.
     return this.client.request({ method, params } as never);
   }
+}
+
+function resolveChain(config: EvmJsonRpcProviderConfig) {
+  if (!Object.hasOwn(CHAINS, config.chainEnvironment)) {
+    throw new Error(`Unsupported Ethereum chain environment ${String(config.chainEnvironment)}.`);
+  }
+  const chain = CHAINS[config.chainEnvironment];
+  if (config.chainId !== undefined && config.chainId !== chain.id) {
+    throw new Error(
+      `Configured Ethereum chain ID ${config.chainId} does not match ${config.chainEnvironment} ${chain.id}.`,
+    );
+  }
+  return chain;
 }
 
 function address(value: string): string {

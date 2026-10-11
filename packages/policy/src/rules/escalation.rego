@@ -12,6 +12,11 @@ escalation_reasons contains {"rule": "reviewer_risk_not_low", "message": "Review
 	not input.reviewerRiskLevel == "low"
 }
 
+escalation_reasons contains {"rule": "mainnet_signing_requires_human", "message": "Mainnet signing requires human approval."} if {
+	input.action == "onchain.request_signature"
+	input.chainEnvironment == "mainnet"
+}
+
 escalation_reasons contains {"rule": "notional_above_auto_threshold", "message": "Notional exceeds automatic execution threshold."} if {
 	input.maxNotionalUsd
 	limits := data.policy.limits[input.environment]

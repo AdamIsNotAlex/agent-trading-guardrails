@@ -313,6 +313,67 @@ describe("EvmConnector execution", () => {
   });
 });
 
+describe("EvmConnector mainnet boundaries", () => {
+  const mainnetConfig: EvmConfig = { ...config, chainEnvironment: "mainnet", chainId: 1 };
+
+  it.each([
+    "dev",
+    "paper",
+    "testnet",
+  ] as const)("refuses mainnet signing from %s before simulation or signing", async (environment) => {
+    const provider = makeMockProvider();
+    const simulate = vi.spyOn(provider, "simulateTransaction");
+    const signAndBroadcast = vi.fn();
+    const connector = new EvmConnector(mainnetConfig, provider, {
+      getAddress: () => RECIPIENT_ADDRESS,
+      signAndBroadcast,
+    });
+    await expect(
+      connector.execute({
+        ...ethereumSepoliaSigning,
+        chainEnvironment: "mainnet",
+        resource: `onchain:ethereum:mainnet:${USDC_ADDRESS}`,
+        environment,
+      }),
+    ).rejects.toThrow("live environment");
+    expect(simulate).not.toHaveBeenCalled();
+    expect(signAndBroadcast).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { chainEnvironment: "mainnet" as const, chainId: 11155111 },
+    { chainEnvironment: "sepolia" as const, chainId: 1 },
+  ])("rejects conflicting chain configuration $chainEnvironment/$chainId", (network) => {
+    expect(() => new EvmConnector({ ...config, ...network }, makeMockProvider(), null)).toThrow(
+      "chain ID",
+    );
+  });
+
+  it.each([
+    "sepolia",
+    "mainnet",
+  ] as const)("refuses intents from another network on a %s connector", async (network) => {
+    if (ethereumSepoliaSimulation.chain !== "ethereum")
+      throw new Error("Expected Ethereum fixture.");
+    const provider = makeMockProvider();
+    const simulate = vi.spyOn(provider, "simulateTransaction");
+    const connector = new EvmConnector(
+      network === "mainnet" ? mainnetConfig : config,
+      provider,
+      null,
+    );
+    const chainEnvironment = network === "mainnet" ? "sepolia" : "mainnet";
+    await expect(
+      connector.execute({
+        ...ethereumSepoliaSimulation,
+        chainEnvironment,
+        resource: `onchain:ethereum:${chainEnvironment}:${USDC_ADDRESS}`,
+      }),
+    ).rejects.toThrow("does not match connector");
+    expect(simulate).not.toHaveBeenCalled();
+  });
+});
+
 describe("LocalDevSigner", () => {
   it("returns configured address", () => {
     const signer = new LocalDevSigner("0xtest", config);

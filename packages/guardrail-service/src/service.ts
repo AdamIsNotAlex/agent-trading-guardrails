@@ -11,6 +11,7 @@ import {
   TradingIntent,
 } from "@guardrails/schemas";
 import { redactObject } from "@guardrails/secrets";
+import { hasAuthorityChange, parseInstructions } from "@guardrails/solana-connector";
 import type { GuardrailConfig } from "./config.js";
 import { generateCorrelationId } from "./correlation.js";
 import { hashPayload, IdempotencyStore } from "./idempotency.js";
@@ -174,35 +175,17 @@ export class GuardrailService {
       return "unknown";
     }
 
-    let hasTransfer = false;
-    let hasUnknown = false;
-    for (const instruction of intent.instructions) {
-      if (instruction.data != null) {
-        hasUnknown = true;
-        continue;
-      }
-      if (typeof instruction.type !== "string" || instruction.type.length === 0) {
-        hasUnknown = true;
-        continue;
-      }
-      const type = instruction.type;
-      if (type === "setAuthority" || type === "SetAuthority" || type === "authority_change") {
-        return "setAuthority";
-      }
-      if (type === "transfer") {
-        hasTransfer = true;
-        continue;
-      }
-      hasUnknown = true;
-    }
-
-    if (hasUnknown) {
+    try {
+      const instructions = parseInstructions(intent.instructions);
+      if (hasAuthorityChange(instructions)) return "setAuthority";
+      return instructions.every(
+        (instruction) => instruction.type === "transfer" || instruction.type === "transferChecked",
+      )
+        ? "transfer"
+        : "unknown";
+    } catch {
       return "unknown";
     }
-    if (hasTransfer) {
-      return "transfer";
-    }
-    return "unknown";
   }
 
   private canonicalResource(intent: TradingIntent): string | null {

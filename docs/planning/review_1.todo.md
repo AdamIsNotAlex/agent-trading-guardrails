@@ -89,7 +89,7 @@ These items are needed for the system to work end-to-end against real infrastruc
 `EvmRpcProvider` in `packages/evm-connector/src/interfaces.ts` lines 29-33 is interface-only. No `viem`/`ethers` dependency exists.
 
 - [x] Add `viem` as a dependency to `packages/evm-connector/package.json`.
-- [x] Create `packages/evm-connector/src/sepolia-provider.ts` implementing `EvmRpcProvider`:
+- [x] Create `packages/evm-connector/src/rpc-provider.ts` implementing `EvmRpcProvider` (now network-aware for mainnet and Sepolia):
   - [x] `simulateTransaction()` → use `viem` `simulateContract` or `eth_call` against Sepolia RPC.
   - [x] `getBalance()` → use `viem` `getBalance`.
   - [x] `getBlockNumber()` → use `viem` `getBlockNumber`.
@@ -101,7 +101,7 @@ These items are needed for the system to work end-to-end against real infrastruc
 `SolanaRpcProvider` in `packages/solana-connector/src/interfaces.ts` lines 22-26 is interface-only. `@solana/web3.js` is not a declared dependency.
 
 - [x] Add `@solana/web3.js` as a dependency to `packages/solana-connector/package.json`.
-- [x] Create `packages/solana-connector/src/devnet-provider.ts` implementing `SolanaRpcProvider`:
+- [x] Create `packages/solana-connector/src/rpc-provider.ts` implementing `SolanaRpcProvider` (now network-aware for mainnet and devnet):
   - [x] `simulateTransaction()` → use `@solana/web3.js` `simulateTransaction`.
   - [x] `getBalance()` → use `getBalance`.
   - [x] `getSlot()` → use `getSlot`.
@@ -286,7 +286,7 @@ The integration suite covers OPA HTTP evaluation/Rego transformation, EVM/Solana
 - [x] Create `packages/agent-adapters/src/adapters.integration.test.ts` against actual standalone Guardrail/Broker entrypoints, with real reviewer/risk/audit/approval components and mocked HTTP infrastructure.
 - [x] Add `packages/red-team/src/red-team.integration.test.ts` for HTTP attacks, framing/body limits, upstream failure, stale risk facts and broker token forgery/rebinding.
 - [x] Add `pnpm test:containers` and a separate CI job for actual namespace egress enforcement, live TCP/UDP controls, fresh denial logs and intentional-bypass detection.
-- [x] Add provider integration tests using local HTTP RPC mocks: `packages/evm-connector/src/sepolia-provider.integration.test.ts` and `packages/solana-connector/src/devnet-provider.integration.test.ts` (P1.1, P1.2).
+- [x] Add provider integration tests using local HTTP RPC mocks: `packages/evm-connector/src/rpc-provider.integration.test.ts` and `packages/solana-connector/src/rpc-provider.integration.test.ts` (P1.1, P1.2).
 
 ### P2.9 — Add missing kill switch tests (Phase 15)
 

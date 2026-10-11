@@ -147,3 +147,9 @@ reviewer output is advisory while policy and broker boundaries remain authoritat
   Disposable Compose `down --rmi local` already removes the generated Agent image tag.
 - Keep `*.sandbox.test.ts` out of ordinary unit/integration discovery. Dedicated testnet credentials
   plus an explicit sandbox command opt into orders; no credentials means skipped, never live proof.
+- `EvmJsonRpcProvider` and `SolanaJsonRpcProvider` require explicit `chainEnvironment`; mainnet
+  binds to Ethereum chain ID 1 or Solana mainnet-beta genesis. Network support is separate from
+  deployment environment: mainnet signatures require live profiles and human approval, while
+  Broker still rejects the reserved production profile and local dev signers remain testnet-only.
+- Guardrail must reuse the Solana connector's trusted decoder for encoded instruction policy facts;
+  rejecting all `instruction.data` prevents real System/SPL transfers from ever reaching approval.

@@ -23,19 +23,30 @@ import type {
   SolanaSimulationResult,
 } from "./interfaces.js";
 
-export interface DevnetSolanaRpcProviderConfig extends Pick<SolanaConfig, "rpcUrl"> {
+export interface SolanaJsonRpcProviderConfig
+  extends Pick<SolanaConfig, "rpcUrl" | "chainEnvironment"> {
   feePayer?: string;
 }
 
-const DEVNET_GENESIS_HASH = "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG";
+const SOLANA_GENESIS_HASH: Record<"devnet" | "mainnet", string> = {
+  devnet: "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG",
+  mainnet: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d",
+};
 const FINALIZED = "finalized" as const;
 const DUMMY_BLOCKHASH = SYSTEM_PROGRAM_ID;
 
-export class DevnetSolanaRpcProvider implements SolanaRpcProvider {
+export class SolanaJsonRpcProvider implements SolanaRpcProvider {
   private connection: Connection;
   private feePayer: PublicKey | null;
+  private chainEnvironment: SolanaConfig["chainEnvironment"];
+  private expectedGenesisHash: string;
 
-  constructor(config: DevnetSolanaRpcProviderConfig) {
+  constructor(config: SolanaJsonRpcProviderConfig) {
+    if (config.chainEnvironment !== "devnet" && config.chainEnvironment !== "mainnet") {
+      throw new Error(`Unsupported Solana chain environment ${config.chainEnvironment}.`);
+    }
+    this.chainEnvironment = config.chainEnvironment;
+    this.expectedGenesisHash = SOLANA_GENESIS_HASH[config.chainEnvironment];
     this.connection = new Connection(config.rpcUrl, FINALIZED);
     this.feePayer = config.feePayer === undefined ? null : new PublicKey(config.feePayer);
   }
@@ -61,7 +72,7 @@ export class DevnetSolanaRpcProvider implements SolanaRpcProvider {
         );
       }
 
-      await this.assertDevnet();
+      await this.assertNetwork();
 
       const pre = await this.connection.getMultipleAccountsInfoAndContext(
         observationAddresses.map((address) => new PublicKey(address)),
@@ -143,20 +154,20 @@ export class DevnetSolanaRpcProvider implements SolanaRpcProvider {
   }
 
   async getBalance(address: string): Promise<number> {
-    await this.assertDevnet();
+    await this.assertNetwork();
     return this.connection.getBalance(new PublicKey(address), FINALIZED);
   }
 
   async getSlot(): Promise<number> {
-    await this.assertDevnet();
+    await this.assertNetwork();
     return this.connection.getSlot(FINALIZED);
   }
 
-  private async assertDevnet(): Promise<void> {
+  private async assertNetwork(): Promise<void> {
     const genesisHash = await this.connection.getGenesisHash();
-    if (genesisHash !== DEVNET_GENESIS_HASH) {
+    if (genesisHash !== this.expectedGenesisHash) {
       throw new Error(
-        `Configured Solana RPC returned genesis hash ${genesisHash}; expected devnet.`,
+        `Configured Solana RPC returned genesis hash ${genesisHash}; expected ${this.chainEnvironment}.`,
       );
     }
   }

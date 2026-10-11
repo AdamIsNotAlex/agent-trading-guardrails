@@ -18,7 +18,8 @@
     "@guardrails/approval": "workspace:*",
     "@guardrails/audit": "workspace:*",
     "@guardrails/schemas": "workspace:*",
-    "@guardrails/secrets": "workspace:*"
+    "@guardrails/secrets": "workspace:*",
+    "@guardrails/solana-connector": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^25.6.0"

@@ -21,6 +21,16 @@ USD-M futures default max leverage: 1x in canary-live. Higher leverage requires 
 
 All limits are configuration defaults, not hardcoded constants.
 
+Ethereum and Solana mainnet use the package-level chain connectors with a trusted signer;
+they are not additional standalone `BROKER_CONNECTOR` modes. Mainnet signing requires
+`canary_live` with explicit broker enablement and human approval for every intent under the
+bundled policy. The provider verifies Ethereum chain ID `1` or Solana mainnet-beta's genesis,
+then attests the actual simulation effects before signing. Mainnet signing from dev/paper/testnet
+is denied. `production` remains rejected by Broker. See
+[mainnet setup and custody requirements](signing-backends.md#mainnet-authorization-and-deployment).
+The Binance USD limits above do not price onchain deltas; operators must bound raw asset debits
+and independently cap signer fees. Local development signers remain testnet-only test doubles.
+
 ## Prerequisites for Live Mode
 
 Operator checklist before enabling canary-live (the dependency and credential gates below are enforced in code):

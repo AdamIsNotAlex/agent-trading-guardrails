@@ -16,8 +16,8 @@ export type {
   SimulateTransactionRequest,
   SimulationResult,
 } from "./interfaces.js";
-export type { SepoliaRpcProviderConfig } from "./sepolia-provider.js";
-export { SepoliaRpcProvider } from "./sepolia-provider.js";
+export type { EvmJsonRpcProviderConfig } from "./rpc-provider.js";
+export { EvmJsonRpcProvider } from "./rpc-provider.js";
 export {
   validateContract,
   validateFunction,

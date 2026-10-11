@@ -26,7 +26,11 @@ export class SolanaConnector implements ExecutionConnector {
     private config: SolanaConfig,
     private provider: SolanaRpcProvider,
     private signer: SolanaSigner | null,
-  ) {}
+  ) {
+    if (config.chainEnvironment !== "devnet" && config.chainEnvironment !== "mainnet") {
+      throw new Error("Unsupported Solana network.");
+    }
+  }
 
   async revalidate(intent: TradingIntent): Promise<{ passed: boolean; reason?: string }> {
     if (
@@ -43,6 +47,14 @@ export class SolanaConnector implements ExecutionConnector {
       intent.chainEnvironment !== this.config.chainEnvironment
     ) {
       return { passed: false, reason: "Intent Solana environment does not match connector." };
+    }
+    if (
+      intent.action === "onchain.request_signature" &&
+      intent.chainEnvironment === "mainnet" &&
+      intent.environment !== "canary_live" &&
+      intent.environment !== "production"
+    ) {
+      return { passed: false, reason: "Mainnet signing requires a live environment." };
     }
     if (
       "instructions" in intent &&

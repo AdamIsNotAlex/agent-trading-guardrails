@@ -11,6 +11,7 @@
     { "path": "../approval" },
     { "path": "../audit" },
     { "path": "../schemas" },
-    { "path": "../secrets" }
+    { "path": "../secrets" },
+    { "path": "../solana-connector" }
   ]
 }

@@ -142,6 +142,46 @@
           }
         },
         {
+          "name": "ethereum-mainnet-simulate",
+          "effect": "allow",
+          "principal": "*",
+          "action": "onchain.simulate_transaction",
+          "resource": "onchain:ethereum:mainnet:",
+          "condition": {
+            "requiresHumanApproval": false
+          }
+        },
+        {
+          "name": "ethereum-mainnet-sign",
+          "effect": "allow",
+          "principal": "*",
+          "action": "onchain.request_signature",
+          "resource": "onchain:ethereum:mainnet:",
+          "condition": {
+            "requiresHumanApproval": false
+          }
+        },
+        {
+          "name": "solana-mainnet-simulate",
+          "effect": "allow",
+          "principal": "*",
+          "action": "onchain.simulate_transaction",
+          "resource": "onchain:solana:mainnet:",
+          "condition": {
+            "requiresHumanApproval": false
+          }
+        },
+        {
+          "name": "solana-mainnet-sign",
+          "effect": "allow",
+          "principal": "*",
+          "action": "onchain.request_signature",
+          "resource": "onchain:solana:mainnet:",
+          "condition": {
+            "requiresHumanApproval": false
+          }
+        },
+        {
           "name": "dev-all-actions",
           "effect": "allow",
           "principal": "*",

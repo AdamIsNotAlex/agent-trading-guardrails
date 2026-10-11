@@ -11,7 +11,8 @@ import {
 } from "viem";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EvmConnector } from "./connector.js";
-import { SepoliaRpcProvider } from "./sepolia-provider.js";
+import type { EvmConfig } from "./interfaces.js";
+import { EvmJsonRpcProvider } from "./rpc-provider.js";
 
 const sender: Address = "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266";
 const recipient: Address = "0x70997970c51812dc3a010c7d01b50e0d17dc79c8";
@@ -28,6 +29,8 @@ const data = encodeFunctionData({
 });
 const nativeBalance = 1_000_000n;
 const blockHash = `0x${"ab".repeat(32)}`;
+const sepoliaChainIdHex = "0xaa36a7";
+const mainnetChainIdHex = "0x1";
 interface TraceAccount {
   balance?: string | number;
   nonce?: number;
@@ -47,7 +50,7 @@ let malformedBalance: boolean;
 let pinnedStorage: Record<string, string>;
 
 beforeEach(async () => {
-  chainId = "0xaa36a7";
+  chainId = sepoliaChainIdHex;
   unsupportedTrace = false;
   revert = false;
   reorg = false;
@@ -122,11 +125,11 @@ afterEach(async () => {
     server.close((error) => (error ? reject(error) : resolve())),
   );
 });
-function config() {
+function config(chainEnvironment: EvmConfig["chainEnvironment"] = "sepolia"): EvmConfig {
   return {
     rpcUrl,
-    chainId: 11155111,
-    chainEnvironment: "sepolia" as const,
+    chainId: chainEnvironment === "mainnet" ? 1 : 11155111,
+    chainEnvironment,
     fromAddress: recipient,
     allowedContracts: [token],
     allowedFunctions: ["transfer"],
@@ -136,23 +139,34 @@ function config() {
     erc20Tokens: [{ address: token, asset: token, balanceSlot: "0" }],
   };
 }
-function provider() {
-  return new SepoliaRpcProvider(config());
+function provider(chainEnvironment: EvmConfig["chainEnvironment"] = "sepolia") {
+  return new EvmJsonRpcProvider(config(chainEnvironment));
 }
 const request = { from: sender, to: token, data, observedAddresses: [recipient] };
+const tokenTransferChanges = [
+  { address: sender, asset: token, delta: "-100" },
+  { address: recipient, asset: token, delta: "100" },
+  { address: sender, asset: "ETH", delta: "0" },
+];
 
-describe("SepoliaRpcProvider execution state evidence", () => {
+describe("EvmJsonRpcProvider execution state evidence", () => {
   it("attests ERC20 debit/credit and unchanged native balances from sparse state diffs", async () => {
     const result = await provider().simulateTransaction(request);
     expect(result.success && result.balanceChangesReliable).toBe(true);
     expect(result.gasUsed).toBe(50000);
-    expect(result.balanceChanges).toEqual(
-      expect.arrayContaining([
-        { address: sender, asset: token, delta: "-100" },
-        { address: recipient, asset: token, delta: "100" },
-        { address: sender, asset: "ETH", delta: "0" },
-      ]),
-    );
+    expect(result.balanceChanges).toEqual(expect.arrayContaining(tokenTransferChanges));
+  });
+  it("attests ERC20 debit/credit on mainnet only when RPC reports chain ID 1", async () => {
+    chainId = mainnetChainIdHex;
+    const result = await provider("mainnet").simulateTransaction(request);
+    expect(result.success && result.balanceChangesReliable).toBe(true);
+    expect(result.gasUsed).toBe(50000);
+    expect(result.balanceChanges).toEqual(expect.arrayContaining(tokenTransferChanges));
+    chainId = sepoliaChainIdHex;
+    const mismatched = await provider("mainnet").simulateTransaction(request);
+    expect(mismatched.success).toBe(false);
+    expect(mismatched.balanceChangesReliable).toBe(false);
+    expect(mismatched.balanceChanges).toEqual([]);
   });
   it("attests native value movement to newly created accounts", async () => {
     trace = {
@@ -162,7 +176,10 @@ describe("SepoliaRpcProvider execution state evidence", () => {
         [recipient]: { balance: "0xa" },
       },
     };
-    const result = await new SepoliaRpcProvider({ rpcUrl }).simulateTransaction({
+    const result = await new EvmJsonRpcProvider({
+      rpcUrl,
+      chainEnvironment: "sepolia",
+    }).simulateTransaction({
       from: sender,
       to: recipient,
       value: "10",
@@ -217,13 +234,29 @@ describe("SepoliaRpcProvider execution state evidence", () => {
     if (mode === "bad-word") malformedBalance = true;
     if (mode === "unsafe-integer") trace.pre[sender].balance = Number.MAX_SAFE_INTEGER + 1;
     if (mode === "reorg") reorg = true;
-    if (mode === "wrong-chain") chainId = "0x1";
+    if (mode === "wrong-chain") chainId = mainnetChainIdHex;
     const result = await provider().simulateTransaction(request);
     expect(result.balanceChangesReliable).toBe(false);
     expect(result.balanceChanges).toEqual([]);
   });
+  it.each([
+    { configured: "sepolia" as const, rpcChainId: mainnetChainIdHex },
+    { configured: "mainnet" as const, rpcChainId: sepoliaChainIdHex },
+  ])("refuses $configured evidence when RPC reports another network", async ({
+    configured,
+    rpcChainId,
+  }) => {
+    chainId = rpcChainId;
+    const result = await provider(configured).simulateTransaction(request);
+    expect(result.success).toBe(false);
+    expect(result.balanceChangesReliable).toBe(false);
+    expect(result.balanceChanges).toEqual([]);
+  });
   it("does not guess an unconfigured token's storage layout", async () => {
-    const result = await new SepoliaRpcProvider({ rpcUrl }).simulateTransaction(request);
+    const result = await new EvmJsonRpcProvider({
+      rpcUrl,
+      chainEnvironment: "sepolia",
+    }).simulateTransaction(request);
     expect(result.balanceChangesReliable).toBe(false);
   });
   it("retains exact zero token observations for explicit unchanged-balance expectations", async () => {
@@ -235,26 +268,55 @@ describe("SepoliaRpcProvider execution state evidence", () => {
     expect(result.balanceChangesReliable).toBe(true);
     expect(result.balanceChanges).toContainEqual({ address: sender, asset: token, delta: "0" });
   });
-  it("returns balances and block numbers only on Sepolia", async () => {
+  it("returns balances and block numbers only on the configured network", async () => {
     await expect(provider().getBalance(sender)).resolves.toBe(nativeBalance.toString());
     await expect(provider().getBlockNumber()).resolves.toBe(123);
-    chainId = "0x1";
+    chainId = mainnetChainIdHex;
     await expect(provider().getBalance(sender)).rejects.toThrow();
     await expect(provider().getBlockNumber()).rejects.toThrow();
+    await expect(provider("mainnet").getBalance(sender)).resolves.toBe(nativeBalance.toString());
+    await expect(provider("mainnet").getBlockNumber()).resolves.toBe(123);
+    chainId = sepoliaChainIdHex;
+    await expect(provider("mainnet").getBalance(sender)).rejects.toThrow();
+    await expect(provider("mainnet").getBlockNumber()).rejects.toThrow();
+  });
+});
+
+describe("EvmJsonRpcProvider network configuration", () => {
+  it("rejects an unsupported chain environment", () => {
+    expect(
+      () =>
+        new EvmJsonRpcProvider({
+          rpcUrl,
+          chainEnvironment: "goerli" as EvmConfig["chainEnvironment"],
+        }),
+    ).toThrow("Unsupported Ethereum chain environment");
+  });
+  it.each([
+    { chainEnvironment: "sepolia" as const, chainId: 1 },
+    { chainEnvironment: "mainnet" as const, chainId: 11155111 },
+  ])("rejects chainId $chainId for $chainEnvironment", ({ chainEnvironment, chainId }) => {
+    expect(() => new EvmJsonRpcProvider({ rpcUrl, chainEnvironment, chainId })).toThrow("chain ID");
+  });
+  it("accepts an optional chainId that matches the configured network", () => {
+    expect(() => new EvmJsonRpcProvider(config("sepolia"))).not.toThrow();
+    expect(() => new EvmJsonRpcProvider(config("mainnet"))).not.toThrow();
   });
 });
 
 describe("built-in EVM provider signing boundary", () => {
-  function signing() {
+  function signing(chainEnvironment: EvmConfig["chainEnvironment"] = "sepolia") {
     const signAndBroadcast = vi.fn(async () => "accepted-by-signer");
-    const connector = new EvmConnector(config(), provider(), {
+    const connector = new EvmConnector(config(chainEnvironment), provider(chainEnvironment), {
       getAddress: () => sender,
       signAndBroadcast,
     });
     const intent: Extract<OnchainSigningIntent, { chain: "ethereum" }> = {
       ...ethereumSepoliaSigning,
       chain: "ethereum",
-      chainEnvironment: "sepolia",
+      chainEnvironment,
+      environment: chainEnvironment === "mainnet" ? "production" : "testnet",
+      resource: `onchain:ethereum:${chainEnvironment}:${token}`,
       to: token,
       data,
       expectedDeltas: [
@@ -271,11 +333,31 @@ describe("built-in EVM provider signing boundary", () => {
     });
     expect(signAndBroadcast).toHaveBeenCalledOnce();
   });
+  it("reaches signing on mainnet through the injected signer when RPC reports chain ID 1", async () => {
+    chainId = mainnetChainIdHex;
+    const { connector, intent, signAndBroadcast } = signing("mainnet");
+    await expect(connector.execute(intent)).resolves.toEqual({
+      transactionHash: "accepted-by-signer",
+    });
+    expect(signAndBroadcast).toHaveBeenCalledOnce();
+  });
   it.each(["range", "unexpected-debit", "unreliable"])("never signs %s", async (mode) => {
     const { connector, intent, signAndBroadcast } = signing();
     if (mode === "range") intent.expectedDeltas[1].minDelta = "101";
     if (mode === "unexpected-debit") intent.expectedDeltas.shift();
     if (mode === "unreliable") unsupportedTrace = true;
+    await expect(connector.execute(intent)).rejects.toThrow();
+    expect(signAndBroadcast).not.toHaveBeenCalled();
+  });
+  it.each([
+    { configured: "sepolia" as const, rpcChainId: mainnetChainIdHex },
+    { configured: "mainnet" as const, rpcChainId: sepoliaChainIdHex },
+  ])("never signs $configured when RPC reports another network", async ({
+    configured,
+    rpcChainId,
+  }) => {
+    chainId = rpcChainId;
+    const { connector, intent, signAndBroadcast } = signing(configured);
     await expect(connector.execute(intent)).rejects.toThrow();
     expect(signAndBroadcast).not.toHaveBeenCalled();
   });

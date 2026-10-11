@@ -6,7 +6,7 @@ A TypeScript-based guardrails framework that lets AI trading agents (OpenClaw, H
 
 - **Supported agents:** OpenClaw, Hermes Agent
 - **CEX:** Binance spot and USD-M futures
-- **Onchain:** Ethereum Sepolia (testnet), Solana devnet
+- **Onchain:** Ethereum mainnet and Sepolia, Solana mainnet-beta and devnet
 - **Policy engine:** OPA/Rego for deterministic authorization
 - **Reviewer:** LLM-based semantic review (advisory, not authoritative)
 - **Secrets:** Vault or a production-grade secret manager for live profiles, local provider for development
@@ -113,10 +113,13 @@ The full report verifies readiness without submitting; execution requires its fr
 receipt plus a normal signed decision. Accepted Binance orders include durable status reconciliation.
 See the [canary launch and first-order protocol](docs/live-trading-safety.md#first-live-trade-protocol).
 
-The package-level Sepolia/devnet providers support state-backed balance checks before signing.
-See [RPC capabilities, audited token configuration, fee semantics, and signer requirements](docs/signing-backends.md#built-in-testnet-simulation-before-signing).
-This does not enable onchain broadcasting in default Compose or turn the `LocalDev*Signer`
-test doubles into real signing backends.
+The package-level `EvmJsonRpcProvider` and `SolanaJsonRpcProvider` support state-backed balance
+checks on mainnet and testnet before signing. Select `chainEnvironment: "mainnet"` explicitly;
+mainnet signatures require a live environment and human approval under the bundled policy.
+See [RPC configuration, audited tokens, fee semantics, and signer requirements](docs/signing-backends.md#built-in-simulation-before-signing).
+This does not enable onchain broadcasting in the standalone Broker/default Compose or turn the
+`LocalDev*Signer` test doubles into real signing backends. Broker execution remains opt-in
+`canary_live`; the reserved `production` profile is still rejected.
 
 ### OpenClaw and Hermes runtime plugins
 

@@ -1,9 +1,10 @@
 # Signing Backend Requirements
 
-## Built-in Testnet Simulation Before Signing
+## Built-in Simulation Before Signing
 
-`SepoliaRpcProvider` and `DevnetSolanaRpcProvider` extract balance changes from RPC execution
-state. Their connectors bind simulation to the actual signer, compare every observed effect
+`EvmJsonRpcProvider` and `SolanaJsonRpcProvider` extract balance changes from RPC execution
+state on Ethereum mainnet/Sepolia and Solana mainnet-beta/devnet. Their connectors bind simulation
+to the actual signer, compare every observed effect
 with `expectedDeltas`, and only then call `signAndBroadcast`. Missing, inconsistent, unsupported,
 or out-of-range evidence still refuses signing. RPC remains a trusted state source; the
 `balanceChangesReliable` flag is not a cryptographic proof of the remote node's honesty.
@@ -14,9 +15,38 @@ fee limits, and broadcasting outside Agent. `LocalDevSigner` and `LocalDevSolana
 test doubles returning synthetic identifiers; they do not produce real signatures. The
 separate local offline Sepolia signer does not automatically broadcast or run these providers.
 
-### Ethereum Sepolia
+### Mainnet authorization and deployment
 
-- The RPC must report chain ID `11155111` and support Geth-compatible `debug_traceCall`
+- Both provider configurations require an explicit `chainEnvironment`. Use `"mainnet"` for
+  Ethereum mainnet or Solana mainnet-beta; the Solana intent/config value is **not** `"mainnet-beta"`.
+  Testnet values remain `"sepolia"` and `"devnet"`, respectively. These network-aware provider
+  classes replace the former testnet-specific exports; update imports and pass the network.
+- Intents use `onchain:ethereum:mainnet:<to>` or `onchain:solana:mainnet:<to>` as their resource.
+  Guardrail still requires exact resource/intent binding. RPC chain ID/genesis checks occur on
+  every simulation and balance/block/slot read; a mainnet endpoint cannot silently serve a
+  testnet-configured provider, or vice versa.
+- Read-only mainnet simulation can be authorized in any deployment environment by the normal
+  reviewer, risk, and policy pipeline. Signing in `dev`, `paper`, or `testnet` is denied by both
+  policy and connector revalidation. In live profiles, the bundled policy **always escalates
+  mainnet signatures to human approval**, even when another allow rule matches.
+- Use `ExecutionBroker` with `environment: "canary_live"`, explicit `canaryLiveEnabled: true`,
+  a trusted network-bound signer, and the existing audit, durable approval, kill-switch, and
+  idempotency stores. Submit the original signed `needs_human` decision after operator approval.
+  Mainnet network support does not enable the reserved `production` broker profile.
+- Keep the provider, connector, and signer on the same chain and account. A custom signer is a
+  trusted custody boundary: it must independently bind its RPC network and cap fees. Never fund
+  local dev keys or use the development signer doubles for mainnet. Default Compose and the
+  standalone `BROKER_CONNECTOR` modes are unchanged; onchain execution is a package-level integration.
+- Contract/program/token/recipient allowlists, approval caps, authority-change denials, and
+  reliable expected balance deltas remain mandatory. Onchain amounts are raw integer deltas,
+  not Binance's USD canary limits; review both debits and fees before approving real funds.
+
+
+### Ethereum Mainnet and Sepolia
+
+- Configure `chainEnvironment: "mainnet"` with chain ID `1`, or `"sepolia"` with `11155111`.
+  `EvmConfig.chainId` must match the network. The provider also rejects a conflicting optional
+  `chainId`. The RPC must report that chain ID and support Geth-compatible `debug_traceCall`
   with both `callTracer` and `prestateTracer` (`diffMode: true`). ERC-20 observation additionally
   needs `eth_getStorageAt` and `eth_call` with state overrides. An `eth_call`-only endpoint
   cannot attest complete effects and is refused; do not expose a node's debug API publicly.
@@ -42,8 +72,10 @@ separate local offline Sepolia signer does not automatically broadcast or run th
   function, contract, recipient, approval, and expected-delta checks remain mandatory.
 
 ```ts
-const provider = new SepoliaRpcProvider({
+const provider = new EvmJsonRpcProvider({
   rpcUrl,
+  chainEnvironment: "mainnet",
+  chainId: 1,
   fromAddress: signer.getAddress(),
   observedAccounts: [recipientAddress],
   erc20Tokens: [{
@@ -58,11 +90,14 @@ Declare expected entries for both the token debit and credit; declaring only a r
 credit does not authorize the sender's debit. Exact zero expectations are supported for
 observed assets. Amounts are raw integer units, never floating-point display balances.
 
-### Solana Devnet
+### Solana Mainnet-Beta and Devnet
 
-- The RPC must report devnet's genesis hash and support `getMultipleAccounts` and
-  `simulateTransaction` with returned base64 account snapshots. The provider observes all
-  compiled account keys, including fee payer, program accounts, and read-only mint accounts.
+- Configure `chainEnvironment: "mainnet"` for genesis
+  `5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d`, or `"devnet"` for
+  `EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG`. The RPC must match the selected genesis and
+  support `getMultipleAccounts` and `simulateTransaction` with returned base64 account snapshots.
+  The provider observes all compiled account keys, including fee payer, program accounts,
+  and read-only mint accounts.
 - Pre-state reads and simulation use `finalized` commitment. Simulation sets `minContextSlot`
   to the snapshot slot and additionally requires **exact equality** of the returned slot.
   `minContextSlot` alone is only a lower bound. An advanced/mixed slot refuses signing instead
@@ -85,22 +120,34 @@ observed assets. Amounts are raw integer units, never floating-point display bal
   `Transfer` and SPL/Token-2022 `TransferChecked`, deriving addresses and mint from the keys.
   Caller-supplied `type` alongside encoded data, `SetAuthority`, unchecked token transfers,
   and other unsupported opcodes remain rejected. Decoded and observed mints must be allowlisted.
+- Guardrail uses the same trusted instruction decoder as the connector. Encoded System transfers
+  and SPL/Token-2022 `TransferChecked` can reach policy approval; malformed, caller-labeled,
+  mixed unsupported, or authority-changing instruction payloads still fail closed.
 
 ```ts
-const provider = new DevnetSolanaRpcProvider({
+const provider = new SolanaJsonRpcProvider({
   rpcUrl,
+  chainEnvironment: "mainnet",
   feePayer: signer.getPublicKey(),
 });
 ```
 
 ### Verification
 
-Colocated provider integration tests cover reliable changes, precision, incomplete evidence,
-wrong environments, signing identity, and refusal before signing. Local execution smoke was
+Colocated provider integration tests cover mainnet and testnet evidence, both directions of
+network mismatch, precision, incomplete evidence, signing identity, and refusal before signing.
+Real-Rego service integration checks mainnet human-approval creation and encoded Solana instruction
+rejection. These tests use loopback RPC fixtures, not funded live accounts. Local execution smoke was
 also exercised with Anvil 1.7.1 (ETH effects and signed/mined ERC-20 transfer) and LiteSVM
 (signed SOL and SPL `TransferChecked` execution with signature verification). Mismatched
 expected deltas were rejected before broadcasting. These checks used local disposable
 ledgers and ephemeral keys, not funded public Sepolia/devnet accounts.
+
+Read-only smoke against public Ethereum mainnet and Solana mainnet-beta verified block/slot
+reads and rejection of testnet-configured providers against those same endpoints. A separate
+compiled Guardrail/real-Rego smoke with synthetic reviewer/risk facts verified pending approval,
+operator approval, one-time consumption, and replay rejection for both chains. No mainnet
+transaction signing or broadcasting was exercised.
 
 ## KMS Adapter Requirements
 

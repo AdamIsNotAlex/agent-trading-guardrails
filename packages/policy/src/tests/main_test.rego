@@ -391,19 +391,77 @@ test_finite_approval_within_cap_not_hard_denied_by_approval_rule if {
 	guardrail.decision == "allow" with input as inp
 }
 
-# Hard deny: mainnet onchain signing
-test_hard_deny_mainnet_onchain_signing if {
-	inp := object.union(base_input, {
-		"action": "onchain.request_signature",
-		"chain": "ethereum",
-		"resource": "onchain:ethereum:mainnet:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-		"chainEnvironment": "mainnet",
-		"contractAddress": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-		"environment": "testnet",
-	})
+mainnet_targets := [
+	{"chain": "ethereum", "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"},
+	{"chain": "solana", "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"},
+]
+
+mainnet_input(target, environment, action) := object.union(base_input, {
+	"action": action,
+	"chain": target.chain,
+	"resource": sprintf("onchain:%s:mainnet:%s", [target.chain, target.address]),
+	"chainEnvironment": "mainnet",
+	"contractAddress": target.address,
+	"programId": target.address,
+	"instructionType": "transfer",
+	"environment": environment,
+})
+
+test_mainnet_signing_denied_outside_live_profiles if {
+	every target in mainnet_targets {
+		every environment in ["dev", "paper", "testnet"] {
+			inp := mainnet_input(target, environment, "onchain.request_signature")
+			guardrail.decision == "deny" with input as inp
+			guardrail.matched_deny_rules[_] == "mainnet_requires_live_environment" with input as inp
+		}
+	}
+}
+
+test_mainnet_signing_requires_human_in_live_profiles if {
+	every target in mainnet_targets {
+		every environment in ["canary_live", "production"] {
+			inp := mainnet_input(target, environment, "onchain.request_signature")
+			guardrail.decision == "needs_human" with input as inp
+			guardrail.requires_human_approval == true with input as inp
+			count(guardrail.hard_deny_reasons) == 0 with input as inp
+			some reason in guardrail.escalation_reasons with input as inp
+			reason.rule == "mainnet_signing_requires_human"
+		}
+	}
+}
+
+test_mainnet_simulation_can_be_allowed_without_human_approval if {
+	every target in mainnet_targets {
+		every environment in ["dev", "paper", "testnet", "canary_live", "production"] {
+			inp := mainnet_input(target, environment, "onchain.simulate_transaction")
+			guardrail.decision == "allow" with input as inp
+			guardrail.requires_human_approval == false with input as inp
+		}
+	}
+}
+
+test_mainnet_signing_cannot_skip_human_approval_using_another_resource if {
+	inp := object.union(mainnet_input(mainnet_targets[0], "production", "onchain.request_signature"), {"resource": "onchain:ethereum:sepolia:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"})
+	guardrail.decision == "needs_human" with input as inp
+	guardrail.requires_human_approval == true with input as inp
+}
+
+test_mainnet_unknown_contract_remains_denied if {
+	inp := object.union(mainnet_input(mainnet_targets[0], "production", "onchain.request_signature"), {"contractAddress": "0x0000000000000000000000000000000000000001"})
 	guardrail.decision == "deny" with input as inp
-	some reason in guardrail.hard_deny_reasons with input as inp
-	reason.rule == "mainnet_onchain_denied"
+	guardrail.matched_deny_rules[_] == "unknown_contract_denied" with input as inp
+}
+
+test_mainnet_authority_change_remains_denied if {
+	inp := object.union(mainnet_input(mainnet_targets[1], "canary_live", "onchain.request_signature"), {"instructionType": "setAuthority"})
+	guardrail.decision == "deny" with input as inp
+	guardrail.matched_deny_rules[_] == "solana_authority_change_denied" with input as inp
+}
+
+test_mainnet_unlimited_approval_remains_denied if {
+	inp := object.union(mainnet_input(mainnet_targets[0], "canary_live", "onchain.request_signature"), {"maxTokenApprovalAmount": "unlimited"})
+	guardrail.decision == "deny" with input as inp
+	guardrail.matched_deny_rules[_] == "unlimited_approval_denied" with input as inp
 }
 
 # Hard deny: invalid ethereum/devnet pair
