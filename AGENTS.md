@@ -89,8 +89,9 @@ reviewer output is advisory while policy and broker boundaries remain authoritat
 - Read-only Debian Nginx needs explicit `/tmp` paths for proxy, client-body, FastCGI, uWSGI,
   and SCGI temporary files, even when the latter protocols are unused. Read-only dev Vault
   runs as `vault` with `SKIP_CHOWN`, `SKIP_SETCAP`, and `-dev-no-store-token`.
-- OpenAI SDK 6.36.0 reads `OPENAI_BASE_URL` even when constructed with only `apiKey`;
-  Compose routes the existing reviewer through its fixed proxy without exposing the key to Agent.
+- OpenAI SDK 6.36.0 reads `OPENAI_BASE_URL` when constructed with only `apiKey`. Reviewer
+  runtime configuration now uses `REVIEWER_BASE_URL` and explicitly passes the SDK base URL;
+  Compose fixes the common prefix to its private reviewer proxy without exposing keys to Agent.
 - `viem` 2.48.8 signature recovery expects a concrete serialized transaction type (such as
   `TransactionSerializedEIP1559`), not generic `Hex`. Validate the response before narrowing;
   Node fetch JSON is `unknown` in the runtime's type environment.
@@ -153,3 +154,7 @@ reviewer output is advisory while policy and broker boundaries remain authoritat
   Broker still rejects the reserved production profile and local dev signers remain testnet-only.
 - Guardrail must reuse the Solana connector's trusted decoder for encoded instruction policy facts;
   rejecting all `instruction.data` prevents real System/SPL transfers from ever reaching approval.
+- Decision APIs return classifications, not prose: Jev uses question/answer maps, OpenAI Decisions
+  uses named arrays (including refusals), and Cloudflare Clef REST adds a `success`/`result`
+  envelope. Bind and validate every required answer; do not invent model explanations or treat
+  vendor confidence scales as interchangeable approval thresholds.

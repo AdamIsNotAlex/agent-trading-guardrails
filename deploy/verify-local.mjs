@@ -71,7 +71,8 @@ async function verifyAgent(witness, nonce) {
   const health = await fetch(`${base}/health`, { signal: AbortSignal.timeout(5000) });
   assert.equal(health.status, 200, "Guardrail through fixed proxy must work");
   assert.equal((await lookup("egress-proxy")).address, "172.30.10.20");
-  for (const path of ["/execute", "/v1/chat/completions", "/latest/meta-data/", "/"]) {
+  for (const path of ["/execute", "/chat/completions", "/decisions", "/systemone",
+    `/accounts/${"a".repeat(32)}/ai/run/@cf/cloudflare/clef-flash`, "/latest/meta-data/", "/"]) {
     const response = await fetch(`${base}${path}`, { signal: AbortSignal.timeout(5000) });
     assert.equal(response.status, 403, `Agent proxy route must deny ${path}`);
   }
@@ -97,6 +98,8 @@ async function verifyAgent(witness, nonce) {
     deniedDns("127.0.0.1", "api.binance.com"),
     deniedDns("127.0.0.1", "ethereum-sepolia-rpc.publicnode.com"),
     deniedDns("127.0.0.1", "api.openai.com"),
+    deniedDns("127.0.0.1", "api.typesafe.ai"),
+    deniedDns("127.0.0.1", "api.cloudflare.com"),
     deniedDns("127.0.0.1", "subdomain.egress-proxy"),
     deniedDns("127.0.0.11", "example.com"),
     deniedDns("1.1.1.1", "example.com"),
@@ -143,7 +146,8 @@ async function verifyAgent(witness, nonce) {
   }
   assert.match(readFileSync("/proc/self/status", "utf8"), /CapEff:\s+0+\n/);
   assert.equal(existsSync("/var/run/docker.sock"), false);
-  for (const key of ["OPENAI_API_KEY", "GUARDRAIL_DECISION_SECRET", "AUDIT_HASH_SECRET", "VAULT_TOKEN"]) {
+  for (const key of ["OPENAI_API_KEY", "TYPESAFE_API_KEY", "CLOUDFLARE_API_TOKEN",
+    "GUARDRAIL_DECISION_SECRET", "AUDIT_HASH_SECRET", "VAULT_TOKEN"]) {
     assert.equal(process.env[key], undefined, `Secret leaked to Agent: ${key}`);
   }
   console.log("Agent: guarded route works; proxy routes, DNS bypasses, direct IPv4/IPv6 and internal targets blocked; no capabilities or service secrets");

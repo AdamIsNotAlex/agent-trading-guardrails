@@ -263,7 +263,7 @@ export async function startAcceptanceStack() {
   }
 
   try {
-    env.OPENAI_BASE_URL = `${await infrastructure("openai")}/v1`;
+    env.REVIEWER_BASE_URL = `${await infrastructure("openai")}/v1`;
     env.OPA_URL = await infrastructure("opa");
     await freshRisk();
     const url = await launch("service");

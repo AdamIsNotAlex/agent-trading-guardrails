@@ -8,7 +8,7 @@ import {
   FileBrokerIdempotencyStore,
   InMemoryKillSwitch,
 } from "@guardrails/broker";
-import { OpenAiLlmProvider, ReviewerAdapter } from "@guardrails/reviewer";
+import { createReviewer } from "@guardrails/reviewer";
 import type { Environment } from "@guardrails/schemas";
 import {
   createGuardrailServer,
@@ -19,6 +19,7 @@ import {
 import Database from "better-sqlite3";
 import { createRuntimeConnector, createRuntimeRiskEngine } from "./binance-runtime.js";
 import { createBrokerServer } from "./broker-server.js";
+import { loadReviewerRuntimeConfig } from "./reviewer-runtime.js";
 
 export interface Runtime {
   server: Server;
@@ -72,13 +73,7 @@ function openApprovalStore(writer: AuditWriter, defaultTimeoutSeconds: number) {
 
 export function createGuardrailRuntime(): Runtime {
   const config = loadDevConfig();
-  const provider = process.env.REVIEWER_PROVIDER ?? "openai";
-  if (provider !== "openai") throw new Error("REVIEWER_PROVIDER must be openai.");
-  const model = process.env.REVIEWER_MODEL ?? "gpt-5.5";
-  const reviewer = new ReviewerAdapter(
-    { provider, model },
-    new OpenAiLlmProvider({ apiKey: process.env.OPENAI_API_KEY ?? "", model }),
-  );
+  const reviewer = createReviewer(loadReviewerRuntimeConfig());
   const policy = new OpaHttpPolicyEvaluator({ opaUrl: config.opaUrl });
   const risk = createRuntimeRiskEngine(config.environment);
   const { database, writer } = openAudit(config.environment, "guardrail");

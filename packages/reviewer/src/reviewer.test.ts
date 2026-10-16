@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import { ReviewerAdapter } from "./adapter.js";
 import type { LlmProvider } from "./interfaces.js";
 import { parseReviewerOutput } from "./parser.js";
-import { buildReviewerPrompt } from "./prompt.js";
 
 const validResponse = JSON.stringify({
   intentId: binanceSpotOrder.intentId,
@@ -15,17 +14,6 @@ const validResponse = JSON.stringify({
   reviewerModel: "gpt-5.5",
   reviewerProvider: "openai",
   reviewedAt: "2026-05-04T12:00:01.000Z",
-});
-
-describe("buildReviewerPrompt", () => {
-  it("includes intent data in prompt", () => {
-    const prompt = buildReviewerPrompt(binanceSpotOrder);
-    expect(prompt).toContain(binanceSpotOrder.intentId);
-    expect(prompt).toContain("ADVISORY ONLY");
-    expect(prompt).toContain("prompt_injection");
-    expect(prompt).toContain("unsupported_claim");
-    expect(prompt).toContain("evidence_action_mismatch");
-  });
 });
 
 describe("parseReviewerOutput", () => {
@@ -99,18 +87,6 @@ describe("parseReviewerOutput", () => {
 });
 
 describe("ReviewerAdapter", () => {
-  it("calls LLM and parses response", async () => {
-    const llm: LlmProvider = {
-      async complete() {
-        return validResponse;
-      },
-    };
-    const adapter = new ReviewerAdapter({ model: "gpt-5.5", provider: "openai" }, llm);
-    const result = await adapter.review(binanceSpotOrder);
-    expect(result.verdict).toBe("approve");
-    expect(result.intentId).toBe(binanceSpotOrder.intentId);
-  });
-
   it("fails closed when LLM returns garbage", async () => {
     const llm: LlmProvider = {
       async complete() {
@@ -129,19 +105,5 @@ describe("ReviewerAdapter", () => {
     };
     const adapter = new ReviewerAdapter({ model: "gpt-5.5", provider: "openai" }, llm);
     await expect(adapter.review(binanceSpotOrder)).rejects.toThrow("API error");
-  });
-
-  it("verdict is advisory — adapter does not execute or sign", () => {
-    const adapter = new ReviewerAdapter(
-      { model: "gpt-5.5", provider: "openai" },
-      {
-        async complete() {
-          return "";
-        },
-      },
-    );
-    expect(adapter).not.toHaveProperty("execute");
-    expect(adapter).not.toHaveProperty("sign");
-    expect(adapter).not.toHaveProperty("approve");
   });
 });

@@ -9,7 +9,7 @@ The framework supports multiple deployment profiles. Each profile defines how co
 - Default Compose starts Agent (JSON Lines), Guardrail HTTP, the paper Broker, the offline Sepolia Signer, OPA, a fixed-route egress proxy, and two firewall/DNS/logging helpers. The optional `dev` profile adds dev Vault.
 - Agent, Guardrail, Broker, Signer, and proxy run as non-root users with read-only roots and no capabilities. Only the two trusted network helpers have `NET_ADMIN`, `NET_BIND_SERVICE`, and `SETGID`; Agent cannot modify their rules or access their filesystem/PID namespaces.
 - Agent is attached only to its sandbox namespace. It can use its controlled loopback DNS and the proxy's Guardrail `/health` and `/evaluate` routes. It cannot reach Broker, Signer, OPA, Vault, direct CEX/RPC endpoints, metadata, host gateways, private networks, external DNS, or arbitrary public IPs, even if it ignores proxy settings. See [Network Controls](security-boundaries.md#network-controls) for the enforced rules and trust limits.
-- The proxy is **not** a forward/CONNECT proxy. A separate listener available only to Guardrail forwards reviewer chat completions to `api.openai.com` over verified TLS. Agent has no direct LLM access. `OPENAI_API_KEY` is required by Guardrail; missing credentials are a startup error, not automatic approval.
+- The proxy is **not** a forward/CONNECT proxy. A separate listener available only to Guardrail forwards the selected review protocol to fixed OpenAI, TypeSafe or Cloudflare API routes over verified TLS. Agent has no direct LLM access. The selected provider's credentials are required by Guardrail; missing credentials are a startup error, not automatic approval.
 - Published Guardrail (3000), Broker (3001), OPA (8181), and optional Vault (8200) ports bind to `127.0.0.1`. Signer, DNS, and proxy have no host-published ports. Docker-published ports can bypass UFW; do not replace the loopback bindings with public interfaces.
 - Broker remains **simulated dev/paper execution only**. The Signer produces real offline Sepolia transaction signatures from authorized typed requests, not broadcasts or execution receipts. Generated local keys must never be funded or reused for real custody. The stack does not enable testnet/live trading or supply an authoritative simulation/risk feed.
 - Guardrail, Broker, and Signer each have independent audit databases/hash anchors. Signer keys, signing idempotency, Broker idempotency, DNS logs, packet-drop logs, and proxy logs persist in named volumes. Each audit chain has exactly one writer. Non-dev profiles require strong decision/audit secrets; this local stack refuses live profiles.
@@ -186,9 +186,81 @@ An idempotency key and intent ID are each bound to one complete approved envelop
 
 Default caps are `SIGNER_MAX_GAS=1000000`, `SIGNER_MAX_FEE_PER_GAS=100000000000` wei/gas, and `SIGNER_MAX_TOTAL_FEE_WEI=10000000000000000` wei. Gas must be at least 21,000, priority fee cannot exceed max fee, and `gas * maxFeePerGas` must fit the aggregate ceiling. The same variables are explicitly passed through Compose; all must be positive uint256 decimal values.
 
+### Reviewer providers
+
+Set `REVIEWER_PROVIDER` to select the review API. Unset selects the existing `openai` chat
+reviewer; changing provider is explicit, not a rollout or automatic fallback. An unset/blank
+`REVIEWER_MODEL` selects the provider default; set it explicitly when pinning another version.
+
+Official documentation checked **2026-10-16**. Prices below are published USD per million
+input tokens, not measured bills or accuracy/latency comparisons. Decision output tokens are
+free; provider-specific regional, context and billing modifiers still apply.
+
+| `REVIEWER_PROVIDER` | Model | Required credentials | Published input price |
+| --- | --- | --- | --- |
+| `openai` | `gpt-5.5` default (Chat Completions) | `OPENAI_API_KEY` | Model-specific |
+| `openai-decisions` | `gpt-6-luna` default | `OPENAI_API_KEY` | $0.10 |
+| `jev` | `jev-1.13.0` default, pinned stable release | `TYPESAFE_API_KEY` | $0.042 |
+| `clef` | `clef-flash` default | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | $0.038 |
+| `clef` | `clef` when explicitly selected | Same Cloudflare credentials | $0.24 |
+
+The protocols are deliberately distinct:
+
+- [TypeSafe Jev](https://docs.typesafe.ai/api): `POST https://api.typesafe.ai/v1/systemone`;
+  `state` plus a question map with `criteria`, returning an answer map. The
+  [model catalog](https://docs.typesafe.ai/models) also lists `jev-1.14.0` as the newer preview;
+  aliases can move, so the default is a pinned stable ID.
+- [Cloudflare Clef](https://developers.cloudflare.com/workers-ai/models/clef/) and
+  [Clef Flash](https://developers.cloudflare.com/workers-ai/models/clef-flash/):
+  `POST https://api.cloudflare.com/client/v4/accounts/{accountId}/ai/run/@cf/cloudflare/{model}`;
+  System One questions inside a Cloudflare REST `success`/`result` envelope. The request model
+  is `clef` or `clef-flash`, not the full `@cf/...` path. Self-hosted weights are a different
+  serving contract; this adapter targets Workers AI REST.
+- [OpenAI Decisions](https://developers.openai.com/api/docs/guides/decisions):
+  `POST https://api.openai.com/v1/decisions`; `input` and question arrays with named `choices`,
+  returning answer arrays. Answers bind by name rather than array position; per-question
+  refusals reject the review. It is in public beta, with `gpt-6-luna` documented as the
+  supported model. The existing OpenAI SDK predates this endpoint, so the decision adapter
+  uses HTTP directly rather than pretending it is Chat Completions.
+
+[OpenRouter also routes Jev](https://openrouter.ai/docs/guides/community/jev) through its own
+Decisions/System One endpoints; it is an alternate route to TypeSafe, not OpenAI Decisions.
+The built-in presets and Compose egress allowlist target the three direct vendors above.
+
+For example, set these in the Guardrail-only environment:
+
+```dotenv
+REVIEWER_PROVIDER=jev
+REVIEWER_MODEL=jev-1.13.0
+TYPESAFE_API_KEY=<server-side TypeSafe key>
+```
+
+`REVIEWER_BASE_URL` optionally overrides the API prefix for standalone use (for example,
+`https://api.typesafe.ai/v1`); adapters append their own route while preserving the prefix.
+Compose fixes it to `http://172.30.20.10:8081`, whose allowlisted proxy routes add each vendor's
+native API prefix. Do not pass reviewer credentials or endpoint configuration to Agent.
+`OPENAI_BASE_URL` is no longer the reviewer's configuration surface: migrate it to
+`REVIEWER_BASE_URL`. The chat client receives an explicit base URL too.
+
+All decision providers use one bounded-choice request for recommendation, risk tier and six
+issue flags. This is a text/JSON trading-intent integration, not a general multimodal SDK.
+They return no generated explanations; reviewer reasons identify themselves as classification
+summaries. Probabilities/confidence are exposed by `DecisionProvider`, but are not treated as
+calibrated authorization thresholds. OPA, live-risk vetoes and real human approvals remain
+authoritative. Decision requests have a 30-second timeout, no retry/fallback, no HTTP redirects,
+and fail closed on upstream errors or incomplete/invalid answers.
+
+Validate model quality on labeled trading intents before using a new provider for live
+automatic approval. Published speed claims are not local measurements. Hosted Clef documents
+truncation of long text state; do not assume an in-schema result proves all evidence was read.
+This integration does not fetch the documents named by evidence references or prove their
+authenticity. Keep prompts within the selected model's documented context and evaluate
+missing-context, prompt-injection and false-approval cases explicitly.
+
+
 ### Runtime configuration and risk data
 
-`GUARDRAIL_HOST`/`GUARDRAIL_PORT` default to `127.0.0.1:3000`; `BROKER_HOST`/`BROKER_PORT` to `127.0.0.1:3001`; `SIGNER_HOST`/`SIGNER_PORT` to `127.0.0.1:3002`. Images explicitly bind to `0.0.0.0` inside their private networks. `OPA_URL`, `REVIEWER_PROVIDER=openai`, `REVIEWER_MODEL`, `OPENAI_API_KEY`, `GUARDRAIL_ENV`, `GUARDRAIL_DECISION_SECRET`, and `APPROVAL_TIMEOUT_SECONDS` configure evaluation. Guardrail, Broker, and Signer must use the same environment and decision secret. Compose fixes `OPENAI_BASE_URL` to the private reviewer proxy; host-only debugging uses the SDK's normal provider endpoint unless explicitly configured otherwise.
+`GUARDRAIL_HOST`/`GUARDRAIL_PORT` default to `127.0.0.1:3000`; `BROKER_HOST`/`BROKER_PORT` to `127.0.0.1:3001`; `SIGNER_HOST`/`SIGNER_PORT` to `127.0.0.1:3002`. Images explicitly bind to `0.0.0.0` inside their private networks. `OPA_URL`, the [reviewer settings](#reviewer-providers), `GUARDRAIL_ENV`, `GUARDRAIL_DECISION_SECRET`, and `APPROVAL_TIMEOUT_SECONDS` configure evaluation. Guardrail, Broker, and Signer must use the same environment and decision secret. Host-only debugging uses the selected provider's native endpoint unless `REVIEWER_BASE_URL` explicitly overrides it.
 
 `GUARDRAIL_AUDIT_DB_PATH` and `BROKER_AUDIT_DB_PATH` default to `./data/guardrail-audit.db` and `./data/broker-audit.db`; corresponding `*_AUDIT_HASH_ANCHOR_PATH` variables select separate anchors. Generic `AUDIT_DB_PATH`/`AUDIT_HASH_ANCHOR_PATH` remain usable when configuring just one process. Never point two processes at the same chain. `BROKER_IDEMPOTENCY_PATH` defaults to `./data/broker-idempotency.json`; preserve it across restarts. `BROKER_KILL_SWITCH=true` starts the broker with its global kill switch active.
 

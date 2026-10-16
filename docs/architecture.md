@@ -25,15 +25,33 @@ Accepts only structured requests. Validates required fields. Rejects ambiguous, 
 
 Provides semantic review before policy evaluation. Detects suspicious reasoning, prompt injection, unsupported claims, risky behavior, and mismatch between evidence and proposed action. The reviewer verdict is advisory — it cannot sign, trade, approve secrets, or bypass policy.
 
+`@guardrails/reviewer` exposes `Reviewer.review(intent)` and `createReviewer(config)` for
+runtime selection. OpenAI chat uses the existing prompt/parser. Decision APIs use the
+separate `DecisionProvider.decide({input, questions})` contract: named questions with fixed
+string choices return a selected choice, probabilities and confidence. The HTTP adapter
+supports TypeSafe Jev, Cloudflare-hosted Clef/Clef Flash and OpenAI Decisions without assuming
+their transport envelopes are interchangeable.
+
+`DecisionReviewerAdapter` asks eight independent questions in one request: the recommendation,
+risk tier and each of the six detected-issue flags. It binds intent ID/provider/time locally,
+records the returned model, and keeps the existing `ReviewerVerdictSchema`. Its reasons are
+explicitly application-generated classification summaries, not invented model explanations;
+`requiredPolicyTags` is empty because these APIs do not generate arbitrary tags. Missing,
+refused, duplicate, malformed or unknown answers fail closed. An approve with detected issues
+is preserved for the existing risk consistency veto, never silently converted into an allow.
+There is no automatic provider fallback or cross-provider confidence threshold. See
+[provider configuration and research sources](deployment-profiles.md#reviewer-providers).
+
 ### Policy Engine (OPA/Rego)
 
-Final deterministic authorization layer. Uses an IAM-inspired model with principal, action, resource, condition, and effect. Evaluates with explicit deny precedence:
+Final deterministic policy layer, evaluated after dynamic risk checks. Uses an IAM-inspired
+model with principal, action, resource, condition, and effect:
 
-1. If any deny rule matches, reject.
-2. If required reviewer status is not satisfied, reject or escalate to human approval.
-3. If no allow rule matches, reject.
-4. If dynamic risk checks fail, reject.
-5. Otherwise, allow broker execution.
+1. Any hard deny rule rejects, regardless of reviewer approval.
+2. Escalation rules require human approval, including non-low reviewer risk, a verdict other
+   than approve, automatic thresholds, or no matching allowlist entry.
+3. Automatic allow requires no hard deny/escalation, a matching allow rule, and approve/low
+   from the reviewer. Broker-side revalidation remains independently required.
 
 ### Dynamic Risk Engine
 
@@ -69,10 +87,10 @@ Hash-chained SQLite audit records. Tamper evidence depends on protecting `AUDIT_
 flowchart TD
   Intent["Agent proposes structured intent"] --> Schema["Schema validation (Zod)"]
   Schema --> Reviewer["Reviewer agent returns structured verdict"]
-  Reviewer --> Facts["TypeScript normalizes facts for OPA"]
+  Reviewer --> Risk["Dynamic risk engine checks live state"]
+  Risk --> Facts["TypeScript normalizes facts for OPA"]
   Facts --> Policy["OPA/Rego evaluates policy<br/>(allow | deny | needs_human)"]
-  Policy --> Risk["Dynamic risk engine checks live state"]
-  Risk --> Broker["Broker revalidates and executes<br/>(or rejects)"]
+  Policy --> Broker["Broker revalidates and executes<br/>(or rejects)"]
   Broker --> Audit["Audit log records full decision chain"]
 ```
 

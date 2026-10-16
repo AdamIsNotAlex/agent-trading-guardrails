@@ -76,7 +76,9 @@ See [acceptance prerequisites and safety limits](docs/deployment-profiles.md#aut
 
 ### Isolated local deployment
 
-Set `OPENAI_API_KEY` in `.env` and configure the trusted risk snapshot described in
+Select a [Reviewer provider](docs/deployment-profiles.md#reviewer-providers) in `.env`
+(OpenAI chat by default; Jev, Clef, and OpenAI Decisions are also supported), set that
+provider's server-side credentials, and configure the trusted risk snapshot described in
 [Deployment Profiles](docs/deployment-profiles.md#runtime-configuration-and-risk-data).
 
 ```sh

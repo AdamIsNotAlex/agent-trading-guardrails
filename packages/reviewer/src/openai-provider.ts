@@ -4,6 +4,7 @@ import type { LlmProvider } from "./interfaces.js";
 export interface OpenAiLlmProviderConfig {
   apiKey: string;
   model?: string;
+  baseUrl?: string;
 }
 
 export class OpenAiLlmProvider implements LlmProvider {
@@ -15,7 +16,10 @@ export class OpenAiLlmProvider implements LlmProvider {
     if (apiKey.length === 0) {
       throw new Error("OpenAI API key is required.");
     }
-    this.#client = new OpenAI({ apiKey });
+    this.#client = new OpenAI({
+      apiKey,
+      baseURL: config.baseUrl ?? "https://api.openai.com/v1",
+    });
     this.#model = config.model ?? "gpt-5.5";
   }
 
