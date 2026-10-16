@@ -37,8 +37,10 @@ risk tier and each of the six detected-issue flags. It binds intent ID/provider/
 records the returned model, and keeps the existing `ReviewerVerdictSchema`. Its reasons are
 explicitly application-generated classification summaries, not invented model explanations;
 `requiredPolicyTags` is empty because these APIs do not generate arbitrary tags. Missing,
-refused, duplicate, malformed or unknown answers fail closed. An approve with detected issues
-is preserved for the existing risk consistency veto, never silently converted into an allow.
+refused, duplicate, malformed or unknown answers fail closed. Clef requests also fail closed
+before dispatch if the full request exceeds a conservative hosted-context budget; the adapter
+does not accept silent input truncation. An approve with detected issues is preserved for the
+existing risk consistency veto, never silently converted into an allow.
 There is no automatic provider fallback or cross-provider confidence threshold. See
 [provider configuration and research sources](deployment-profiles.md#reviewer-providers).
 

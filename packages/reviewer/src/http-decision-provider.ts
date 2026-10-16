@@ -12,6 +12,7 @@ const REQUEST_TIMEOUT_MS = 30_000;
 const REQUEST_FAILED = "Decision reviewer request failed.";
 const INVALID_RESPONSE = "Decision reviewer response is invalid.";
 const INVALID_REQUEST = "Decision reviewer request is invalid.";
+const CONTEXT_EXCEEDED = "Decision reviewer request exceeds the Clef context budget.";
 const ACCOUNT_ID_PATTERN = /^[0-9a-fA-F]{32}$/;
 const CLEF_QUESTION_ID = /^[A-Za-z0-9._-]{1,100}$/;
 
@@ -26,6 +27,7 @@ export class HttpDecisionProvider implements DecisionProvider {
   #apiKey: string;
   #model: string;
   #endpoint: string;
+  #clefContextLimit?: number;
 
   constructor(config: HttpDecisionProviderConfig) {
     const apiKey = config.apiKey.trim();
@@ -72,6 +74,7 @@ export class HttpDecisionProvider implements DecisionProvider {
         throw new Error("Unsupported Clef model.");
       }
       this.#endpoint = `${base}/accounts/${accountId}/ai/run/@cf/cloudflare/${model}`;
+      this.#clefContextLimit = model === "clef" ? 65_536 : 24_576;
     } else if (provider === "jev") {
       this.#endpoint = `${base}/systemone`;
     } else {
@@ -89,6 +92,10 @@ export class HttpDecisionProvider implements DecisionProvider {
       this.#provider === "openai-decisions"
         ? encodeOpenAiBody(this.#model, request.input, bound.values())
         : encodeSystemOneBody(this.#model, request.input, bound.values());
+    const serializedBody = JSON.stringify(body);
+    if (this.#clefContextLimit !== undefined) {
+      assertClefContextBudget(serializedBody, bound.values(), this.#clefContextLimit);
+    }
 
     let response: Response;
     try {
@@ -98,7 +105,7 @@ export class HttpDecisionProvider implements DecisionProvider {
           Authorization: `Bearer ${this.#apiKey}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(body),
+        body: serializedBody,
         redirect: "error",
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
@@ -195,6 +202,24 @@ function encodeOpenAiBody(
       })),
     })),
   };
+}
+
+function assertClefContextBudget(
+  serializedBody: string,
+  questions: Iterable<ChoiceQuestion>,
+  tokenLimit: number,
+): void {
+  // Clef's byte-level tokenizer uses at most one token per UTF-8 byte. Count the
+  // entire JSON body, including escaped text, instructions, IDs and choices.
+  // Reserve additional tokens for its system prompt and per-field/option framing,
+  // which are added by the provider rather than represented in the HTTP body.
+  let tokenUpperBound = Buffer.byteLength(serializedBody, "utf8") + 1_024;
+  for (const question of questions) {
+    tokenUpperBound += 128 + 64 * Object.keys(question.choices).length;
+  }
+  if (tokenUpperBound > tokenLimit) {
+    throw new Error(CONTEXT_EXCEEDED);
+  }
 }
 
 function isUnitInterval(value: unknown): value is number {

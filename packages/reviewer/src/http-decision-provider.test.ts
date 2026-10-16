@@ -155,6 +155,132 @@ describe("decision protocol normalization", () => {
   });
 });
 
+describe("Clef context safety budget", () => {
+  function clef(model = "clef-flash") {
+    return new HttpDecisionProvider({
+      provider: "clef",
+      apiKey: secret,
+      model,
+      accountId: "a".repeat(32),
+    });
+  }
+
+  beforeEach(() => {
+    body = { success: true, result: response() };
+  });
+
+  it.each([
+    ["clef-flash", 24_576],
+    ["clef", 65_536],
+  ] as const)("accepts the %s budget boundary and rejects one byte over", async (model, limit) => {
+    const question = request.questions[0];
+    const emptyBody = JSON.stringify({
+      model,
+      state: "",
+      questions: {
+        [question.id]: {
+          type: "choice",
+          instructions: question.instructions,
+          criteria: question.choices,
+        },
+      },
+    });
+    // One question with three choices; include the documented framing reserves.
+    const capacity = limit - 1_024 - 128 - 3 * 64 - Buffer.byteLength(emptyBody, "utf8");
+    const boundary = { input: "x".repeat(capacity), questions: [question] };
+    body = {
+      success: true,
+      result: { model, answers: { verdict: response().answers.verdict } },
+    };
+    const client = clef(model);
+    await expect(client.decide(boundary)).resolves.toMatchObject({
+      answers: { verdict: { choice: "reject" } },
+    });
+    fetchMock.mockClear();
+    await expect(client.decide({ ...boundary, input: `${boundary.input}x` })).rejects.toThrow(
+      /Clef context budget/,
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { kind: "UTF-8 bytes", input: "\u754c".repeat(8_192) },
+    { kind: "JSON escaping", input: "\\".repeat(12_288) },
+  ])("counts $kind rather than unescaped string length", async ({ input }) => {
+    await expect(clef().decide({ ...request, input })).rejects.toThrow(/Clef context budget/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "instructions",
+    "choices",
+  ] as const)("includes oversized %s even when the state is short", async (field) => {
+    const question = request.questions[0];
+    const oversized = "x".repeat(24_576);
+    const questions = [
+      {
+        ...question,
+        ...(field === "instructions"
+          ? { instructions: oversized }
+          : { choices: { ...question.choices, reject: oversized } }),
+      },
+      request.questions[1],
+    ];
+    await expect(clef().decide({ ...request, questions })).rejects.toThrow(/Clef context budget/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      kind: "question",
+      input: "x".repeat(4_096),
+      questions: Array.from({ length: 64 }, (_, index) => ({
+        id: `q${index}`,
+        instructions: "Review.",
+        choices: { yes: "", no: "" },
+      })),
+    },
+    {
+      kind: "option",
+      input: "x".repeat(12_000),
+      questions: [
+        {
+          id: "verdict",
+          instructions: "Review.",
+          choices: Object.fromEntries(Array.from({ length: 200 }, (_, index) => [`c${index}`, ""])),
+        },
+      ],
+    },
+  ])("reserves provider-added $kind framing", async ({ input, questions }) => {
+    await expect(clef().decide({ input, questions })).rejects.toThrow(/Clef context budget/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "jev",
+    "openai-decisions",
+  ] as const)("does not impose Clef's context budget on %s", async (name) => {
+    const valid = response();
+    body =
+      name === "jev"
+        ? valid
+        : {
+            ...valid,
+            answers: Object.entries(valid.answers).map(([name, answer]) => ({
+              ...answer,
+              name,
+              probabilities: Object.entries(answer.probabilities).map(([value, probability]) => ({
+                value,
+                probability,
+              })),
+            })),
+          };
+    await expect(
+      provider(name).decide({ ...request, input: "x".repeat(65_536) }),
+    ).resolves.toMatchObject({ answers: { verdict: { choice: "reject" } } });
+  });
+});
+
 describe("decision provider credential and failure boundaries", () => {
   it("does not expose credentials in inspection or serialization", () => {
     const client = provider();

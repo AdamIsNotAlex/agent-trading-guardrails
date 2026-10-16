@@ -250,9 +250,25 @@ calibrated authorization thresholds. OPA, live-risk vetoes and real human approv
 authoritative. Decision requests have a 30-second timeout, no retry/fallback, no HTTP redirects,
 and fail closed on upstream errors or incomplete/invalid answers.
 
+Hosted Clef silently truncates long text state. The adapter instead rejects requests before
+dispatch when a conservative context bound exceeds the selected model's hosted window:
+
+| Model | Hosted context window (tokens) |
+| --- | --- |
+| `clef-flash` | 24,576 |
+| `clef` | 65,536 |
+
+The bound counts every UTF-8 byte of the complete serialized JSON request as one token, plus
+1,024 tokens for system framing, 128 per question and 64 per choice (summed across questions).
+This includes the intent, instructions, choice descriptions, identifiers and JSON escaping;
+the extra reserves cover the provider's [field/option rendering](https://huggingface.co/Cloudflare/clef-flash/blob/8b2e5fd17c09fd49bc2880b805d5323ec7ff4ff3/joint_schema_model.py).
+It deliberately underfills the context and can reject text that the real tokenizer would fit.
+Overflow produces a `reviewer_unavailable` denial without a provider request or human-approval
+request; it never truncates the intent locally or substitutes a different provider. Jev and
+OpenAI retain their existing behavior. Reassess the bound if Clef's tokenizer or framing changes.
+
 Validate model quality on labeled trading intents before using a new provider for live
-automatic approval. Published speed claims are not local measurements. Hosted Clef documents
-truncation of long text state; do not assume an in-schema result proves all evidence was read.
+automatic approval. Published speed claims are not local measurements.
 This integration does not fetch the documents named by evidence references or prove their
 authenticity. Keep prompts within the selected model's documented context and evaluate
 missing-context, prompt-injection and false-approval cases explicitly.

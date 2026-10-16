@@ -158,3 +158,6 @@ reviewer output is advisory while policy and broker boundaries remain authoritat
   uses named arrays (including refusals), and Cloudflare Clef REST adds a `success`/`result`
   envelope. Bind and validate every required answer; do not invent model explanations or treat
   vendor confidence scales as interchangeable approval thresholds.
+- Hosted Clef silently truncates text state. Bound the complete serialized UTF-8 request plus
+  provider-added question/option framing before dispatch; state-only or character-count limits
+  miss schema overhead, multibyte text and JSON escaping.
