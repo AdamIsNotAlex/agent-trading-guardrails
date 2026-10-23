@@ -38,9 +38,22 @@ See [docs/architecture.md](docs/architecture.md) for details.
 
 ## Prerequisites
 
-- Node.js >= 22
+- Node.js 22.23.4+ on the 22.x line, or 24.22.1+ (CI and containers pin 22.23.4)
 - pnpm (via Corepack: `corepack enable`)
 - Docker (for OPA sidecar and local development)
+
+Security baseline (2026-10-23): all Debian Bookworm build/runtime images install
+`ca-certificates>=20250419~deb12u2`. Workspace security overrides pin Vite 8.1.6,
+PostCSS 8.5.23 and Jayson 5.0.0; Vitest/coverage use 4.1.12+. Jayson 5 removes
+the vulnerable legacy UUID and streaming JSON dependencies instead of forcing
+incompatible major versions of those transitive APIs. The seven-day release-age
+policy remains enabled with explicit security exceptions.
+
+For host-only safe verification, run `pnpm build`, `pnpm test --maxWorkers=2`,
+`pnpm test:integration --maxWorkers=2`, then both `pnpm audit --prod` and
+`pnpm audit`. Integration acceptance starts actual loopback HTTP Guardrail/Broker/Agent
+processes with temporary databases, stubbed remote reviewer/OPA infrastructure,
+and paper execution only; it does not require Docker or place real orders.
 
 ## Getting Started
 

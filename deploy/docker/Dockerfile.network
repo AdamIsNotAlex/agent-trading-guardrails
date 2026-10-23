@@ -2,6 +2,7 @@ FROM debian:bookworm-slim
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
+        'ca-certificates>=20250419~deb12u2' \
         nftables \
         iproute2 \
         dnsmasq \

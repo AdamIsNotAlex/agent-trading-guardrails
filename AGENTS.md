@@ -161,3 +161,13 @@ reviewer output is advisory while policy and broker boundaries remain authoritat
 - Hosted Clef silently truncates text state. Bound the complete serialized UTF-8 request plus
   provider-added question/option framing before dispatch; state-only or character-count limits
   miss schema overhead, multibyte text and JSON escaping.
+- Security baseline: Node 22.23.4+ (22.x) or 24.22.1+, including CI and every Docker
+  builder/runtime stage. Explicit Bookworm bases keep the CA floor unambiguous:
+  install `ca-certificates>=20250419~deb12u2` in every image/stage.
+- Audit at all severities, not only high: Vite/PostCSS/Vitest and Solana's legacy
+  Jayson graph carried lower-severity advisories too. Jayson 5 drops UUID/stream-json;
+  do not override stream-json 1.x to ESM-only 3.x under a CommonJS consumer.
+- pnpm release-age exclusions accept scoped name globs (`@vitest/*`) but not a
+  name glob combined with a version (`@vitest/*@4.1.12`). Keep the age policy active.
+- Bound final Vitest runs with `--maxWorkers=2`. Host HTTP acceptance uses the
+  existing stack harness and paper execution, never live credentials or Docker mutation.
