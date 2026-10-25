@@ -5,7 +5,7 @@ import {
   OnchainSigningIntent,
   OnchainSimulationIntent,
 } from "@guardrails/schemas";
-import { zodToJsonSchema } from "zod-to-json-schema";
+import { z } from "zod";
 
 const trustedFields = { principal: true, environment: true, action: true, resource: true } as const;
 
@@ -22,12 +22,12 @@ export interface GuardedToolDefinition {
   parameters: Record<string, unknown>;
 }
 
-function parameters(schema: Parameters<typeof zodToJsonSchema>[0]): Record<string, unknown> {
-  const { $schema: _, ...json } = zodToJsonSchema(schema, { $refStrategy: "none" });
+function parameters(schema: z.ZodType): Record<string, unknown> {
+  const { $schema: _, ...json } = z.toJSONSchema(schema, { target: "draft-7", io: "input" });
   return json;
 }
 
-function onchainParameters(schemas: Array<Parameters<typeof zodToJsonSchema>[0]>) {
+function onchainParameters(schemas: z.ZodType[]) {
   const branches = schemas.map(parameters);
   const properties: Record<string, unknown> = {};
   for (const branch of branches) {

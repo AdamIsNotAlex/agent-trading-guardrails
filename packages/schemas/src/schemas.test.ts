@@ -187,13 +187,13 @@ describe("OnchainSigningIntent", () => {
     ) as {
       definitions: {
         "onchain-signing-intent": {
-          anyOf: Array<{
+          oneOf: Array<{
             properties?: { maxTokenApprovalAmount?: { pattern?: string } };
           }>;
         };
       };
     };
-    const pattern = schema.definitions["onchain-signing-intent"].anyOf
+    const pattern = schema.definitions["onchain-signing-intent"].oneOf
       .map((variant) => variant.properties?.maxTokenApprovalAmount?.pattern)
       .find((value): value is string => value !== undefined);
 

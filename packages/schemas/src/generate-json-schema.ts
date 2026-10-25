@@ -1,5 +1,5 @@
 import { mkdirSync, writeFileSync } from "node:fs";
-import { zodToJsonSchema } from "zod-to-json-schema";
+import { z } from "zod";
 import {
   AuditEvent,
   BrokerExecutionResult,
@@ -68,7 +68,12 @@ const outDir = new URL("../json-schema", import.meta.url).pathname;
 mkdirSync(outDir, { recursive: true });
 
 for (const [name, schema] of Object.entries(schemas)) {
-  const jsonSchema = zodToJsonSchema(schema, name);
+  const { $schema, ...definition } = z.toJSONSchema(schema, { target: "draft-7", io: "input" });
+  const jsonSchema = {
+    $schema,
+    $ref: `#/definitions/${name}`,
+    definitions: { [name]: definition },
+  };
   if (name === "onchain-signing-intent") patchMaxTokenApprovalAmount(jsonSchema);
   const path = `${outDir}/${name}.json`;
   writeFileSync(path, `${JSON.stringify(jsonSchema, null, 2)}\n`);

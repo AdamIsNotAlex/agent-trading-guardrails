@@ -183,6 +183,27 @@ describe("guardrail HTTP boundary", () => {
   });
 
   it.each([
+    "/evaluate",
+    "/dry-run",
+  ])("rejects oversized collections before processing %s and stays available", async (path) => {
+    const { origin, events, approvals } = await listen();
+    for (const evidence of [Array(65).fill("snapshot"), Array(10_000).fill(null)]) {
+      const response = await fetch(`${origin}${path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...binanceSpotOrder, evidence }),
+      });
+      expect(response.status).toBe(400);
+      await response.json();
+      expect(events).toEqual([]);
+      expect(approvals.list()).toEqual([]);
+    }
+    const valid = await evaluate(origin);
+    expect(valid.status).toBe(200);
+    expect(await valid.json()).toMatchObject({ outcome: "allow" });
+  });
+
+  it.each([
     "",
     "not a valid id",
     "a".repeat(129),

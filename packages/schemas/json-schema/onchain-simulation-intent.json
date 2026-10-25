@@ -1,14 +1,16 @@
 {
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "$ref": "#/definitions/onchain-simulation-intent",
   "definitions": {
     "onchain-simulation-intent": {
-      "anyOf": [
+      "oneOf": [
         {
           "type": "object",
           "properties": {
             "intentId": {
               "type": "string",
-              "format": "uuid"
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
             },
             "principal": {
               "type": "string",
@@ -28,7 +30,8 @@
             },
             "requestedAt": {
               "type": "string",
-              "format": "date-time"
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "idempotencyKey": {
               "type": "string",
@@ -39,12 +42,13 @@
               "minLength": 1
             },
             "evidence": {
+              "minItems": 1,
+              "maxItems": 64,
               "type": "array",
               "items": {
                 "type": "string",
                 "minLength": 1
-              },
-              "minItems": 1
+              }
             },
             "to": {
               "type": "string",
@@ -60,9 +64,13 @@
               "type": "string"
             },
             "instructions": {
+              "maxItems": 64,
               "type": "array",
               "items": {
                 "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
                 "additionalProperties": {}
               }
             },
@@ -75,6 +83,7 @@
               "enum": ["sepolia", "mainnet"]
             },
             "expectedDeltas": {
+              "maxItems": 256,
               "type": "array",
               "items": {
                 "type": "object",
@@ -92,7 +101,8 @@
                     "pattern": "^-?\\d+$"
                   },
                   "maxDelta": {
-                    "$ref": "#/definitions/onchain-simulation-intent/anyOf/0/properties/expectedDeltas/items/properties/minDelta"
+                    "type": "string",
+                    "pattern": "^-?\\d+$"
                   }
                 },
                 "required": ["address", "asset", "minDelta", "maxDelta"],
@@ -120,46 +130,71 @@
           "type": "object",
           "properties": {
             "intentId": {
-              "$ref": "#/definitions/onchain-simulation-intent/anyOf/0/properties/intentId"
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
             },
             "principal": {
-              "$ref": "#/definitions/onchain-simulation-intent/anyOf/0/properties/principal"
+              "type": "string",
+              "minLength": 1
             },
             "action": {
-              "$ref": "#/definitions/onchain-simulation-intent/anyOf/0/properties/action"
+              "type": "string",
+              "const": "onchain.simulate_transaction"
             },
             "resource": {
-              "$ref": "#/definitions/onchain-simulation-intent/anyOf/0/properties/resource"
+              "type": "string",
+              "minLength": 1
             },
             "environment": {
-              "$ref": "#/definitions/onchain-simulation-intent/anyOf/0/properties/environment"
+              "type": "string",
+              "enum": ["dev", "paper", "testnet", "canary_live", "production"]
             },
             "requestedAt": {
-              "$ref": "#/definitions/onchain-simulation-intent/anyOf/0/properties/requestedAt"
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "idempotencyKey": {
-              "$ref": "#/definitions/onchain-simulation-intent/anyOf/0/properties/idempotencyKey"
+              "type": "string",
+              "minLength": 1
             },
             "rationale": {
-              "$ref": "#/definitions/onchain-simulation-intent/anyOf/0/properties/rationale"
+              "type": "string",
+              "minLength": 1
             },
             "evidence": {
-              "$ref": "#/definitions/onchain-simulation-intent/anyOf/0/properties/evidence"
+              "minItems": 1,
+              "maxItems": 64,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
             },
             "to": {
-              "$ref": "#/definitions/onchain-simulation-intent/anyOf/0/properties/to"
+              "type": "string",
+              "minLength": 1
             },
             "data": {
-              "$ref": "#/definitions/onchain-simulation-intent/anyOf/0/properties/data"
+              "type": "string"
             },
             "value": {
-              "$ref": "#/definitions/onchain-simulation-intent/anyOf/0/properties/value"
+              "type": "string"
             },
             "programId": {
-              "$ref": "#/definitions/onchain-simulation-intent/anyOf/0/properties/programId"
+              "type": "string"
             },
             "instructions": {
-              "$ref": "#/definitions/onchain-simulation-intent/anyOf/0/properties/instructions"
+              "maxItems": 64,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              }
             },
             "chain": {
               "type": "string",
@@ -170,6 +205,7 @@
               "enum": ["devnet", "mainnet"]
             },
             "expectedDeltas": {
+              "maxItems": 256,
               "type": "array",
               "items": {
                 "type": "object",
@@ -183,10 +219,12 @@
                     "minLength": 1
                   },
                   "minDelta": {
-                    "$ref": "#/definitions/onchain-simulation-intent/anyOf/0/properties/expectedDeltas/items/properties/minDelta"
+                    "type": "string",
+                    "pattern": "^-?\\d+$"
                   },
                   "maxDelta": {
-                    "$ref": "#/definitions/onchain-simulation-intent/anyOf/0/properties/expectedDeltas/items/properties/minDelta"
+                    "type": "string",
+                    "pattern": "^-?\\d+$"
                   }
                 },
                 "required": ["account", "asset", "minDelta", "maxDelta"],
@@ -212,6 +250,5 @@
         }
       ]
     }
-  },
-  "$schema": "http://json-schema.org/draft-07/schema#"
+  }
 }

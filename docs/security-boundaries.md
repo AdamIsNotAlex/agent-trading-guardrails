@@ -77,6 +77,29 @@ When the required sandbox, network, and filesystem controls are deployed, the ag
 - Receive structured rejection reasons
 - Query order status through guarded read-only endpoints
 
+## Intent Validation Limits
+
+Guardrail and Broker reject intents exceeding these collection limits with HTTP 400,
+before reviewer, policy, approval, or execution processing. The same limits apply to
+direct schema parsing and guarded tool parameters; inputs are rejected, never truncated.
+
+| Intent collection | Minimum items | Maximum items |
+|-------------------|---------------|---------------|
+| `evidence` | 1 | 64 |
+| `instructions` (optional) | 0 | 64 |
+| Simulation `expectedDeltas` (optional) | 0 | 256 |
+| Signing `expectedDeltas` | 1 | 256 |
+
+These bounds complement the existing 1 MiB HTTP JSON body limit. Zod 4.6.6 or newer
+is required for [GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5):
+leading array size checks reject oversized inputs before validating their elements.
+Adding `.max()` to the old Zod 3 parser alone did not provide that early rejection.
+Intent validation selects one branch by `action`, then by `chain` for onchain intents,
+instead of retrying every union branch and multiplying validation errors.
+
+Generated draft-7 JSON Schemas and native tool parameters use Zod's built-in
+`toJSONSchema` input conversion and publish the same collection bounds.
+
 ## Secret Isolation
 
 | Secret Type | Storage | Access Path |

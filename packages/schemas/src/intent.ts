@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { AccountMode, Action, Environment, MarginType, OrderSide, OrderType } from "./common.js";
 
+const MAX_EVIDENCE_ITEMS = 64;
+const MAX_INSTRUCTIONS = 64;
+const MAX_EXPECTED_DELTAS = 256;
+
 export const IntentEnvelope = z
   .object({
     intentId: z.string().uuid(),
@@ -11,7 +15,7 @@ export const IntentEnvelope = z
     requestedAt: z.string().datetime(),
     idempotencyKey: z.string().min(1),
     rationale: z.string().min(1),
-    evidence: z.array(z.string().min(1)).min(1),
+    evidence: z.array(z.string().min(1)).min(1).max(MAX_EVIDENCE_ITEMS),
   })
   .strict();
 export type IntentEnvelope = z.infer<typeof IntentEnvelope>;
@@ -82,24 +86,24 @@ const OnchainSimulationBase = {
   data: z.string().optional(),
   value: z.string().optional(),
   programId: z.string().optional(),
-  instructions: z.array(z.record(z.unknown())).optional(),
+  instructions: z.array(z.record(z.string(), z.unknown())).max(MAX_INSTRUCTIONS).optional(),
 };
 
 const EvmOnchainSimulationIntent = IntentEnvelope.extend({
   ...OnchainSimulationBase,
   chain: z.literal("ethereum"),
   chainEnvironment: EvmChainEnvironment,
-  expectedDeltas: z.array(EvmExpectedBalanceDelta).optional(),
+  expectedDeltas: z.array(EvmExpectedBalanceDelta).max(MAX_EXPECTED_DELTAS).optional(),
 }).strict();
 
 const SolanaOnchainSimulationIntent = IntentEnvelope.extend({
   ...OnchainSimulationBase,
   chain: z.literal("solana"),
   chainEnvironment: SolanaChainEnvironment,
-  expectedDeltas: z.array(SolanaExpectedBalanceDelta).optional(),
+  expectedDeltas: z.array(SolanaExpectedBalanceDelta).max(MAX_EXPECTED_DELTAS).optional(),
 }).strict();
 
-export const OnchainSimulationIntent = z.union([
+export const OnchainSimulationIntent = z.discriminatedUnion("chain", [
   EvmOnchainSimulationIntent,
   SolanaOnchainSimulationIntent,
 ]);
@@ -124,7 +128,7 @@ const OnchainSigningBase = {
   data: z.string().optional(),
   value: z.string().optional(),
   programId: z.string().optional(),
-  instructions: z.array(z.record(z.unknown())).optional(),
+  instructions: z.array(z.record(z.string(), z.unknown())).max(MAX_INSTRUCTIONS).optional(),
   simulationId: z.string().uuid(),
   maxTokenApprovalAmount: TokenApprovalAmount.optional(),
 };
@@ -133,7 +137,7 @@ const EvmOnchainSigningIntent = IntentEnvelope.extend({
   ...OnchainSigningBase,
   chain: z.literal("ethereum"),
   chainEnvironment: EvmChainEnvironment,
-  expectedDeltas: z.array(EvmExpectedBalanceDelta).nonempty(),
+  expectedDeltas: z.array(EvmExpectedBalanceDelta).min(1).max(MAX_EXPECTED_DELTAS),
 }).strict();
 
 const SolanaOnchainSigningIntent = IntentEnvelope.extend({
@@ -141,13 +145,16 @@ const SolanaOnchainSigningIntent = IntentEnvelope.extend({
   chain: z.literal("solana"),
   chainEnvironment: SolanaChainEnvironment,
   programId: z.string().min(1),
-  expectedDeltas: z.array(SolanaExpectedBalanceDelta).nonempty(),
+  expectedDeltas: z.array(SolanaExpectedBalanceDelta).min(1).max(MAX_EXPECTED_DELTAS),
 }).strict();
 
-export const OnchainSigningIntent = z.union([EvmOnchainSigningIntent, SolanaOnchainSigningIntent]);
+export const OnchainSigningIntent = z.discriminatedUnion("chain", [
+  EvmOnchainSigningIntent,
+  SolanaOnchainSigningIntent,
+]);
 export type OnchainSigningIntent = z.infer<typeof OnchainSigningIntent>;
 
-export const TradingIntent = z.union([
+export const TradingIntent = z.discriminatedUnion("action", [
   CexOrderIntent,
   CexCancelIntent,
   CexOrderStatusIntent,

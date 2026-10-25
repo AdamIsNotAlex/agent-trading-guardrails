@@ -171,3 +171,7 @@ reviewer output is advisory while policy and broker boundaries remain authoritat
   name glob combined with a version (`@vitest/*@4.1.12`). Keep the age policy active.
 - Bound final Vitest runs with `--maxWorkers=2`. Host HTTP acceptance uses the
   existing stack harness and paper execution, never live credentials or Docker mutation.
+- Zod 4.6.6+ rejects oversized arrays before parsing elements only when a leading upper
+  bound is declared; upgrading alone does not bound unbounded arrays, and Zod 3 `.max()`
+  still walked them. Keep Intent collection caps and nested `action`/`chain` discriminators.
+  Native `z.toJSONSchema` replaces `zod-to-json-schema`; use draft-7 input conversion.

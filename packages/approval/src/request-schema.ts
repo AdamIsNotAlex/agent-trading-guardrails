@@ -12,7 +12,7 @@ const base = z.object({
   environment: Environment,
   escalationReason: z.string(),
   approvalType: z.enum(["one_time", "allowlist_onboarding"]),
-  intentData: z.record(z.unknown()),
+  intentData: z.record(z.string(), z.unknown()),
   createdAt: z.string().datetime(),
   timeoutAt: z.string().datetime(),
 });

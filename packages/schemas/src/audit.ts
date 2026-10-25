@@ -44,7 +44,7 @@ export const AuditEvent = z
     promptId: z.string().optional(),
     sessionId: z.string().optional(),
     inputRef: z.string().optional(),
-    data: z.record(z.unknown()),
+    data: z.record(z.string(), z.unknown()),
     previousHash: z.string().min(1),
     eventHash: z.string().min(1),
   })

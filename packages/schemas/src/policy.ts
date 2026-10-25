@@ -28,7 +28,7 @@ export const PolicyInput = z
     reviewerVerdict: z.string().optional(),
     reviewerRiskLevel: RiskTier.optional(),
     reviewerDetectedIssues: z.array(z.string()).optional(),
-    riskCheckResults: z.record(z.unknown()).optional(),
+    riskCheckResults: z.record(z.string(), z.unknown()).optional(),
     dailyNotionalUsd: z.number().finite().optional(),
     projectedDailyNotionalUsd: z.number().finite().optional(),
     dailyRealizedLossUsd: z.number().finite().optional(),

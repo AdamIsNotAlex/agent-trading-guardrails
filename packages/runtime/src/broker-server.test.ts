@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ApprovalStore } from "@guardrails/approval";
 import { createGuardrailDecisionToken } from "@guardrails/broker";
-import { binanceSpotOrder } from "@guardrails/schemas/fixtures";
+import { binanceSpotOrder, solanaDevnetSigning } from "@guardrails/schemas/fixtures";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createBrokerRuntime, type Runtime } from "./runtime.js";
 
@@ -143,6 +143,33 @@ describe("standalone broker HTTP boundary", () => {
       status: "rejected",
       revalidationPassed: false,
     });
+  });
+
+  it.each([
+    "/execute",
+    "/dry-run",
+  ])("rejects oversized intent collections at %s before broker processing", async (path) => {
+    const executeUrl = await start();
+    const url = new URL(path, executeUrl).href;
+    const signed = approval();
+    const invalidIntents = [
+      { ...signed.intent, evidence: Array(65).fill("snapshot") },
+      { ...signed.intent, evidence: Array(10_000).fill(null) },
+      { ...solanaDevnetSigning, instructions: Array(65).fill({ type: "transfer" }) },
+    ];
+    for (const intent of invalidIntents) {
+      const response = await execute(url, {
+        ...signed,
+        intentId: intent.intentId,
+        intent,
+        ...(path === "/dry-run" ? { dryRun: true } : {}),
+      });
+      expect(response.status).toBe(400);
+      await response.json();
+    }
+    const valid = await execute(executeUrl, signed);
+    expect(valid.status).toBe(200);
+    expect(await valid.json()).toMatchObject({ status: "executed", executionKind: "cex_order" });
   });
 
   it("honors the startup kill switch even for a correctly signed decision", async () => {

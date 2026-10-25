@@ -34,7 +34,7 @@ const snapshotSchema = z.object({
       orderCount: z.number().int().nonnegative(),
     }),
   ),
-  lastOrderTimestamps: z.record(timestamp.nullable()),
+  lastOrderTimestamps: z.record(z.string(), timestamp.nullable()),
 });
 
 // One trusted, atomically replaced snapshot per evaluation; never derive risk facts from the intent.
