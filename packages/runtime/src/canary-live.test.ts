@@ -6,13 +6,15 @@ import { AuditWriter } from "@guardrails/audit";
 import {
   createGuardrailDecisionToken,
   ExecutionBroker,
+  type ExecutionConnector,
   FileBrokerIdempotencyStore,
   type GuardrailApproval,
   type GuardrailDryRunApproval,
   InMemoryKillSwitch,
+  PaperExecutionConnector,
 } from "@guardrails/broker";
 import type { BrokerOrderReconciliation, TradingIntent } from "@guardrails/schemas";
-import { binanceSpotOrder } from "@guardrails/schemas/fixtures";
+import { binanceCancelOrder, binanceSpotOrder } from "@guardrails/schemas/fixtures";
 import Database from "better-sqlite3";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -62,7 +64,7 @@ function harness() {
     observed: acknowledged,
     discrepancies: [],
   };
-  const execute = vi.fn(async (_intent: TradingIntent, before?: () => void) => {
+  const execute = vi.fn<ExecutionConnector["execute"]>(async (_intent, before) => {
     before?.();
     return { orderId: acknowledged.orderId, orderStatus: acknowledged, reconciliation };
   });
@@ -149,6 +151,31 @@ function approvedRequest(store: ApprovalStore) {
 }
 
 describe("canary first-order closure", () => {
+  it("previews and executes an emergency cancellation without enabling new orders", async () => {
+    const h = harness();
+    const connector = new PaperExecutionConnector();
+    h.execute.mockImplementation(connector.execute.bind(connector));
+    h.kill.activate({ type: "global" });
+    const intent = { ...binanceCancelOrder, orderId: acknowledged.orderId };
+    const report = await h.broker.dryRun(preview(intent));
+    expect(report.passed).toBe(true);
+    expect(report.authorization).toBeDefined();
+    expect(h.execute).not.toHaveBeenCalled();
+    const signed = approval(intent);
+    const result = await h.broker.execute(signed);
+    expect(result).toMatchObject({
+      status: "executed",
+      executionKind: "cex_cancel",
+      orderId: intent.orderId,
+      revalidationPassed: true,
+    });
+    expect(await h.createBroker().execute(signed)).toEqual(result);
+    expect((await h.broker.dryRun(preview())).passed).toBe(false);
+    expect((await h.broker.execute(approval())).status).toBe("rejected");
+    expect(h.execute).toHaveBeenCalledTimes(1);
+    expect(h.kill.isActive({ type: "global" })).toBe(true);
+  });
+
   it("previews without consuming approval or reserving execution, then executes exactly once", async () => {
     const h = harness();
     const id = approvedRequest(h.approvals);

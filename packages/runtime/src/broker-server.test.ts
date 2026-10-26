@@ -4,7 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ApprovalStore } from "@guardrails/approval";
 import { createGuardrailDecisionToken } from "@guardrails/broker";
-import { binanceSpotOrder, solanaDevnetSigning } from "@guardrails/schemas/fixtures";
+import { BrokerExecutionResult, type TradingIntent } from "@guardrails/schemas";
+import {
+  binanceCancelOrder,
+  binanceSpotOrder,
+  solanaDevnetSigning,
+} from "@guardrails/schemas/fixtures";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createBrokerRuntime, type Runtime } from "./runtime.js";
 
@@ -61,8 +66,7 @@ function openStore() {
   return store;
 }
 
-function approval() {
-  const intent = { ...binanceSpotOrder, environment: "dev" as const };
+function approval(intent: TradingIntent = { ...binanceSpotOrder, environment: "dev" }) {
   const facts = {
     intent,
     correlationId: "signed-decision-id",
@@ -78,7 +82,7 @@ function approval() {
 
 function needsHuman(
   approvalId: string,
-  intent = { ...binanceSpotOrder, environment: "dev" as const },
+  intent: TradingIntent = { ...binanceSpotOrder, environment: "dev" },
 ) {
   const facts = {
     intent,
@@ -172,12 +176,64 @@ describe("standalone broker HTTP boundary", () => {
     expect(await valid.json()).toMatchObject({ status: "executed", executionKind: "cex_order" });
   });
 
-  it("honors the startup kill switch even for a correctly signed decision", async () => {
+  it("cancels through HTTP after a stop without bypassing authorization or enabling orders", async () => {
+    const placed = BrokerExecutionResult.parse(
+      await (await execute(await start(), approval())).json(),
+    );
+    expect(placed.status).toBe("executed");
+    if (!("orderId" in placed) || !placed.orderId) throw new Error("Paper order ID is missing.");
+    await stop();
     vi.stubEnv("BROKER_KILL_SWITCH", "true");
-    const response = await execute(await start(), approval());
-    expect(await response.json()).toMatchObject({
+    const url = await start();
+    const intent = { ...binanceCancelOrder, environment: "dev" as const, orderId: placed.orderId };
+    const signed = approval(intent);
+    const tampered = { ...signed, intent: { ...intent, orderId: "another-order" } };
+    expect(await (await execute(url, tampered)).json()).toMatchObject({
+      status: "rejected",
+      rejectionReason: "Guardrail decision token is invalid.",
+    });
+
+    const store = openStore();
+    const request = store.create({
+      intentId: intent.intentId,
+      correlationId: signed.correlationId,
+      principal: intent.principal,
+      action: intent.action,
+      resource: intent.resource,
+      environment: intent.environment,
+      escalationReason: "Operator review required.",
+      approvalType: "one_time",
+      intentData: intent,
+    });
+    const authorized = needsHuman(request.approvalId, intent);
+    expect(await (await execute(url, authorized)).json()).toMatchObject({
+      status: "rejected",
+      rejectionReason: "Human approval is required before execution.",
+    });
+    expect(store.approve(request.approvalId, "operator")?.state).toBe("approved");
+    const response = await execute(url, authorized);
+    expect(response.status).toBe(200);
+    const cancelled = await response.json();
+    expect(cancelled).toMatchObject({
+      status: "executed",
+      executionKind: "cex_cancel",
+      orderId: placed.orderId,
+      revalidationPassed: true,
+    });
+    expect(store.get(request.approvalId)?.state).toBe("consumed");
+    await stop();
+    const restarted = await start();
+    expect(await (await execute(restarted, authorized)).json()).toEqual(cancelled);
+    const newOrder = approval({
+      ...binanceSpotOrder,
+      environment: "dev",
+      intentId: "550e8400-e29b-41d4-a716-446655440009",
+      idempotencyKey: "new-order-after-stop",
+    });
+    expect(await (await execute(restarted, newOrder)).json()).toMatchObject({
       status: "rejected",
       revalidationPassed: false,
+      rejectionReason: "Kill switch is active.",
     });
   });
 

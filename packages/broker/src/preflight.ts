@@ -38,7 +38,11 @@ export function getKillSwitchScopes(intent: TradingIntent): KillSwitchScope[] {
   return scopes;
 }
 
-export function readKillSwitchActive(killSwitch: KillSwitch, scope: KillSwitchScope): boolean {
+export function readKillSwitchBlocking(
+  killSwitch: KillSwitch,
+  scope: KillSwitchScope,
+  intent: TradingIntent,
+): boolean {
   let active: unknown;
   try {
     active = killSwitch.isActive(scope);
@@ -48,7 +52,8 @@ export function readKillSwitchActive(killSwitch: KillSwitch, scope: KillSwitchSc
   if (typeof active !== "boolean") {
     throw new KillSwitchReachabilityError();
   }
-  return active;
+  // Cancellation may proceed during a known stop, never with an unknown controller state.
+  return active && intent.action !== "cex.cancel_order";
 }
 
 export class LiveModePreflightCheck {
@@ -70,7 +75,7 @@ export class LiveModePreflightCheck {
   private checkKillSwitch(): PreflightCheckResult {
     try {
       for (const scope of getKillSwitchScopes(this.params.intent)) {
-        if (readKillSwitchActive(this.params.killSwitch, scope)) {
+        if (readKillSwitchBlocking(this.params.killSwitch, scope, this.params.intent)) {
           return { check: "kill_switch", passed: false, message: "Kill switch is active." };
         }
       }

@@ -1,4 +1,4 @@
-import { binanceSpotOrder } from "@guardrails/schemas/fixtures";
+import { binanceCancelOrder, binanceSpotOrder } from "@guardrails/schemas/fixtures";
 import { describe, expect, it, vi } from "vitest";
 import type { KillSwitchScope } from "./interfaces.js";
 import { InMemoryKillSwitch } from "./kill-switch.js";
@@ -31,14 +31,17 @@ describe("live preflight failures", () => {
     expect(result.checks.find((check) => check.check === "kill_switch")?.passed).toBe(false);
   });
 
-  it("never mistakes an unknown kill state for inactive or exposes backend details", () => {
+  it.each([
+    binanceSpotOrder,
+    binanceCancelOrder,
+  ])("fails closed on unknown kill state for $action without exposing backend details", (intent) => {
     const killSwitch = new InMemoryKillSwitch();
     const read = vi.spyOn(killSwitch, "isActive").mockReturnValue(undefined as unknown as boolean);
-    expect(run({ killSwitch }).passed).toBe(false);
+    expect(run({ killSwitch, intent }).passed).toBe(false);
     read.mockImplementation(() => {
       throw new Error("sensitive-backend-detail");
     });
-    const failed = run({ killSwitch });
+    const failed = run({ killSwitch, intent });
     expect(failed.passed).toBe(false);
     expect(JSON.stringify(failed)).not.toContain("sensitive-backend-detail");
     read.mockRestore();

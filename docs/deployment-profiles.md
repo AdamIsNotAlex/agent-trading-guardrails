@@ -280,6 +280,12 @@ missing-context, prompt-injection and false-approval cases explicitly.
 
 `GUARDRAIL_AUDIT_DB_PATH` and `BROKER_AUDIT_DB_PATH` default to `./data/guardrail-audit.db` and `./data/broker-audit.db`; corresponding `*_AUDIT_HASH_ANCHOR_PATH` variables select separate anchors. Generic `AUDIT_DB_PATH`/`AUDIT_HASH_ANCHOR_PATH` remain usable when configuring just one process. Never point two processes at the same chain. `BROKER_IDEMPOTENCY_PATH` defaults to `./data/broker-idempotency.json`; preserve it across restarts. `BROKER_KILL_SWITCH=true` starts the broker with its global kill switch active.
 
+An active switch blocks new orders and other non-cancellation execution, but permits authorized
+`cex.cancel_order` requests through the normal Broker path. Signature, approval, environment,
+connector, audit, idempotency, and kill-switch reachability checks remain enforced. Keep the stop
+active and the existing live account/product configuration while cancelling real orders; switch to
+paper/testnet only afterward. See the [rollback procedure](live-trading-safety.md#rollback).
+
 Broker JSON state updates use a persistent SQLite mutex at `${BROKER_IDEMPOTENCY_PATH}.lock`.
 All processes sharing the JSON state must share that same mutex on a local filesystem with
 SQLite-compatible locking, not NFS or separate per-replica files. `BEGIN IMMEDIATE` covers

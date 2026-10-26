@@ -39,7 +39,7 @@ Operator checklist before enabling canary-live (the dependency and credential ga
 - [ ] Binance trading key reports `enableWithdrawals: false` through signed SAPI permissions lookup.
 - [ ] `BINANCE_IP_ALLOWLIST` contains explicit, unique IP literals and the key reports `ipRestrict: true`.
 - [ ] Audit storage accepts a probe event whose readback, HMAC chain head, and external hash anchor verify.
-- [ ] Kill switch is initialized, reachable, and inactive at every applicable scope; unknown state is not treated as inactive.
+- [ ] Kill switch is initialized and reachable at every applicable scope, and inactive before enabling non-cancellation execution. Authorized cancellations may proceed during an active stop; unknown state still fails closed.
 - [ ] An explicit approval database is configured and passes an immediate transactional write/read/delete probe.
 - [ ] Human approval is required unless policy explicitly allows no-human low-risk trades.
 - [ ] Dedicated account/product, exhaustive history symbols, supported fee currencies, and reconciled
@@ -130,26 +130,46 @@ and use guarded status queries; do not retry the trade with a new idempotency ke
 
 ## Kill Switch
 
-The kill switch immediately halts all execution. It can be activated at multiple scopes:
+The kill switch blocks matching execution except authorized `cex.cancel_order` intents. New orders
+and signing remain blocked; status queries and simulations are not additional exceptions. The stop
+does not automatically cancel existing orders or retract requests already dispatched to an exchange.
+It can be activated at multiple scopes:
 
-| Scope | Effect |
+| Scope | Effect (authorized CEX cancellations remain available) |
 |-------|--------|
-| Global | All execution halted |
-| Per-agent | Specific agent halted |
-| Per-account | Specific CEX account/subaccount halted |
-| Per-exchange | All activity on specific exchange halted |
-| Per-chain | All onchain activity on specific chain halted |
+| Global | All non-cancellation execution halted |
+| Per-agent | Non-cancellation execution by the specified agent halted |
+| Per-account | Non-cancellation execution for the specified CEX account/subaccount halted |
+| Per-exchange | Non-cancellation execution on the specified exchange halted |
+| Per-chain | All onchain execution on the specified chain halted |
 
 The standalone runtime initializes an in-memory backend. `BROKER_KILL_SWITCH=true` starts it in
 global-stop state; changing that environment setting requires a restart. Embedded backends must
 return a real boolean from `isActive(scope)` or throw on an unavailable controller.
 
+Cancellation is exempt only from rejection for a known active switch, not from controller
+reachability checks. The same rule applies to live preflight, broker previews, checks before/after
+revalidation, and the final check before connector side effects. Guardrail authorization, decision
+signature/freshness, environment matching, required human approval, audit health, idempotency, and
+connector account/product/permission checks still apply. An unavailable or malformed kill-switch
+backend fails closed even for cancellations.
+
 ## Rollback
 
 If live trading reveals issues:
 
-1. Activate kill switch at the appropriate scope.
-2. Review audit log for the decision chain.
-3. Cancel any open orders through the broker.
-4. Revert to paper/testnet mode.
-5. Investigate and fix before re-enabling.
+1. Activate the kill switch at the appropriate scope. For the standalone runtime, set
+   `BROKER_KILL_SWITCH=true` and restart the Broker with its existing live configuration and durable
+   state paths; changing the environment variable alone does not update a running process.
+2. Review the audit log and identify the affected account/product, symbols, and open order IDs.
+3. **Keep the kill switch active.** Obtain a fresh Guardrail decision for each `cex.cancel_order`
+   intent and submit it to Broker `POST /execute`, completing human approval if required. Each
+   cancellation needs its own intent ID and idempotency key, distinct from the original placement;
+   retries of that cancellation reuse its key. Retain the original live environment, account/product,
+   credentials, and `BROKER_CANARY_LIVE_ENABLED=true` until cancellations complete. Cancellation
+   requires no new-order dry-run receipt, but all other authorization and safety checks remain.
+4. Check cancellation results and audit records, and confirm remaining orders with the exchange.
+   Do not disable the switch to bypass a failed authorization, unavailable dependency, or rejected
+   cancellation. Once real-account cancellations are confirmed, revert to paper/testnet mode;
+   simulated/testnet cancellations cannot cancel live orders.
+5. Investigate and fix before re-enabling non-cancellation execution.

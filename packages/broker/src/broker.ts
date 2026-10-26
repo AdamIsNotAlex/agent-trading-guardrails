@@ -26,7 +26,11 @@ import {
   type KillSwitch,
   type KillSwitchScope,
 } from "./interfaces.js";
-import { getKillSwitchScopes, LiveModePreflightCheck, readKillSwitchActive } from "./preflight.js";
+import {
+  getKillSwitchScopes,
+  LiveModePreflightCheck,
+  readKillSwitchBlocking,
+} from "./preflight.js";
 
 export interface BrokerConfig {
   environment: Environment;
@@ -363,7 +367,7 @@ export class ExecutionBroker {
     try {
       const scopes = getKillSwitchScopes(intent);
       for (const scope of scopes) {
-        if (readKillSwitchActive(this.killSwitch, scope)) {
+        if (readKillSwitchBlocking(this.killSwitch, scope, intent)) {
           this.audit.write({
             eventType: "killswitch.blocked",
             environment: this.config.environment,
@@ -412,7 +416,7 @@ export class ExecutionBroker {
       }
 
       for (const scope of scopes) {
-        if (readKillSwitchActive(this.killSwitch, scope)) {
+        if (readKillSwitchBlocking(this.killSwitch, scope, intent)) {
           this.audit.write({
             eventType: "killswitch.blocked",
             environment: this.config.environment,
@@ -468,7 +472,7 @@ export class ExecutionBroker {
       let executionResult: Awaited<ReturnType<ExecutionConnector["execute"]>>;
       try {
         executionResult = await this.connector.execute(intent, () => {
-          this.assertKillSwitchInactive(scopes, intent, approval.correlationId);
+          this.assertKillSwitchAllowsExecution(scopes, intent, approval.correlationId);
           if (
             canaryOrder &&
             !dryRunIsFresh(
@@ -668,13 +672,13 @@ export class ExecutionBroker {
           ? { message: this.nonEmptyReason(validation.reason, "Connector revalidation failed.") }
           : {}),
       });
-      const inactive = getKillSwitchScopes(intent).every(
-        (scope) => !readKillSwitchActive(this.killSwitch, scope),
+      const allowed = getKillSwitchScopes(intent).every(
+        (scope) => !readKillSwitchBlocking(this.killSwitch, scope, intent),
       );
       report.checks.push({
         check: "late_kill_switch",
-        passed: inactive,
-        ...(!inactive ? { message: "Kill switch is active." } : {}),
+        passed: allowed,
+        ...(!allowed ? { message: "Kill switch is active." } : {}),
       });
     } catch {
       report.checks.push({
@@ -904,19 +908,19 @@ export class ExecutionBroker {
     );
   }
 
-  private assertKillSwitchInactive(
+  private assertKillSwitchAllowsExecution(
     scopes: KillSwitchScope[],
     intent: TradingIntent,
     correlationId: string,
   ): void {
     for (const scope of scopes) {
-      let active: boolean;
+      let blocked: boolean;
       try {
-        active = readKillSwitchActive(this.killSwitch, scope);
+        blocked = readKillSwitchBlocking(this.killSwitch, scope, intent);
       } catch {
         throw new ConnectorRevalidationError("Kill switch is not reachable.");
       }
-      if (active) {
+      if (blocked) {
         this.audit.write({
           eventType: "killswitch.blocked",
           environment: this.config.environment,

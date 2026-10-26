@@ -182,3 +182,6 @@ reviewer output is advisory while policy and broker boundaries remain authoritat
   the trading allowlists only for new orders. Cancellation key permissions follow the configured
   `accountMode`, not symbol membership: retired symbols must remain manageable without skipping
   the product's trading-permission check.
+- Emergency `cex.cancel_order` intents may pass a known active Kill Switch, but unknown/unreachable
+  state still fails closed. Keep this action-aware rule shared by live preflight, dry-run, both
+  execution checks, and the connector side-effect callback; never bypass the remaining guards.

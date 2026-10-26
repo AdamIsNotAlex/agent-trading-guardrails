@@ -19,7 +19,12 @@ import {
   type GuardrailApproval,
 } from "./broker.js";
 import { FileBrokerIdempotencyStore, InMemoryBrokerIdempotencyStore } from "./idempotency-store.js";
-import type { AuditWriter, BrokerIdempotencyStore, ExecutionConnector } from "./interfaces.js";
+import type {
+  AuditWriter,
+  BrokerIdempotencyStore,
+  ExecutionConnector,
+  KillSwitchScope,
+} from "./interfaces.js";
 import { InMemoryKillSwitch, KillSwitchAuditError } from "./kill-switch.js";
 import { PaperExecutionConnector } from "./paper-connector.js";
 
@@ -1025,6 +1030,107 @@ describe("ExecutionBroker", () => {
       cause,
     });
     expect(ks.isActive(scope)).toBe(true);
+  });
+
+  it.each<KillSwitchScope>([
+    { type: "global" },
+    { type: "agent", principal: binanceCancelOrder.principal },
+    { type: "account", account: binanceCancelOrder.account },
+    { type: "exchange", exchange: binanceCancelOrder.exchange },
+  ])("allows authorized cancellation under an active $type stop", async (scope) => {
+    const killSwitch = new InMemoryKillSwitch();
+    killSwitch.activate(scope);
+    const audit = makeAudit();
+    const approvals = new ApprovalStore({ databasePath: ":memory:", defaultTimeoutSeconds: 300 });
+    try {
+      const broker = new ExecutionBroker(
+        config,
+        new PaperExecutionConnector(),
+        killSwitch,
+        audit,
+        makeIdempotency(),
+        approvals,
+      );
+      const signed = makeApproval(binanceCancelOrder);
+      const result = await broker.execute(signed);
+      expect(result).toMatchObject({
+        status: "executed",
+        executionKind: "cex_cancel",
+        orderId: binanceCancelOrder.orderId,
+        revalidationPassed: true,
+      });
+      expect(await broker.execute(signed)).toEqual(result);
+      expect(audit.events.filter((event) => event.eventType === "broker.executed")).toHaveLength(1);
+      expect(audit.events.some((event) => event.eventType === "killswitch.blocked")).toBe(false);
+      expect(killSwitch.isActive(scope)).toBe(true);
+    } finally {
+      approvals.close();
+    }
+  });
+
+  it("still revalidates emergency cancellations before dispatch", async () => {
+    const killSwitch = new InMemoryKillSwitch();
+    killSwitch.activate({ type: "global" });
+    const connector = new PaperExecutionConnector();
+    const execute = vi.spyOn(connector, "execute");
+    vi.spyOn(connector, "revalidate").mockResolvedValue({
+      passed: false,
+      reason: "Account is not authorized.",
+    });
+    const approvals = new ApprovalStore({ databasePath: ":memory:", defaultTimeoutSeconds: 300 });
+    try {
+      const broker = new ExecutionBroker(
+        config,
+        connector,
+        killSwitch,
+        makeAudit(),
+        makeIdempotency(),
+        approvals,
+      );
+      expect(await broker.execute(makeApproval(binanceCancelOrder))).toMatchObject({
+        status: "rejected",
+        revalidationPassed: false,
+        rejectionReason: "Account is not authorized.",
+      });
+      expect(execute).not.toHaveBeenCalled();
+    } finally {
+      approvals.close();
+    }
+  });
+
+  it.each([
+    binanceSpotOrder,
+    binanceCancelOrder,
+  ])("applies a stop activated during revalidation to $action", async (intent) => {
+    const killSwitch = new InMemoryKillSwitch();
+    const connector = new PaperExecutionConnector();
+    const execute = vi.spyOn(connector, "execute");
+    vi.spyOn(connector, "revalidate").mockImplementation(async () => {
+      await Promise.resolve();
+      killSwitch.activate({ type: "global" });
+      return { passed: true };
+    });
+    const approvals = new ApprovalStore({ databasePath: ":memory:", defaultTimeoutSeconds: 300 });
+    try {
+      const broker = new ExecutionBroker(
+        config,
+        connector,
+        killSwitch,
+        makeAudit(),
+        makeIdempotency(),
+        approvals,
+      );
+      const result = await broker.execute(makeApproval(intent));
+      if (intent.action === "cex.cancel_order") {
+        expect(result).toMatchObject({ status: "executed", executionKind: "cex_cancel" });
+        expect(execute).toHaveBeenCalledTimes(1);
+      } else {
+        expect(result).toMatchObject({ status: "rejected", revalidationPassed: false });
+        expect(execute).not.toHaveBeenCalled();
+      }
+    } finally {
+      approvals.close();
+    }
   });
 
   it("rejects when kill switch is active (global)", async () => {
