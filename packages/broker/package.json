@@ -17,9 +17,11 @@
   "dependencies": {
     "@guardrails/approval": "workspace:*",
     "@guardrails/schemas": "workspace:*",
-    "@guardrails/secrets": "workspace:*"
+    "@guardrails/secrets": "workspace:*",
+    "better-sqlite3": "^12.9.0"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.6.0"
   }
 }

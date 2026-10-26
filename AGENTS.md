@@ -175,3 +175,6 @@ reviewer output is advisory while policy and broker boundaries remain authoritat
   bound is declared; upgrading alone does not bound unbounded arrays, and Zod 3 `.max()`
   still walked them. Keep Intent collection caps and nested `action`/`chain` discriminators.
   Native `z.toJSONSchema` replaces `zod-to-json-schema`; use draft-7 input conversion.
+- Broker JSON idempotency uses a persistent SQLite `.lock` mutex, not an expiring directory
+  lease. Keep its inode stable; process death releases the lock without clearing uncertain
+  reservations. Upgrades must stop all old writers before removing a legacy lock directory.

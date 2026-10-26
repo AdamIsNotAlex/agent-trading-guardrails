@@ -280,6 +280,22 @@ missing-context, prompt-injection and false-approval cases explicitly.
 
 `GUARDRAIL_AUDIT_DB_PATH` and `BROKER_AUDIT_DB_PATH` default to `./data/guardrail-audit.db` and `./data/broker-audit.db`; corresponding `*_AUDIT_HASH_ANCHOR_PATH` variables select separate anchors. Generic `AUDIT_DB_PATH`/`AUDIT_HASH_ANCHOR_PATH` remain usable when configuring just one process. Never point two processes at the same chain. `BROKER_IDEMPOTENCY_PATH` defaults to `./data/broker-idempotency.json`; preserve it across restarts. `BROKER_KILL_SWITCH=true` starts the broker with its global kill switch active.
 
+Broker JSON state updates use a persistent SQLite mutex at `${BROKER_IDEMPOTENCY_PATH}.lock`.
+All processes sharing the JSON state must share that same mutex on a local filesystem with
+SQLite-compatible locking, not NFS or separate per-replica files. `BEGIN IMMEDIATE` covers
+the entire read/update/atomic replacement/fsync interval. Contention fails closed after
+one second; a stopped or slow owner never loses the lock because of elapsed time. Process
+exit releases the kernel lock, but does **not** clear persisted `in_progress` reservations:
+reconcile uncertain executions before any operator recovery, never delete state and retry.
+
+Upgrading from directory-based locks requires stopping **all** old Broker writers, including
+paused processes; do not mix versions in a rolling deployment. Preserve the JSON state. If
+an old `.lock` **directory** remains, inspect/reconcile the interrupted operation and remove
+only that obsolete directory after confirming no old writer can resume. New code refuses
+such directories rather than guessing that they are stale. The new `.lock` **file** stays
+in place even when unlocked: never unlink or replace it while any writer is running, since
+that would split the mutex into independent lock domains.
+
 `RISK_DATA_PROVIDER=file` is the default. `RISK_DATA_PATH` defaults to `./data/risk/risk-snapshot.json`. Compose fixes this backend and mounts the host `./data/risk` directory read-only into Guardrail. A trusted feed outside the agent must atomically replace this JSON file. Each evaluation reads one consistent snapshot and applies `DEFAULT_CANARY_LIVE_LIMITS`; missing, malformed, mismatched, future-dated, or stale facts fail closed. The runtime never substitutes intent prices for market data or synthesizes successful risk checks.
 
 Snapshot shape (illustrative values only; timestamp `0` is intentionally stale):

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ApprovalStore } from "@guardrails/approval";
@@ -2005,7 +2005,6 @@ describe("ExecutionBroker", () => {
           binanceSpotOrder,
         ),
       ).toThrow("entries is required");
-      expect(existsSync(`${path}.lock`)).toBe(false);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -2023,7 +2022,6 @@ describe("ExecutionBroker", () => {
           binanceSpotOrder,
         ),
       ).toThrow("entries must be an object");
-      expect(existsSync(`${path}.lock`)).toBe(false);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -2044,7 +2042,6 @@ describe("ExecutionBroker", () => {
           binanceSpotOrder,
         ),
       ).toThrow("payloadHash is invalid");
-      expect(existsSync(`${path}.lock`)).toBe(false);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -2069,7 +2066,6 @@ describe("ExecutionBroker", () => {
 
       expect(revalidate).not.toHaveBeenCalled();
       expect(execute).not.toHaveBeenCalled();
-      expect(existsSync(`${path}.lock`)).toBe(false);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

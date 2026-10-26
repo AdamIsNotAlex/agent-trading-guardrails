@@ -7,8 +7,6 @@ import {
   openSync,
   readFileSync,
   renameSync,
-  rmSync,
-  statSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -20,6 +18,7 @@ import {
   Environment,
   type TradingIntent,
 } from "@guardrails/schemas";
+import Database from "better-sqlite3";
 import {
   type BrokerAuditEvent,
   type BrokerIdempotencyReservation,
@@ -186,7 +185,6 @@ interface FileState {
 }
 
 const fileLockTimeoutMs = 1_000;
-const staleFileLockMs = 30_000;
 
 export class FileBrokerIdempotencyStore implements BrokerIdempotencyStore {
   private pending = new Map<
@@ -332,68 +330,23 @@ export class FileBrokerIdempotencyStore implements BrokerIdempotencyStore {
   private withLockedState<T>(update: (state: FileState) => T): T {
     mkdirSync(dirname(this.path), { recursive: true, mode: 0o700 });
     const lockPath = `${this.path}.lock`;
-    const lockToken = this.acquireLock(lockPath);
+    // Keep this inode: unlinking/replacing it would create an independent lock domain.
+    // A legacy lock directory fails closed here; upgrades must stop all old writers.
+    closeSync(openSync(lockPath, "a", 0o600));
+    const lock = new Database(lockPath, { timeout: fileLockTimeoutMs });
     try {
-      const state = this.readState();
-      const result = update(state);
-      this.writeState(state);
-      return result;
+      // SQLite holds the kernel lock through JSON replacement and fsync. It cannot
+      // expire while the owner is paused, and process death releases it automatically.
+      return lock
+        .transaction(() => {
+          const state = this.readState();
+          const result = update(state);
+          this.writeState(state);
+          return result;
+        })
+        .immediate();
     } finally {
-      this.releaseLock(lockPath, lockToken);
-    }
-  }
-
-  private acquireLock(lockPath: string): string {
-    const deadline = Date.now() + fileLockTimeoutMs;
-    while (true) {
-      const token = `${process.pid}-${randomUUID()}`;
-      try {
-        mkdirSync(lockPath, 0o700);
-        try {
-          writeFileSync(`${lockPath}/owner`, token, { mode: 0o600 });
-        } catch (err) {
-          rmSync(lockPath, { recursive: true, force: true });
-          throw err;
-        }
-        return token;
-      } catch (err) {
-        if (!isFileExistsError(err)) throw err;
-        if (this.removeStaleLock(lockPath)) continue;
-        if (Date.now() >= deadline) {
-          throw new Error("Timed out waiting for idempotency store lock.");
-        }
-        waitForFileLockRetry();
-      }
-    }
-  }
-
-  private releaseLock(lockPath: string, token: string): void {
-    try {
-      if (readFileSync(`${lockPath}/owner`, "utf8") !== token) return;
-      rmSync(lockPath, { recursive: true, force: true });
-    } catch (err) {
-      if (!isFileMissingError(err)) throw err;
-    }
-  }
-
-  private removeStaleLock(lockPath: string): boolean {
-    const stalePath = `${lockPath}.stale-${process.pid}-${randomUUID()}`;
-    try {
-      const ownerPath = `${lockPath}/owner`;
-      const owner = existsSync(ownerPath) ? readFileSync(ownerPath, "utf8") : undefined;
-      const ageMs = Date.now() - statSync(owner ? ownerPath : lockPath).mtimeMs;
-      if (ageMs < staleFileLockMs) return false;
-      renameSync(lockPath, stalePath);
-      if (owner && readFileSync(`${stalePath}/owner`, "utf8") !== owner) {
-        if (!existsSync(lockPath)) renameSync(stalePath, lockPath);
-        return false;
-      }
-      rmSync(stalePath, { recursive: true, force: true });
-      return true;
-    } catch (err) {
-      if (isFileMissingError(err)) return true;
-      if (isFileExistsError(err)) return false;
-      throw err;
+      lock.close();
     }
   }
 
@@ -473,18 +426,6 @@ function terminalAuditEventId(
     )
     .digest("hex");
   return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-8${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
-}
-
-function waitForFileLockRetry(): void {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
-}
-
-function isFileExistsError(err: unknown): boolean {
-  return err instanceof Error && "code" in err && err.code === "EEXIST";
-}
-
-function isFileMissingError(err: unknown): boolean {
-  return err instanceof Error && "code" in err && err.code === "ENOENT";
 }
 
 function parseFileState(value: unknown): FileState {

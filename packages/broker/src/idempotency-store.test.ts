@@ -1,5 +1,13 @@
 import { createHash } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type {
@@ -172,6 +180,47 @@ describe("FileBrokerIdempotencyStore reconciliation recovery", () => {
       expect(() =>
         new FileBrokerIdempotencyStore(path).begin(intent.idempotencyKey, intent),
       ).toThrow();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("FileBrokerIdempotencyStore lock recovery", () => {
+  it.each([false, true])("fails closed on an old directory lock (owner: %s)", (hasOwner) => {
+    const dir = mkdtempSync(join(tmpdir(), "idempotency-legacy-lock-"));
+    try {
+      const path = join(dir, "store.json");
+      const lockPath = `${path}.lock`;
+      writeFileSync(path, JSON.stringify({ entries: {} }));
+      mkdirSync(lockPath);
+      const old = new Date(Date.now() - 31_000);
+      if (hasOwner) {
+        writeFileSync(`${lockPath}/owner`, `${process.pid}-legacy-owner`);
+        utimesSync(`${lockPath}/owner`, old, old);
+      }
+      utimesSync(lockPath, old, old);
+
+      expect(() =>
+        new FileBrokerIdempotencyStore(path).begin(intent.idempotencyKey, intent),
+      ).toThrow();
+      expect(JSON.parse(readFileSync(path, "utf8"))).toEqual({ entries: {} });
+      expect(statSync(lockPath).isDirectory()).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("releases the mutex when reading state fails", () => {
+    const dir = mkdtempSync(join(tmpdir(), "idempotency-read-failure-"));
+    try {
+      const path = join(dir, "store.json");
+      const store = new FileBrokerIdempotencyStore(path);
+      writeFileSync(path, "invalid JSON");
+      expect(() => store.begin(intent.idempotencyKey, intent)).toThrow();
+
+      writeFileSync(path, JSON.stringify({ entries: {} }));
+      expect(store.begin(intent.idempotencyKey, intent).status).toBe("reserved");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
