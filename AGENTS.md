@@ -161,8 +161,8 @@ reviewer output is advisory while policy and broker boundaries remain authoritat
 - Hosted Clef silently truncates text state. Bound the complete serialized UTF-8 request plus
   provider-added question/option framing before dispatch; state-only or character-count limits
   miss schema overhead, multibyte text and JSON escaping.
-- Security baseline: Node 22.23.4+ (22.x) or 24.22.1+, including CI and every Docker
-  builder/runtime stage. Explicit Bookworm bases keep the CA floor unambiguous:
+- Security baseline: Node 22.23.4+ (22.x), 24.22.1+ (24.x), or 26.12.1+, including CI and every Docker
+  builder/runtime stage. Keep generated plugin engines in sync; an unbounded `>=24.22.1` also admits vulnerable Node 25/26 (CVE-2026-111497). Explicit Bookworm bases keep the CA floor unambiguous:
   install `ca-certificates>=20250419~deb12u2` in every image/stage.
 - Audit at all severities, not only high: Vite/PostCSS/Vitest and Solana's legacy
   Jayson graph carried lower-severity advisories too. Jayson 5 drops UUID/stream-json;
@@ -182,3 +182,6 @@ reviewer output is advisory while policy and broker boundaries remain authoritat
   the trading allowlists only for new orders. Cancellation key permissions follow the configured
   `accountMode`, not symbol membership: retired symbols must remain manageable without skipping
   the product's trading-permission check.
+- Emergency `cex.cancel_order` intents may pass a known active Kill Switch, but unknown/unreachable
+  state still fails closed. Keep this action-aware rule shared by live preflight, dry-run, both
+  execution checks, and the connector side-effect callback; never bypass the remaining guards.

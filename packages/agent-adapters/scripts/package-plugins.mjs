@@ -42,7 +42,7 @@ await json("openclaw/package.json", {
   type: "module",
   main: "./index.mjs",
   files: ["index.mjs", "openclaw.plugin.json"],
-  engines: { node: ">=22" },
+  engines: { node: "^22.23.4 || ^24.22.1 || >=26.12.1" },
   openclaw: { extensions: ["./index.mjs"] },
 });
 await json("openclaw/openclaw.plugin.json", {

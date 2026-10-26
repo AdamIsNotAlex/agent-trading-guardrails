@@ -38,7 +38,7 @@ See [docs/architecture.md](docs/architecture.md) for details.
 
 ## Prerequisites
 
-- Node.js 22.23.4+ on the 22.x line, or 24.22.1+ (CI and containers pin 22.23.4)
+- Node.js 22.23.4+ (22.x), 24.22.1+ (24.x), or 26.12.1+ (CI and containers pin 22.23.4); earlier releases are excluded for CVE-2026-111497.
 - pnpm (via Corepack: `corepack enable`)
 - Docker (for OPA sidecar and local development)
 
