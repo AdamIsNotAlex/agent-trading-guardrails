@@ -1,13 +1,8 @@
-import type { BinanceApiClient, BinanceConfig } from "./interfaces.js";
-
-export type BinanceAccountMode = "spot" | "usdm_futures";
+import type { BinanceAccountMode, BinanceApiClient, BinanceConfig } from "./interfaces.js";
 
 // One key belongs to one dedicated account/product; account is a local alias, never a REST selector.
 export interface BinanceRestConfig extends BinanceConfig {
   account: string;
-  accountMode: BinanceAccountMode;
-  // Exhaustive history universe, including symbols no longer enabled for new orders.
-  historySymbols: string[];
 }
 
 export interface BinanceRestOptions {

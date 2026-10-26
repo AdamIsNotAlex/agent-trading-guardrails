@@ -2,11 +2,17 @@ import assert from "node:assert/strict";
 import { createHmac, randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { createServer, type Server } from "node:http";
-import { binanceCancelOrder, binanceSpotOrder } from "@guardrails/schemas/fixtures";
+import { ConnectorRevalidationError } from "@guardrails/broker";
+import {
+  binanceCancelOrder,
+  binanceOrderStatus,
+  binanceSpotOrder,
+} from "@guardrails/schemas/fixtures";
 import { afterEach, describe, expect, it } from "vitest";
 import { BinanceConnector } from "./connector.js";
+import type { BinanceAccountMode } from "./interfaces.js";
 import { BinanceRestClient } from "./rest-client.js";
-import type { BinanceAccountMode, BinanceRestConfig } from "./rest-types.js";
+import type { BinanceRestConfig, BinanceRestOptions } from "./rest-types.js";
 
 const servers: Server[] = [];
 const fixtureErrors: unknown[] = [];
@@ -34,7 +40,7 @@ async function exchange(product: BinanceAccountMode = "spot", testnet = true, ti
     allowedAccounts: ["subaccount-1"],
     allowedSpotSymbols: product === "spot" ? ["ETH-USDC"] : [],
     allowedFuturesSymbols: product === "spot" ? [] : ["ETH-USDC"],
-    historySymbols: ["ETH-USDC"],
+    historySymbols: ["ETH-USDC", "BTC-USDC"],
     maxFuturesLeverage: 2,
     ipAllowlist: testnet ? [] : ["203.0.113.10"],
   };
@@ -46,6 +52,8 @@ async function exchange(product: BinanceAccountMode = "spot", testnet = true, ti
     statusUnavailable: false,
     fault: "none" as "none" | "reject" | "ticker" | "hang" | "malformed-order",
     withdrawals: false,
+    spotTrading: true,
+    futuresTrading: true,
   };
   const requests: { method: string; path: string }[] = [];
   const prefix = product === "spot" ? "/api/v3" : "/fapi/v1";
@@ -96,8 +104,8 @@ async function exchange(product: BinanceAccountMode = "spot", testnet = true, ti
             ipRestrict: true,
             enableWithdrawals: state.withdrawals,
             enableReading: true,
-            enableSpotAndMarginTrading: true,
-            enableFutures: true,
+            enableSpotAndMarginTrading: state.spotTrading,
+            enableFutures: state.futuresTrading,
           }),
         );
       } else if (url.pathname === "/fapi/v2/positionRisk") {
@@ -170,7 +178,7 @@ async function exchange(product: BinanceAccountMode = "spot", testnet = true, ti
       : testnet
         ? "https://demo-fapi.binance.com"
         : "https://fapi.binance.com";
-  const client = new BinanceRestClient(config, {
+  const options: BinanceRestOptions = {
     timeoutMs,
     // Redirect only the destination. Real HTTP, request bytes and response parsing remain intact.
     fetch: (input, init) => {
@@ -183,8 +191,11 @@ async function exchange(product: BinanceAccountMode = "spot", testnet = true, ti
       );
       return fetch(`http://127.0.0.1:${address.port}${url.pathname}${url.search}`, init);
     },
-  });
-  const connector = new BinanceConnector(config, client, "live");
+  };
+  const connect = (currentConfig = config) => {
+    const client = new BinanceRestClient(currentConfig, options);
+    return { client, connector: new BinanceConnector(currentConfig, client, "live") };
+  };
   const intent = {
     ...binanceSpotOrder,
     intentId: randomUUID(),
@@ -194,7 +205,7 @@ async function exchange(product: BinanceAccountMode = "spot", testnet = true, ti
     accountMode: product,
     ...(product === "usdm_futures" ? { marginType: "isolated" as const, leverage: 2 } : {}),
   };
-  return { connector, client, state, requests, intent };
+  return { ...connect(), config, connect, state, requests, intent };
 }
 
 describe("Binance connector with a stateful HTTP exchange", () => {
@@ -227,6 +238,65 @@ describe("Binance connector with a stateful HTTP exchange", () => {
       }),
     ).toMatchObject({ status: "CANCELED", executedQty: 0 });
     expect(state.status).toBe("CANCELED");
+  });
+
+  it.each([
+    "spot",
+    "usdm_futures",
+  ] as const)("keeps retired %s orders queryable and cancellable without allowing new orders", async (product) => {
+    const { connector, config, connect, intent, state, requests } = await exchange(product, false);
+    await connector.execute(intent);
+    const { connector: retired } = connect({
+      ...config,
+      allowedSpotSymbols: product === "spot" ? ["BTC-USDC"] : [],
+      allowedFuturesSymbols: product === "usdm_futures" ? ["BTC-USDC"] : [],
+    });
+    const cancel = { ...binanceCancelOrder, orderId: "12345" };
+    const status = { ...binanceOrderStatus, orderId: "12345" };
+    const before = requests.length;
+
+    // The opposite product's permission must not be needed for this account's old orders.
+    state.spotTrading = product === "spot";
+    state.futuresTrading = product === "usdm_futures";
+    expect(await retired.revalidate(cancel)).toEqual({ passed: true });
+    expect(await retired.revalidate(status)).toEqual({ passed: true });
+    expect(await retired.execute(status)).toMatchObject({
+      orderId: "12345",
+      orderStatus: { status: "NEW" },
+    });
+    expect(await retired.execute(cancel)).toEqual({ orderId: "12345" });
+    expect(state.status).toBe("CANCELED");
+    expect(await retired.execute(status)).toMatchObject({
+      orderId: "12345",
+      orderStatus: { status: "CANCELED" },
+    });
+    const path = product === "spot" ? "/api/v3/order" : "/fapi/v1/order";
+    expect(requests.slice(before).filter((request) => request.path === path)).toEqual([
+      { method: "GET", path },
+      { method: "DELETE", path },
+      { method: "GET", path },
+    ]);
+
+    const afterManagement = requests.length;
+    expect((await retired.revalidate(intent)).passed).toBe(false);
+    await expect(retired.execute(intent)).rejects.toThrow(ConnectorRevalidationError);
+    for (const management of [cancel, status]) {
+      await expect(retired.execute({ ...management, symbol: "DOGE-USDT" })).rejects.toThrow(
+        ConnectorRevalidationError,
+      );
+      await expect(retired.execute({ ...management, account: "other" })).rejects.toThrow(
+        ConnectorRevalidationError,
+      );
+    }
+    expect(requests.slice(afterManagement)).toEqual([]);
+
+    // Removing a trading symbol must not remove its product's API-key permission check.
+    state.spotTrading = product !== "spot";
+    state.futuresTrading = product !== "usdm_futures";
+    await expect(retired.execute(cancel)).rejects.toThrow(ConnectorRevalidationError);
+    expect(requests.slice(afterManagement)).toEqual([
+      { method: "GET", path: "/sapi/v1/account/apiRestrictions" },
+    ]);
   });
 
   it("retains the accepted order when reconciliation HTTP fails", async () => {

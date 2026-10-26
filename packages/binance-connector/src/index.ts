@@ -1,5 +1,6 @@
 export { BinanceConnector } from "./connector.js";
 export type {
+  BinanceAccountMode,
   BinanceAccountSnapshot,
   BinanceApiClient,
   BinanceApiKeyPermissions,
@@ -20,7 +21,6 @@ export {
 } from "./reconciliation.js";
 export { BinanceRestClient } from "./rest-client.js";
 export type {
-  BinanceAccountMode,
   BinanceHistoricalOrder,
   BinanceIncome,
   BinanceRestConfig,

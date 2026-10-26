@@ -17,7 +17,10 @@ export function validateIntent(intent: TradingIntent, config: BinanceConfig): Va
     return { valid: false, reason: `Account ${intent.account} is not in the allowlist.` };
   }
 
-  if ("accountMode" in intent) {
+  if (intent.action === "cex.place_order") {
+    if (intent.accountMode !== config.accountMode) {
+      return { valid: false, reason: "Order does not match the configured Binance product." };
+    }
     if (intent.accountMode === "spot") {
       if ("symbol" in intent && !config.allowedSpotSymbols.includes(intent.symbol)) {
         return { valid: false, reason: `Spot symbol ${intent.symbol} is not in the allowlist.` };
@@ -41,11 +44,10 @@ export function validateIntent(intent: TradingIntent, config: BinanceConfig): Va
       }
     }
   } else if (
-    "symbol" in intent &&
-    !config.allowedSpotSymbols.includes(intent.symbol) &&
-    !config.allowedFuturesSymbols.includes(intent.symbol)
+    (intent.action === "cex.cancel_order" || intent.action === "cex.get_order_status") &&
+    !config.historySymbols.includes(intent.symbol)
   ) {
-    return { valid: false, reason: `Symbol ${intent.symbol} is not in the allowlist.` };
+    return { valid: false, reason: `Symbol ${intent.symbol} is not in the history allowlist.` };
   }
 
   return { valid: true };
@@ -128,9 +130,9 @@ export function validateLiveKeyPermissions(
       requireFutures = true;
     } else if ("accountMode" in intent && intent.accountMode === "spot") {
       requireSpot = true;
-    } else if ("symbol" in intent) {
-      requireSpot = config.allowedSpotSymbols.includes(intent.symbol);
-      requireFutures = config.allowedFuturesSymbols.includes(intent.symbol);
+    } else if (intent.action === "cex.cancel_order") {
+      requireSpot = config.accountMode === "spot";
+      requireFutures = config.accountMode === "usdm_futures";
     }
   }
   if (requireSpot && permissions.enableSpotAndMarginTrading !== true) {

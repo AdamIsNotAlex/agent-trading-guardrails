@@ -485,6 +485,9 @@ Spot and USD-M have distinct order namespaces. `BINANCE_ACCOUNT_MODE` fixes pric
 data, cancellation, and status queries to the selected product. Deploy separate runtimes,
 aliases, and state directories for separate accounts/products. Use read-only USER_DATA keys
 for Guardrail and separate no-withdrawal trading keys for Broker, for the same account.
+Library integrations must supply `BinanceConfig.accountMode` and `historySymbols` to the
+Connector as well as the REST client. Mainnet cancellation requires the configured product's
+trading permission; the product is never inferred from membership in the new-order allowlist.
 
 After `pnpm install && pnpm build`, configure the trusted service/Broker environments:
 
@@ -533,12 +536,16 @@ response and durable audit. Follow the [live-trading protocol and limitations](l
 - Symbols are canonical `BASE-USDT`/`BASE-USDC`. Amounts ending in `Usd` are USD-equivalent
   assuming those stablecoins remain at par; there is no external USD/depeg oracle. Spot permits
   only one quote pair per base asset to keep reconstructed cost basis unambiguous.
-- `BINANCE_SYMBOLS` is the new-order allowlist. `BINANCE_HISTORY_SYMBOLS` must be the exhaustive
-  lifetime trading universe, including symbols disabled for new orders; omission defaults to
-  `BINANCE_SYMBOLS`. Never omit old symbols to reduce reported turnover/loss. Do not trade other
-  symbols, other products, or externally alter inventory in this dedicated account. Spot REST
-  history is symbol-scoped: the adapter cannot discover a fully closed, unconfigured symbol.
-  Uncovered active assets/positions are rejected rather than omitted.
+- `BINANCE_SYMBOLS` authorizes new orders only. `BINANCE_HISTORY_SYMBOLS` must be the exhaustive
+  lifetime trading universe, including symbols disabled for new orders. It also defines the
+  scope for `cex.cancel_order` and `cex.get_order_status` at Connector revalidation and the REST
+  boundary: removing a symbol from `BINANCE_SYMBOLS` must not prevent managing its old orders
+  while it remains in `BINANCE_HISTORY_SYMBOLS`. Account and fixed-product restrictions still
+  apply. Omitting `BINANCE_HISTORY_SYMBOLS` defaults it to `BINANCE_SYMBOLS`, so configure the
+  history list explicitly before retiring a trading symbol. Never omit old symbols to reduce
+  reported turnover/loss. Do not trade other symbols, other products, or externally alter inventory
+  in this dedicated account. Spot REST history is symbol-scoped: the adapter cannot discover a
+  fully closed, unconfigured symbol. Uncovered active assets/positions are rejected rather than omitted.
 - Spot ticker prices come from `/api/v3/ticker/price`; its timestamp is the request-start
   observation time because the response has no event timestamp. USD-M quotes use
   `/fapi/v2/ticker/price` and its exchange timestamp. Keep the host clock synchronized.

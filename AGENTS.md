@@ -178,3 +178,7 @@ reviewer output is advisory while policy and broker boundaries remain authoritat
 - Broker JSON idempotency uses a persistent SQLite `.lock` mutex, not an expiring directory
   lease. Keep its inode stable; process death releases the lock without clearing uncertain
   reservations. Upgrades must stop all old writers before removing a legacy lock directory.
+- Binance Connector and REST validation must use `historySymbols` for cancellation/status and
+  the trading allowlists only for new orders. Cancellation key permissions follow the configured
+  `accountMode`, not symbol membership: retired symbols must remain manageable without skipping
+  the product's trading-permission check.

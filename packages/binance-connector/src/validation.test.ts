@@ -17,11 +17,20 @@ const config: BinanceConfig = {
   apiKey: "test-key",
   apiSecret: "test-secret",
   testnet: false,
+  accountMode: "spot",
   allowedAccounts: ["subaccount-1", "subaccount-2"],
   allowedSpotSymbols: ["ETH-USDC", "BTC-USDC"],
-  allowedFuturesSymbols: ["BTC-USDT", "ETH-USDT"],
+  allowedFuturesSymbols: [],
+  historySymbols: ["ETH-USDC", "BTC-USDC"],
   maxFuturesLeverage: 3,
   ipAllowlist: ["203.0.113.10"],
+};
+const futuresConfig: BinanceConfig = {
+  ...config,
+  accountMode: "usdm_futures",
+  allowedSpotSymbols: [],
+  allowedFuturesSymbols: ["BTC-USDT", "ETH-USDT"],
+  historySymbols: ["BTC-USDT", "ETH-USDT"],
 };
 const safePermissions: BinanceApiKeyPermissions = {
   ipRestrict: true,
@@ -86,33 +95,48 @@ describe("live key permissions", () => {
   it("requires the trading permission for the configured order product", () => {
     const spotOnly = { ...safePermissions, enableFutures: false };
     const futuresOnly = { ...safePermissions, enableSpotAndMarginTrading: false };
-    expect(validateLiveKeyPermissions(spotOnly, binanceFuturesOrder, config).valid).toBe(false);
+    expect(validateLiveKeyPermissions(spotOnly, binanceFuturesOrder, futuresConfig).valid).toBe(
+      false,
+    );
     expect(validateLiveKeyPermissions(futuresOnly, binanceSpotOrder, config).valid).toBe(false);
     expect(validateLiveKeyPermissions(spotOnly, binanceSpotOrder, config).valid).toBe(true);
-    expect(validateLiveKeyPermissions(futuresOnly, binanceFuturesOrder, config).valid).toBe(true);
+    expect(validateLiveKeyPermissions(futuresOnly, binanceFuturesOrder, futuresConfig).valid).toBe(
+      true,
+    );
     expect(validateLiveKeyPermissions(futuresOnly, binanceCancelOrder, config).valid).toBe(false);
     expect(
-      validateLiveKeyPermissions(futuresOnly, { ...binanceCancelOrder, symbol: "BTC-USDT" }, config)
-        .valid,
+      validateLiveKeyPermissions(
+        futuresOnly,
+        { ...binanceCancelOrder, symbol: "BTC-USDT" },
+        futuresConfig,
+      ).valid,
     ).toBe(true);
   });
 
-  it("does not grant ambiguous cancellation a permission from the wrong product", () => {
-    const both = {
+  it.each([
+    "spot",
+    "usdm_futures",
+  ] as const)("requires only the configured %s permission to cancel a retired symbol", (accountMode) => {
+    const retired = {
       ...config,
-      allowedSpotSymbols: ["BTC-USDT"],
-      allowedFuturesSymbols: ["BTC-USDT"],
+      accountMode,
+      allowedSpotSymbols: accountMode === "spot" ? ["BTC-USDC"] : [],
+      allowedFuturesSymbols: accountMode === "usdm_futures" ? ["BTC-USDC"] : [],
     };
-    const intent = { ...binanceCancelOrder, symbol: "BTC-USDT" };
-    expect(
-      validateLiveKeyPermissions(
-        { ...safePermissions, enableSpotAndMarginTrading: false },
-        intent,
-        both,
-      ).valid,
-    ).toBe(false);
-    expect(
-      validateLiveKeyPermissions({ ...safePermissions, enableFutures: false }, intent, both).valid,
-    ).toBe(false);
+    const correctProduct = {
+      ...safePermissions,
+      enableReading: false,
+      enableSpotAndMarginTrading: accountMode === "spot",
+      enableFutures: accountMode === "usdm_futures",
+    };
+    const wrongProduct = {
+      ...safePermissions,
+      enableSpotAndMarginTrading: accountMode !== "spot",
+      enableFutures: accountMode !== "usdm_futures",
+    };
+    expect(validateLiveKeyPermissions(correctProduct, binanceCancelOrder, retired).valid).toBe(
+      true,
+    );
+    expect(validateLiveKeyPermissions(wrongProduct, binanceCancelOrder, retired).valid).toBe(false);
   });
 });

@@ -1,10 +1,15 @@
+export type BinanceAccountMode = "spot" | "usdm_futures";
+
 export interface BinanceConfig {
   apiKey: string;
   apiSecret: string;
   testnet: boolean;
+  accountMode: BinanceAccountMode;
   allowedAccounts: string[];
   allowedSpotSymbols: string[];
   allowedFuturesSymbols: string[];
+  // Exhaustive universe for history, cancellation and status, including retired trading symbols.
+  historySymbols: string[];
   maxFuturesLeverage: number;
   ipAllowlist: string[];
 }

@@ -14,14 +14,28 @@ const config: BinanceConfig = {
   apiKey: "test-key",
   apiSecret: "test-secret",
   testnet: true,
+  accountMode: "spot",
   allowedAccounts: ["subaccount-1", "subaccount-2"],
   allowedSpotSymbols: ["ETH-USDC", "BTC-USDC"],
-  allowedFuturesSymbols: ["BTC-USDT", "ETH-USDT"],
+  allowedFuturesSymbols: [],
+  historySymbols: ["ETH-USDC", "BTC-USDC"],
   maxFuturesLeverage: 3,
   ipAllowlist: [],
 };
+const futuresConfig: BinanceConfig = {
+  ...config,
+  accountMode: "usdm_futures",
+  allowedSpotSymbols: [],
+  allowedFuturesSymbols: ["BTC-USDT", "ETH-USDT"],
+  historySymbols: ["BTC-USDT", "ETH-USDT"],
+};
 const liveMainnetConfig: BinanceConfig = {
   ...config,
+  testnet: false,
+  ipAllowlist: ["203.0.113.10"],
+};
+const liveMainnetFuturesConfig: BinanceConfig = {
+  ...futuresConfig,
   testnet: false,
   ipAllowlist: ["203.0.113.10"],
 };
@@ -114,7 +128,7 @@ describe("BinanceConnector (paper mode)", () => {
   });
 
   it("executes futures paper order", async () => {
-    const connector = new BinanceConnector(config, null, "paper");
+    const connector = new BinanceConnector(futuresConfig, null, "paper");
     const result = await connector.execute(binanceFuturesOrder);
     expect(result.orderId).toBeTruthy();
     expect(result.orderId).toContain("paper-futures");
@@ -242,7 +256,7 @@ describe("BinanceConnector (live mode with mock)", () => {
         return makeMockClient().placeFuturesOrder(params);
       },
     };
-    const connector = new BinanceConnector(config, client, "live");
+    const connector = new BinanceConnector(futuresConfig, client, "live");
 
     await connector.execute(binanceFuturesOrder);
     await connector.execute(binanceFuturesOrder);
@@ -417,6 +431,28 @@ describe("BinanceConnector (live mode with mock)", () => {
 });
 
 describe("BinanceConnector validation", () => {
+  it.each([
+    "spot",
+    "usdm_futures",
+  ] as const)("rejects new orders for the other product even when its symbol is enabled for %s", async (accountMode) => {
+    const connector = new BinanceConnector(
+      {
+        ...config,
+        accountMode,
+        allowedSpotSymbols: ["ETH-USDC"],
+        allowedFuturesSymbols: ["ETH-USDC"],
+      },
+      makeMockClient(),
+      "live",
+    );
+    const intent = {
+      ...(accountMode === "spot" ? binanceFuturesOrder : binanceSpotOrder),
+      symbol: "ETH-USDC",
+    };
+    expect((await connector.revalidate(intent)).passed).toBe(false);
+    await expect(connector.execute(intent)).rejects.toThrow(ConnectorRevalidationError);
+  });
+
   it("rejects disallowed account", async () => {
     const connector = new BinanceConnector(config, null, "paper");
     const intent = { ...binanceSpotOrder, account: "unknown-account" };
@@ -471,7 +507,7 @@ describe("BinanceConnector validation", () => {
   });
 
   it("rejects futures leverage above cap", async () => {
-    const connector = new BinanceConnector(config, null, "paper");
+    const connector = new BinanceConnector(futuresConfig, null, "paper");
     const intent = { ...binanceFuturesOrder, leverage: 10 };
     const result = await connector.revalidate(intent);
     expect(result.passed).toBe(false);
@@ -479,7 +515,7 @@ describe("BinanceConnector validation", () => {
   });
 
   it("rejects cross-margin futures", async () => {
-    const connector = new BinanceConnector(config, null, "paper");
+    const connector = new BinanceConnector(futuresConfig, null, "paper");
     const intent = { ...binanceFuturesOrder, marginType: "cross" as const };
     const result = await connector.revalidate(intent);
     expect(result.passed).toBe(false);
@@ -487,7 +523,7 @@ describe("BinanceConnector validation", () => {
   });
 
   it("rejects futures orders without margin type", async () => {
-    const connector = new BinanceConnector(config, null, "paper");
+    const connector = new BinanceConnector(futuresConfig, null, "paper");
     const { marginType: _marginType, ...intent } = binanceFuturesOrder;
     const result = await connector.revalidate(intent);
     expect(result.passed).toBe(false);
@@ -495,7 +531,7 @@ describe("BinanceConnector validation", () => {
   });
 
   it("rejects direct cross-margin futures execution", async () => {
-    const connector = new BinanceConnector(config, null, "paper");
+    const connector = new BinanceConnector(futuresConfig, null, "paper");
     await expect(
       connector.execute({ ...binanceFuturesOrder, marginType: "cross" }),
     ).rejects.toThrow("isolated margin");
@@ -508,7 +544,7 @@ describe("BinanceConnector validation", () => {
         return "cross";
       },
     };
-    const connector = new BinanceConnector(config, client, "live");
+    const connector = new BinanceConnector(futuresConfig, client, "live");
 
     await expect(connector.execute(binanceFuturesOrder)).rejects.toThrow("isolated margin");
   });
@@ -520,7 +556,7 @@ describe("BinanceConnector validation", () => {
         return "cross";
       },
     };
-    const connector = new BinanceConnector(config, client, "live");
+    const connector = new BinanceConnector(futuresConfig, client, "live");
     const result = await connector.revalidate(binanceFuturesOrder);
     expect(result.passed).toBe(false);
     expect(result.reason).toContain("isolated margin");
@@ -632,7 +668,7 @@ describe("BinanceConnector live mainnet permissions and reconciliation", () => {
         return makeMockClient().placeFuturesOrder(params);
       },
     };
-    const connector = new BinanceConnector(liveMainnetConfig, client, "live");
+    const connector = new BinanceConnector(liveMainnetFuturesConfig, client, "live");
     const result = await connector.revalidate(binanceFuturesOrder);
     expect(result.passed).toBe(false);
     await expect(connector.execute(binanceFuturesOrder)).rejects.toThrow(
@@ -696,7 +732,7 @@ describe("BinanceConnector live mainnet permissions and reconciliation", () => {
         return { symbol, price: binanceFuturesOrder.price, timestampMs: Date.now() };
       },
     };
-    const connector = new BinanceConnector(liveMainnetConfig, client, "live");
+    const connector = new BinanceConnector(liveMainnetFuturesConfig, client, "live");
     const result = await connector.execute(binanceFuturesOrder);
     expect(result.orderId).toBe("live-futures-001");
     expect(result.orderStatus).toMatchObject({
